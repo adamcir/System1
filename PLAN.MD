@@ -1,106 +1,77 @@
-# System/1: C-first build plán s 3 výstupy (`iso-32`, `iso-x86_64`, `img-32`)
+# System/1 Plan: 3 Kernel Branches (`i386`, `x86_64`, `i386-floppy`)
 
-## Shrnutí
-Projekt bude mít dvě boot cesty:
-1. `GRUB2 + Multiboot2` pro ISO výstupy:
-   - `iso-32` (i386 kernel)
-   - `iso-x86_64` (x86_64 kernel)
-2. `Jednoduchý vlastní bootloader` pro disketový obraz:
-   - `img-32` (i386, floppy image)
+## Summary
+Projekt bude mít tři oddělené kernel větve:
 
-Jádro zůstane hlavně v C; assembler jen pro nevyhnutelné low-level přechody.
+1. `kernel/i386/` pro GRUB `iso-32`
+2. `kernel/x86_64/` pro GRUB `iso-x86_64`
+3. `kernel/i386-floppy/` pro jednoduchý bootloader `img-32`
 
-## Cíl a kritéria úspěchu
-1. `make iso-32` vytvoří bootovatelný i386 ISO přes GRUB.
-2. `make iso-x86_64` vytvoří bootovatelný x86_64 ISO přes GRUB.
-3. `make img-32` vytvoří bootovatelný disketový obraz s jednoduchým bootloaderem.
-4. `make run-iso-32`, `make run-iso-x86_64`, `make run-img-32` fungují v QEMU.
-5. Ve všech režimech se zobrazí boot banner a základní init stav.
+Každá větev má vlastní `kernel.c` a vlastní `modules/`.
 
-## Architektura a výstupy
+## Target Layout
+1. `kernel/i386/kernel.c`
+2. `kernel/i386/modules/{vga,panic,bootlog}/...`
+3. `kernel/x86_64/kernel.c`
+4. `kernel/x86_64/modules/{vga,panic,bootlog}/...`
+5. `kernel/i386-floppy/kernel.c`
+6. `kernel/i386-floppy/modules/{vga,panic,bootlog}/...`
 
-## 1) Výstupní artefakty
-1. `build/system1-iso-32.iso`
-2. `build/system1-iso-x86_64.iso`
-3. `build/system1-img-32.img` (1.44MB floppy)
+## Boot Pipelines
+1. `iso-32`: `boot/multiboot2_header.S` + `arch/i386/entry_i386.S` + `kernel/i386/*`
+2. `iso-x86_64`: `boot/multiboot2_header.S` + `arch/x86_64/entry_x86_64_bridge.S` + `kernel/x86_64/*`
+3. `img-32`: `boot/simple32/stage1.asm` + `boot/simple32/stage2.asm` + `arch/i386/entry_floppy_i386.S` + `kernel/i386-floppy/*`
 
-## 2) Boot cesty
-1. `GRUB ISO 32-bit`:
-   - GRUB načte `kernel32.elf` (Multiboot2), vstup do `entry_i386`.
-2. `GRUB ISO 64-bit`:
-   - GRUB načte `kernel64.elf` (Multiboot2), vstup v 32-bit, pak přepnutí do long mode, pak C entry.
-3. `Simple bootloader img-32`:
-   - `stage1` (boot sektor) načte `stage2`.
-   - `stage2` načte 32-bit kernel do paměti a skočí na C entry.
-   - Bez filesystemu: fixní sektory (MVP).
+## GRUB Layout
+1. `boot/grub/i386/grub.cfg` pro `iso-32`
+2. `boot/grub/x86_64/grub.cfg` pro `iso-x86_64`
+3. ISO skripty berou `grub.cfg` jen z `boot/grub/*` (ne ze staré `grub/` složky)
 
-## 3) Sdílení kódu
-1. `kernel/common/*` sdílené C moduly (print/panic/init pomocné části).
-2. `arch/i386/*` pro i386 specifika.
-3. `arch/x86_64/*` pro x86_64 specifika.
-4. `boot/simple32/*` pro vlastní floppy bootloader.
+## Public APIs / Interfaces
+1. `kernel/i386/kernel.c`:
+   - `void kmain_i386(uint32_t magic, uint32_t info);`
+2. `kernel/x86_64/kernel.c`:
+   - `void kmain_x86_64(uint32_t magic, uint32_t info);`
+3. `kernel/i386-floppy/kernel.c`:
+   - `void kmain_floppy_i386(uint32_t magic, uint32_t boot_info_ptr);`
+4. Module API (v každé větvi stejné názvy):
+   - `vga_init`, `vga_putc`, `vga_puts`
+   - `panic`
+   - `bootlog_info`
 
-## Veřejná rozhraní / API / typy
-
-## 1) Entrypointy
-1. `void kmain_i386(uint32_t boot_magic, uint32_t boot_info);`
-2. `void kmain_x86_64(uint32_t boot_magic, uint32_t boot_info);`
-3. `void panic(const char* msg) __attribute__((noreturn));`
-
-## 2) Arch init API
-1. `void gdt_init_i386(void);`
-2. `void idt_init_i386(void);`
-3. `void gdt_init_x86_64(void);`
-4. `void idt_init_x86_64(void);`
-
-## 3) Output API
-1. `void vga_putc(char c);`
-2. `void vga_puts(const char* s);`
-3. `void vga_hex_u32(uint32_t v);`
-4. `void vga_hex_u64(uint64_t v);`
-
-## 4) Důležité typy
-1. `struct gdt_entry32`, `struct idt_entry32`
-2. `struct gdt_entry64`, `struct idt_entry64`
-3. `struct regs32`, `struct regs64`
-
-## Build systém
-1. `Makefile` cíle:
+## Build System Changes (Makefile)
+1. Oddělené proměnné:
+   - `KDIR_I386 := kernel/i386`
+   - `KDIR_X64 := kernel/x86_64`
+   - `KDIR_FLP := kernel/i386-floppy`
+2. Každý target kompiluje jen vlastní `kernel.c` + vlastní `modules/*`.
+3. Moduly se archivují do `.a` odděleně po větvích.
+4. Výstupy:
+   - `build/system1-iso-32.iso`
+   - `build/system1-iso-x86_64.iso`
+   - `build/system1-img-32.img`
+5. Cíle:
    - `iso-32`, `iso-x86_64`, `img-32`
    - `run-iso-32`, `run-iso-x86_64`, `run-img-32`
-   - `clean`, `all`
-2. Toolchain:
-   - i386: `i686-elf-gcc`, `i686-elf-ld`
-   - x86_64: `x86_64-elf-gcc`, `x86_64-elf-ld`
-   - bootloader: `nasm`
-   - ISO: `grub-mkrescue`
-3. `all` defaultně postaví všechny tři artefakty.
+   - `modules-i386`, `modules-x86_64`, `modules-i386-floppy` (doporučeno)
 
-## Testy a scénáře
+## `img-32` (Floppy) Details
+1. Stage1 načte stage2.
+2. Stage2 čte FAT12 root directory a hledá `KERNEL32.BIN`.
+3. Kernel načte do `0x00100000`, přepne do protected mode a skočí na `entry_floppy_i386`.
+4. `kmain_floppy_i386` vypíše boot status přes `bootlog`/`vga`.
 
-## 1) Artefaktové testy
-1. Po buildu existují přesné 3 soubory: `iso-32`, `iso-x86_64`, `img-32`.
-2. Každý artefakt je spustitelný v odpovídajícím QEMU targetu.
+## Test Cases
+1. `make clean && make iso-32` projde a bootuje.
+2. `make clean && make iso-x86_64` projde a bootuje.
+3. `make clean && make img-32` vytvoří 1.44MB image a bootuje.
+4. Ověření izolace:
+   - změna v `kernel/i386/modules/*` neovlivní `x86_64` ani `i386-floppy`.
+5. FAT12 negativní test:
+   - chybějící `KERNEL32.BIN` => stage2 vypíše chybu a zastaví.
 
-## 2) Boot testy
-1. ISO-32: boot banner + `GDT ok`, `IDT ok`.
-2. ISO-x86_64: boot banner + `Long mode ok`, `IDT ok`.
-3. IMG-32: boot banner + `Simple loader ok`, kernel start ok.
-
-## 3) Stabilita
-1. Žádný triple fault při normálním bootu.
-2. Ruční `int3` test (aspoň pro i386 pipeline) projde přes C dispatcher.
-
-## Implementační pořadí
-1. Založit adresářovou strukturu + Makefile s 3 pipeline.
-2. Rozchodit `iso-32`.
-3. Rozchodit `iso-x86_64` (včetně long mode switch).
-4. Rozchodit `img-32` (stage1/stage2 + kernel load).
-5. Sjednotit sdílené C moduly a test run cíle.
-6. Dopsat minimální diagnostické výpisy a validaci.
-
-## Explicitní předpoklady a defaulty
-1. Jazykově “hlavně C”: ASM pouze entry/ISR/CPU mode transitions.
-2. `img-32` je pouze i386 (disketa), bez x86_64 varianty.
-3. Jednoduchý bootloader je MVP bez filesystemu, s fixními sektory.
-4. Scheduler, user-space, FS a ovladače nejsou v tomto milníku.
+## Assumptions and Defaults
+1. Duplicitní moduly mezi větvemi jsou záměr (čistá izolace).
+2. `i386-floppy` není Multiboot kompatibilní.
+3. `iso-*` zůstávají GRUB-based.
+4. Priorita je čitelnost architektur, ne minimalizace duplicit.

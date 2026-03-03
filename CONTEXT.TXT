@@ -1,0 +1,64 @@
+System/1 project context (updated 2026-03-03)
+
+Overview:
+- Project is an experimental OS kernel in C with minimal ASM.
+- Build supports 3 artifacts:
+  1) iso-32   (GRUB + Multiboot2 + i386 kernel)
+  2) iso-64   (GRUB + Multiboot2 + x86_64 kernel)
+  3) img-32   (simple floppy bootloader + i386-floppy kernel)
+
+Key layout:
+- boot/
+  - multiboot2_header.S
+  - grub/i386/grub.cfg
+  - grub/x86_64/grub.cfg
+  - simple32/stage1.asm
+  - simple32/stage2.asm
+- kernel/
+  - i386/kernel.c + modules/{vga,panic,bootlog}
+  - x86_64/kernel.c + modules/{vga,panic,bootlog}
+  - i386-floppy/kernel.c + modules/{vga,panic,bootlog}
+- arch/
+  - i386/entry_i386.S
+  - i386/entry_floppy_i386.S
+  - x86_64/entry_x86_64_bridge.S
+- linker/
+  - linker.i386.ld
+  - linker.x86_64.ld
+  - linker.floppy.i386.ld
+- scripts/
+  - mkiso-i386.sh
+  - mkiso-x86_64.sh
+  - mkimg-32.sh
+- Makefile
+
+Important Makefile behavior:
+- Main command expected by user:
+  make iso-32 iso-64 img-32
+- Toolchain auto-fallback configured:
+  - i686-elf-* -> i686-linux-gnu-*
+  - x86_64-elf-* -> x86_64-linux-gnu-*
+- Alias target exists:
+  - iso-64 (same output as previous iso-x86_64)
+
+Recent fixes:
+1) Floppy bootloader CHS read bug fixed in stage1/stage2:
+   - BX buffer register was being clobbered during LBA->CHS conversion.
+2) Floppy kernel load address mismatch fixed:
+   - linker.floppy.i386.ld base changed to 0x00010000
+   - must match stage2 jump target and load location.
+3) VGA init now clears screen on boot in all three kernel branches.
+
+Notes on runtime:
+- In -nographic mode, VGA text is not visible.
+- For visible VGA output, run with QEMU window (without -nographic).
+- Example floppy run:
+  qemu-system-i386 -drive file=build/system1-img-32.img,if=floppy,format=raw -boot a
+
+Known warnings:
+- Linker warns about RWX LOAD segment (accepted for MVP currently).
+
+Current user preference highlights:
+- Wants mostly C implementation.
+- Wants explicit project structure separation by kernel target.
+- Wants simple commands for build.
