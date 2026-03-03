@@ -23,8 +23,8 @@ LDS32          := linker/linker.i386.ld
 LDS64          := linker/linker.x86_64.ld
 LDSFLP         := linker/linker.floppy.i386.ld
 
-KERNEL32_ELF := $(BUILD_DIR)/kernel32.elf
-KERNEL64_ELF := $(BUILD_DIR)/kernel64.elf
+KERNEL32_ELF := $(BUILD_DIR)/kernel32.bin
+KERNEL64_ELF := $(BUILD_DIR)/kernel64.bin
 KERNELFLP_ELF := $(BUILD_DIR)/kernel32-floppy.elf
 KERNELFLP_BIN := $(BUILD_DIR)/kernel32-floppy.bin
 
@@ -32,36 +32,48 @@ ISO32 := $(BUILD_DIR)/system1-iso-32.iso
 ISO64 := $(BUILD_DIR)/system1-iso-x86_64.iso
 IMG32 := $(BUILD_DIR)/system1-img-32.img
 
-I386_INCLUDES := -Iinclude -I$(KDIR_I386)/modules/vga -I$(KDIR_I386)/modules/panic -I$(KDIR_I386)/modules/bootlog
-X64_INCLUDES  := -Iinclude -I$(KDIR_X64)/modules/vga -I$(KDIR_X64)/modules/panic -I$(KDIR_X64)/modules/bootlog
-FLP_INCLUDES  := -Iinclude -I$(KDIR_FLP)/modules/vga -I$(KDIR_FLP)/modules/panic -I$(KDIR_FLP)/modules/bootlog
+I386_INCLUDES := -Iinclude -I$(KDIR_I386)/modules/vga -I$(KDIR_I386)/modules/panic -I$(KDIR_I386)/modules/bootlog -I$(KDIR_I386)/modules/interrupts -I$(KDIR_I386)/modules/keyboard
+X64_INCLUDES  := -Iinclude -I$(KDIR_X64)/modules/vga -I$(KDIR_X64)/modules/panic -I$(KDIR_X64)/modules/bootlog -I$(KDIR_X64)/modules/interrupts -I$(KDIR_X64)/modules/keyboard
+FLP_INCLUDES  := -Iinclude -I$(KDIR_FLP)/modules/vga -I$(KDIR_FLP)/modules/panic -I$(KDIR_FLP)/modules/bootlog -I$(KDIR_FLP)/modules/interrupts -I$(KDIR_FLP)/modules/keyboard
 
 I386_MOD_VGA_SRC := $(KDIR_I386)/modules/vga/vga.c
 I386_MOD_PANIC_SRC := $(KDIR_I386)/modules/panic/panic.c
 I386_MOD_BOOTLOG_SRC := $(KDIR_I386)/modules/bootlog/bootlog.c
+I386_MOD_INTERRUPTS_SRC := $(KDIR_I386)/modules/interrupts/interrupts.c
+I386_MOD_KEYBOARD_SRC := $(KDIR_I386)/modules/keyboard/keyboard.c
 
 X64_MOD_VGA_SRC := $(KDIR_X64)/modules/vga/vga.c
 X64_MOD_PANIC_SRC := $(KDIR_X64)/modules/panic/panic.c
 X64_MOD_BOOTLOG_SRC := $(KDIR_X64)/modules/bootlog/bootlog.c
+X64_MOD_INTERRUPTS_SRC := $(KDIR_X64)/modules/interrupts/interrupts.c
+X64_MOD_KEYBOARD_SRC := $(KDIR_X64)/modules/keyboard/keyboard.c
 
 FLP_MOD_VGA_SRC := $(KDIR_FLP)/modules/vga/vga.c
 FLP_MOD_PANIC_SRC := $(KDIR_FLP)/modules/panic/panic.c
 FLP_MOD_BOOTLOG_SRC := $(KDIR_FLP)/modules/bootlog/bootlog.c
+FLP_MOD_INTERRUPTS_SRC := $(KDIR_FLP)/modules/interrupts/interrupts.c
+FLP_MOD_KEYBOARD_SRC := $(KDIR_FLP)/modules/keyboard/keyboard.c
 
 I386_MOD_VGA_LIB := $(BUILD_DIR)/modules/i386/vga/libvga.a
 I386_MOD_PANIC_LIB := $(BUILD_DIR)/modules/i386/panic/libpanic.a
 I386_MOD_BOOTLOG_LIB := $(BUILD_DIR)/modules/i386/bootlog/libbootlog.a
-I386_MODULE_LIBS := $(I386_MOD_VGA_LIB) $(I386_MOD_PANIC_LIB) $(I386_MOD_BOOTLOG_LIB)
+I386_MOD_INTERRUPTS_LIB := $(BUILD_DIR)/modules/i386/interrupts/libinterrupts.a
+I386_MOD_KEYBOARD_LIB := $(BUILD_DIR)/modules/i386/keyboard/libkeyboard.a
+I386_MODULE_LIBS := $(I386_MOD_VGA_LIB) $(I386_MOD_PANIC_LIB) $(I386_MOD_BOOTLOG_LIB) $(I386_MOD_INTERRUPTS_LIB) $(I386_MOD_KEYBOARD_LIB)
 
 X64_MOD_VGA_LIB := $(BUILD_DIR)/modules/x86_64/vga/libvga.a
 X64_MOD_PANIC_LIB := $(BUILD_DIR)/modules/x86_64/panic/libpanic.a
 X64_MOD_BOOTLOG_LIB := $(BUILD_DIR)/modules/x86_64/bootlog/libbootlog.a
-X64_MODULE_LIBS := $(X64_MOD_VGA_LIB) $(X64_MOD_PANIC_LIB) $(X64_MOD_BOOTLOG_LIB)
+X64_MOD_INTERRUPTS_LIB := $(BUILD_DIR)/modules/x86_64/interrupts/libinterrupts.a
+X64_MOD_KEYBOARD_LIB := $(BUILD_DIR)/modules/x86_64/keyboard/libkeyboard.a
+X64_MODULE_LIBS := $(X64_MOD_VGA_LIB) $(X64_MOD_PANIC_LIB) $(X64_MOD_BOOTLOG_LIB) $(X64_MOD_INTERRUPTS_LIB) $(X64_MOD_KEYBOARD_LIB)
 
 FLP_MOD_VGA_LIB := $(BUILD_DIR)/modules/i386-floppy/vga/libvga.a
 FLP_MOD_PANIC_LIB := $(BUILD_DIR)/modules/i386-floppy/panic/libpanic.a
 FLP_MOD_BOOTLOG_LIB := $(BUILD_DIR)/modules/i386-floppy/bootlog/libbootlog.a
-FLP_MODULE_LIBS := $(FLP_MOD_VGA_LIB) $(FLP_MOD_PANIC_LIB) $(FLP_MOD_BOOTLOG_LIB)
+FLP_MOD_INTERRUPTS_LIB := $(BUILD_DIR)/modules/i386-floppy/interrupts/libinterrupts.a
+FLP_MOD_KEYBOARD_LIB := $(BUILD_DIR)/modules/i386-floppy/keyboard/libkeyboard.a
+FLP_MODULE_LIBS := $(FLP_MOD_VGA_LIB) $(FLP_MOD_PANIC_LIB) $(FLP_MOD_BOOTLOG_LIB) $(FLP_MOD_INTERRUPTS_LIB) $(FLP_MOD_KEYBOARD_LIB)
 
 .PHONY: all help modules-i386 modules-x86_64 modules-i386-floppy iso-32 iso-64 iso-x86_64 floppy-kernel32 img-32 run-iso-32 run-iso-64 run-iso-x86_64 run-img-32 clean
 
@@ -83,9 +95,9 @@ help:
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
-$(BUILD_DIR)/modules/i386/vga $(BUILD_DIR)/modules/i386/panic $(BUILD_DIR)/modules/i386/bootlog \
-$(BUILD_DIR)/modules/x86_64/vga $(BUILD_DIR)/modules/x86_64/panic $(BUILD_DIR)/modules/x86_64/bootlog \
-$(BUILD_DIR)/modules/i386-floppy/vga $(BUILD_DIR)/modules/i386-floppy/panic $(BUILD_DIR)/modules/i386-floppy/bootlog:
+$(BUILD_DIR)/modules/i386/vga $(BUILD_DIR)/modules/i386/panic $(BUILD_DIR)/modules/i386/bootlog $(BUILD_DIR)/modules/i386/interrupts $(BUILD_DIR)/modules/i386/keyboard \
+$(BUILD_DIR)/modules/x86_64/vga $(BUILD_DIR)/modules/x86_64/panic $(BUILD_DIR)/modules/x86_64/bootlog $(BUILD_DIR)/modules/x86_64/interrupts $(BUILD_DIR)/modules/x86_64/keyboard \
+$(BUILD_DIR)/modules/i386-floppy/vga $(BUILD_DIR)/modules/i386-floppy/panic $(BUILD_DIR)/modules/i386-floppy/bootlog $(BUILD_DIR)/modules/i386-floppy/interrupts $(BUILD_DIR)/modules/i386-floppy/keyboard:
 	mkdir -p $@
 
 $(BUILD_DIR)/modules/i386/vga/vga.o: $(I386_MOD_VGA_SRC) $(KDIR_I386)/modules/vga/vga.h include/types.h | $(BUILD_DIR)/modules/i386/vga
@@ -97,6 +109,12 @@ $(BUILD_DIR)/modules/i386/panic/panic.o: $(I386_MOD_PANIC_SRC) $(KDIR_I386)/modu
 $(BUILD_DIR)/modules/i386/bootlog/bootlog.o: $(I386_MOD_BOOTLOG_SRC) $(KDIR_I386)/modules/bootlog/bootlog.h $(KDIR_I386)/modules/vga/vga.h | $(BUILD_DIR)/modules/i386/bootlog
 	$(I386_CC) $(CFLAGS_COMMON) $(I386_INCLUDES) -m32 -c $< -o $@
 
+$(BUILD_DIR)/modules/i386/interrupts/interrupts.o: $(I386_MOD_INTERRUPTS_SRC) $(KDIR_I386)/modules/interrupts/interrupts.h | $(BUILD_DIR)/modules/i386/interrupts
+	$(I386_CC) $(CFLAGS_COMMON) $(I386_INCLUDES) -m32 -c $< -o $@
+
+$(BUILD_DIR)/modules/i386/keyboard/keyboard.o: $(I386_MOD_KEYBOARD_SRC) $(KDIR_I386)/modules/keyboard/keyboard.h | $(BUILD_DIR)/modules/i386/keyboard
+	$(I386_CC) $(CFLAGS_COMMON) $(I386_INCLUDES) -m32 -c $< -o $@
+
 $(I386_MOD_VGA_LIB): $(BUILD_DIR)/modules/i386/vga/vga.o
 	$(AR) rcs $@ $<
 
@@ -104,6 +122,12 @@ $(I386_MOD_PANIC_LIB): $(BUILD_DIR)/modules/i386/panic/panic.o
 	$(AR) rcs $@ $<
 
 $(I386_MOD_BOOTLOG_LIB): $(BUILD_DIR)/modules/i386/bootlog/bootlog.o
+	$(AR) rcs $@ $<
+
+$(I386_MOD_INTERRUPTS_LIB): $(BUILD_DIR)/modules/i386/interrupts/interrupts.o
+	$(AR) rcs $@ $<
+
+$(I386_MOD_KEYBOARD_LIB): $(BUILD_DIR)/modules/i386/keyboard/keyboard.o
 	$(AR) rcs $@ $<
 
 modules-i386: $(I386_MODULE_LIBS)
@@ -117,6 +141,12 @@ $(BUILD_DIR)/modules/x86_64/panic/panic.o: $(X64_MOD_PANIC_SRC) $(KDIR_X64)/modu
 $(BUILD_DIR)/modules/x86_64/bootlog/bootlog.o: $(X64_MOD_BOOTLOG_SRC) $(KDIR_X64)/modules/bootlog/bootlog.h $(KDIR_X64)/modules/vga/vga.h | $(BUILD_DIR)/modules/x86_64/bootlog
 	$(X64_CC) $(CFLAGS_COMMON) $(X64_INCLUDES) -m64 -c $< -o $@
 
+$(BUILD_DIR)/modules/x86_64/interrupts/interrupts.o: $(X64_MOD_INTERRUPTS_SRC) $(KDIR_X64)/modules/interrupts/interrupts.h | $(BUILD_DIR)/modules/x86_64/interrupts
+	$(X64_CC) $(CFLAGS_COMMON) $(X64_INCLUDES) -m64 -c $< -o $@
+
+$(BUILD_DIR)/modules/x86_64/keyboard/keyboard.o: $(X64_MOD_KEYBOARD_SRC) $(KDIR_X64)/modules/keyboard/keyboard.h | $(BUILD_DIR)/modules/x86_64/keyboard
+	$(X64_CC) $(CFLAGS_COMMON) $(X64_INCLUDES) -m64 -c $< -o $@
+
 $(X64_MOD_VGA_LIB): $(BUILD_DIR)/modules/x86_64/vga/vga.o
 	$(AR) rcs $@ $<
 
@@ -124,6 +154,12 @@ $(X64_MOD_PANIC_LIB): $(BUILD_DIR)/modules/x86_64/panic/panic.o
 	$(AR) rcs $@ $<
 
 $(X64_MOD_BOOTLOG_LIB): $(BUILD_DIR)/modules/x86_64/bootlog/bootlog.o
+	$(AR) rcs $@ $<
+
+$(X64_MOD_INTERRUPTS_LIB): $(BUILD_DIR)/modules/x86_64/interrupts/interrupts.o
+	$(AR) rcs $@ $<
+
+$(X64_MOD_KEYBOARD_LIB): $(BUILD_DIR)/modules/x86_64/keyboard/keyboard.o
 	$(AR) rcs $@ $<
 
 modules-x86_64: $(X64_MODULE_LIBS)
@@ -137,6 +173,12 @@ $(BUILD_DIR)/modules/i386-floppy/panic/panic.o: $(FLP_MOD_PANIC_SRC) $(KDIR_FLP)
 $(BUILD_DIR)/modules/i386-floppy/bootlog/bootlog.o: $(FLP_MOD_BOOTLOG_SRC) $(KDIR_FLP)/modules/bootlog/bootlog.h $(KDIR_FLP)/modules/vga/vga.h | $(BUILD_DIR)/modules/i386-floppy/bootlog
 	$(I386_CC) $(CFLAGS_COMMON) $(FLP_INCLUDES) -m32 -c $< -o $@
 
+$(BUILD_DIR)/modules/i386-floppy/interrupts/interrupts.o: $(FLP_MOD_INTERRUPTS_SRC) $(KDIR_FLP)/modules/interrupts/interrupts.h | $(BUILD_DIR)/modules/i386-floppy/interrupts
+	$(I386_CC) $(CFLAGS_COMMON) $(FLP_INCLUDES) -m32 -c $< -o $@
+
+$(BUILD_DIR)/modules/i386-floppy/keyboard/keyboard.o: $(FLP_MOD_KEYBOARD_SRC) $(KDIR_FLP)/modules/keyboard/keyboard.h | $(BUILD_DIR)/modules/i386-floppy/keyboard
+	$(I386_CC) $(CFLAGS_COMMON) $(FLP_INCLUDES) -m32 -c $< -o $@
+
 $(FLP_MOD_VGA_LIB): $(BUILD_DIR)/modules/i386-floppy/vga/vga.o
 	$(AR) rcs $@ $<
 
@@ -144,6 +186,12 @@ $(FLP_MOD_PANIC_LIB): $(BUILD_DIR)/modules/i386-floppy/panic/panic.o
 	$(AR) rcs $@ $<
 
 $(FLP_MOD_BOOTLOG_LIB): $(BUILD_DIR)/modules/i386-floppy/bootlog/bootlog.o
+	$(AR) rcs $@ $<
+
+$(FLP_MOD_INTERRUPTS_LIB): $(BUILD_DIR)/modules/i386-floppy/interrupts/interrupts.o
+	$(AR) rcs $@ $<
+
+$(FLP_MOD_KEYBOARD_LIB): $(BUILD_DIR)/modules/i386-floppy/keyboard/keyboard.o
 	$(AR) rcs $@ $<
 
 modules-i386-floppy: $(FLP_MODULE_LIBS)
