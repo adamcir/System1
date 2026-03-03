@@ -18,74 +18,87 @@ Boot/config layout:
   - boot/simple32/stage2.asm
 
 Kernel artifact naming:
-- GRUB kernels named `.bin` (ELF for multiboot):
+- GRUB kernels (`.bin`, ELF for multiboot):
   - build/artifacts/i386/kernel.bin
   - build/artifacts/x86_64/kernel.bin
-- Floppy raw kernel image:
+- Floppy raw image:
   - build/artifacts/i386-floppy/kernel.bin
 
-Shared module model:
-- Common core modules:
-  - kernel/common/modules/vga/vga_core.c
-  - kernel/common/modules/bootlog/bootlog_core.c
-  - kernel/common/modules/panic/panic_core.c
-  - kernel/common/modules/keyboard/keyboard_core.c
-  - kernel/common/modules/interrupts/interrupts_common.c
-- Branch modules are wrappers in:
-  - kernel/i386/modules/*
-  - kernel/x86_64/modules/*
-  - kernel/i386-floppy/modules/*
+Module model (current):
+- Common wrappers + cores used by all targets for:
+  - vga
+  - bootlog
+  - panic
+  - keyboard
+  - tty
+- Interrupts:
+  - common logic: `kernel/common/modules/interrupts/interrupts_common.c`
+  - arch-specific wrappers:
+    - kernel/i386/modules/interrupts/interrupts.c
+    - kernel/x86_64/modules/interrupts/interrupts.c
+    - kernel/i386-floppy/modules/interrupts/interrupts.c
+
+TTY status:
+- Shared `tty` module is active for all 3 outputs.
+- `kmain_*` uses `tty_run()` instead of duplicated input loop.
+- TTY handles:
+  - backspace
+  - left/right
+  - delete/home/end
+  - insert toggle
+  - printable chars
+  - `CTRL+ALT+DEL` (hard reset via i8042)
 
 VGA status:
-- Default color: LIGHT_GREY
-- Hardware text cursor sync active (ports 0x3D4/0x3D5)
-- Overflow behavior: scroll-up
-- API includes:
-  - vga_set_color(...)
-  - vga_set_cursor(row, col)
-  - vga_get_cursor(&row, &col)
-  - vga_putc_at(row, col, c)
-  - vga_getc_at(row, col)
-  - vga_hex_u32(...)
+- Hardware cursor sync active (0x3D4/0x3D5)
+- Scroll-up on overflow enabled
+- Color list exposed in `vga.h` via `#define VGA_COLOR_*` (0..15), with enum aliases.
+- Compatibility alias for yellow is present (`VGA_COLOR_YELLOW`, `YELLOW`).
+- Text editing API:
   - vga_text_begin(...)
   - vga_text_putc(...)
   - vga_text_backspace()
   - vga_text_left()
   - vga_text_right()
-- Text editing model:
-  - internal text buffer + cursor path
-  - right arrow cannot move beyond typed text
-  - space is treated as normal typed character
-  - Enter in middle of text splits line (moves tail text to next line)
+  - vga_text_delete()
+  - vga_text_home()
+  - vga_text_end()
+  - vga_text_toggle_insert()
+- Behavior:
+  - right arrow bounded by text model
+  - Enter in middle splits text to next line
+  - Insert toggles insert/overwrite mode
 
 Keyboard status:
-- IRQ1 handler reads scancodes from ports 0x64/0x60
-- Poll path available as optional fallback (disabled by default)
-- Supports ASCII keys + Shift
-- Supports Backspace
-- Supports Left/Right arrows
-- Up/Down arrows intentionally ignored
-- API:
-  - keyboard_take_key()
-  - keyboard_take_char()
+- IRQ1 path active, polling fallback optional
+- Supported editor control keys:
+  - Left, Right
+  - Insert, Delete
+  - Home, End
+  - Ctrl+Alt+Del
+- Key constants include:
+  - KEY_LEFT/KEY_RIGHT
+  - KEY_INSERT/KEY_DELETE
+  - KEY_HOME/KEY_END
+  - KEY_CTRL_ALT_DEL
+
+Bootlog note:
+- `bootlog_core` includes `vga.h` directly; yellow color usage is now explicit and type-safe.
 
 Interrupts status:
-- PIC remap: master 0x20, slave 0x28
-- EOI handling for master/slave implemented
-- PIT IRQ0 configured; timer ticks increment
-- irq_register_handler(...) updates PIC masks, including cascade IRQ2 path
-- IDT gate selector uses runtime CS (fix for prior triple fault)
-- Shared/common split used where arch-neutral; IDT entry format and flags logic remain arch-specific
+- PIC remap 0x20/0x28
+- EOI handling implemented
+- PIT tick source active
+- `irq_register_handler` updates masks (including cascade IRQ2)
+- IDT selector uses runtime CS
 
-Build/runtime validation:
-- `make iso-32 iso-64 img-32` passes after refactor and VGA edits
-- Headless smoke (timeout-based) previously run for all targets without immediate crash
-- Full interactive QEMU validation still pending for final sign-off on new text-edit behavior
+Validation status:
+- Build passes after refactor and key support updates:
+  - make iso-32 iso-64 img-32
+- Interactive QEMU runtime validation still pending as next step.
 
 Known warnings:
-- Linker warns about RWX LOAD segments (accepted for current MVP)
+- Linker RWX LOAD segment warning accepted for MVP.
 
-Next technical priority:
-1. Run interactive QEMU validation on `iso-32`, `iso-64`, `img-32` focused on vga_text_* behavior.
-2. Confirm timer/IRQ parity after refactor in all targets.
-3. If stable, prepare commit set (source-only and optionally artifacts separated).
+Recent source commit:
+- d4b8634

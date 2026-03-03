@@ -8,6 +8,8 @@ static volatile uint8_t key_head;
 static volatile uint8_t key_tail;
 
 static uint8_t shift_pressed;
+static uint8_t ctrl_pressed;
+static uint8_t alt_pressed;
 static uint8_t extended_prefix;
 static uint8_t poll_fallback_enabled;
 
@@ -93,6 +95,8 @@ static char translate_scancode(uint8_t scancode) {
 
 static void keyboard_process_scancode(uint8_t scancode) {
     char translated;
+    uint8_t is_break;
+    uint8_t code;
 
     if (scancode == 0xE0) {
         extended_prefix = 1;
@@ -100,18 +104,37 @@ static void keyboard_process_scancode(uint8_t scancode) {
     }
 
     if (extended_prefix) {
-        if ((scancode & 0x80u) == 0) {
-            if (scancode == 0x4B) {
+        is_break = (uint8_t)(scancode & 0x80u);
+        code = (uint8_t)(scancode & 0x7Fu);
+
+        if (code == 0x1D) {
+            ctrl_pressed = is_break ? 0u : 1u;
+            extended_prefix = 0;
+            return;
+        }
+
+        if (code == 0x38) {
+            alt_pressed = is_break ? 0u : 1u;
+            extended_prefix = 0;
+            return;
+        }
+
+        if (is_break == 0) {
+            if (code == 0x4B) {
                 queue_push(KEY_LEFT);
-            } else if (scancode == 0x4D) {
+            } else if (code == 0x4D) {
                 queue_push(KEY_RIGHT);
-            } else if (scancode == 0x52) {
+            } else if (code == 0x52) {
                 queue_push(KEY_INSERT);
-            } else if (scancode == 0x53) {
-                queue_push(KEY_DELETE);
-            } else if (scancode == 0x47) {
+            } else if (code == 0x53) {
+                if (ctrl_pressed && alt_pressed) {
+                    queue_push(KEY_CTRL_ALT_DEL);
+                } else {
+                    queue_push(KEY_DELETE);
+                }
+            } else if (code == 0x47) {
                 queue_push(KEY_HOME);
-            } else if (scancode == 0x4F) {
+            } else if (code == 0x4F) {
                 queue_push(KEY_END);
             }
         }
@@ -129,6 +152,26 @@ static void keyboard_process_scancode(uint8_t scancode) {
         return;
     }
 
+    if (scancode == 0x1D) {
+        ctrl_pressed = 1;
+        return;
+    }
+
+    if (scancode == 0x9D) {
+        ctrl_pressed = 0;
+        return;
+    }
+
+    if (scancode == 0x38) {
+        alt_pressed = 1;
+        return;
+    }
+
+    if (scancode == 0xB8) {
+        alt_pressed = 0;
+        return;
+    }
+
     if (scancode & 0x80u) {
         return;
     }
@@ -143,6 +186,8 @@ void keyboard_core_init(void) {
     key_head = 0;
     key_tail = 0;
     shift_pressed = 0;
+    ctrl_pressed = 0;
+    alt_pressed = 0;
     extended_prefix = 0;
     poll_fallback_enabled = 0;
 }

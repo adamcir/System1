@@ -1,68 +1,68 @@
 # System/1 Plan (Current)
 
 ## Goal
-Stabilize shared module architecture and finalize interactive text editing behavior on all 3 outputs:
+Stabilize shared module architecture and complete interactive VGA text editing across all 3 outputs:
 1. `iso-32`
 2. `iso-64`
 3. `img-32`
 
 ## Current Completed
-1. Common module layer introduced in `kernel/common/modules/*`.
-2. Branch wrappers (`i386`, `x86_64`, `i386-floppy`) now call shared core modules where architecture/media allows.
-3. Shared cores implemented:
-   - `vga_core`
-   - `bootlog_core`
-   - `panic_core`
-   - `keyboard_core`
-   - `interrupts_common`
-4. `Makefile` updated to build each module as `wrapper.o + core.o` into existing `lib*.a` outputs.
-5. VGA improvements completed:
-   - scroll-up on overflow (no wrap-to-row-0)
-   - unified `vga_hex_u32` API in all branches
-   - text editing API (`vga_text_begin`, `vga_text_putc`, `vga_text_backspace`, `vga_text_left`, `vga_text_right`)
-   - cursor path + text buffer model for editor-like behavior
-   - `Enter` inside text now performs split-line behavior (text after cursor moves to next line)
-   - right arrow no longer moves beyond typed text
-6. Interrupt architecture remains separated where required (IDT descriptor differences and flags save/restore path), with shared PIC/PIT/IRQ common logic.
-7. Full build passes after refactor and VGA behavior updates:
+1. Shared module base in `kernel/common/modules/*` is active.
+2. `vga`, `bootlog`, `panic`, `keyboard`, `tty` wrapper implementations moved to `common`.
+3. Arch module folders keep headers and only required arch-specific sources.
+4. `interrupts` remains split as intended:
+   - shared logic in `interrupts_common`
+   - arch-specific wrapper in each branch
+5. `Makefile` compiles common wrappers/cores for all 3 targets.
+6. VGA text editing supports:
+   - insert/overwrite mode toggle (`Insert`)
+   - delete at cursor (`Delete`)
+   - line start/end navigation (`Home`, `End`)
+   - left/right cursor movement bounded by text model
+   - backspace
+   - newline split behavior in middle of text
+   - scroll-up at bottom
+7. Keyboard extended keys mapped for:
+   - `Insert`
+   - `Delete`
+   - `Home`
+   - `End`
+8. Shared `tty` module integrated for all targets (`iso-32`, `iso-64`, `img-32`) and used from all `kmain_*`.
+9. Keyboard supports `CTRL+ALT+DEL` mapped to `KEY_CTRL_ALT_DEL`.
+10. `tty` handles `KEY_CTRL_ALT_DEL` by triggering hard reset via i8042 command `0xFE`.
+11. VGA headers expose explicit color-number list via `#define VGA_COLOR_*` plus enum aliases (including `YELLOW` compatibility alias).
+12. `bootlog_core` now includes `vga.h` directly (no implicit VGA declarations).
+13. Build validation passes:
    - `make iso-32 iso-64 img-32`
 
 ## Active Work Items
-1. Runtime validation in QEMU for all 3 targets with focus on text editing semantics:
-   - typing
-   - backspace
-   - left/right cursor movement bounds
-   - `Enter` split in middle of line
-   - newline + scroll stability
-2. Validate timer/IRQ stability parity after refactor:
-   - keyboard IRQ path active
-   - `timer_ticks_get()` increments
-3. Optional cleanup pass:
-   - reduce leftover legacy VGA helper usage in kernel loops to only `vga_text_*` where appropriate
-   - update docs/comments for new text editing contract
+1. Full interactive QEMU validation on all 3 targets for editor behavior parity.
+2. Verify timer/IRQ runtime parity after refactor.
+3. Optional cleanup:
+   - document exact VGA text API contract in module docs/comments.
 
 ## Validation Checklist
 1. `make clean && make iso-32 iso-64 img-32`.
-2. Boot each target and verify:
-   - no reboot loop/triple fault
-   - cursor visible and synced
-   - typing works
-   - backspace behavior correct
-   - left/right bounded by text buffer
-   - enter-in-middle performs split-line
-   - scrolling works when bottom is reached
-3. Confirm interrupts:
-   - keyboard IRQ receives input
-   - timer ticks increase over time
+2. Runtime checks per target:
+   - typing, backspace
+   - left/right bounds
+   - insert toggle behavior
+   - delete behavior
+   - home/end behavior
+   - enter split in middle
+   - scroll stability at bottom
+   - ctrl+alt+del reset path
+3. IRQ checks:
+   - keyboard IRQ path active
+   - `timer_ticks_get()` increases
 
 ## Risks
-1. VGA text buffer/path invariants can desync if future code writes directly to cursor/screen outside `vga_text_*` contract.
-2. Large text edits are bounded by `80*25` storage; behavior at hard limit must stay deterministic.
-3. Any future direct screen writes from other modules can invalidate edit buffer expectations.
-4. Arch-specific interrupt wrapper regressions can appear if common/arch boundaries shift without parity checks.
+1. Any direct screen writes outside `vga_text_*` may desync editor model.
+2. Text buffer remains bounded by screen capacity.
+3. Arch interrupt wrappers still require parity checks when changed.
 
 ## Defaults / Assumptions
-1. C-first architecture remains; ASM limited to entry/ISR/lidt/iret paths.
-2. Existing artifact names and output paths stay unchanged.
-3. Branch wrappers remain explicit for clarity, shared logic lives in `kernel/common/modules`.
-4. Linker RWX warning remains accepted for current MVP.
+1. C-first approach with minimal ASM stays unchanged.
+2. Artifact names and output paths stay unchanged.
+3. Common-first module policy remains default unless arch/media constraints require local code.
+4. Linker RWX warning remains accepted for MVP.

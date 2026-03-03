@@ -27,6 +27,7 @@ COMMON_PANIC_DIR := $(COMMON_MODULE_DIR)/panic
 COMMON_BOOTLOG_DIR := $(COMMON_MODULE_DIR)/bootlog
 COMMON_INTERRUPTS_DIR := $(COMMON_MODULE_DIR)/interrupts
 COMMON_KEYBOARD_DIR := $(COMMON_MODULE_DIR)/keyboard
+COMMON_TTY_DIR := $(COMMON_MODULE_DIR)/tty
 
 MB2_SRC        := boot/multiboot2_header.S
 ENTRY32_SRC    := arch/i386/entry_i386.S
@@ -48,28 +49,31 @@ ISO32 := $(IMAGE_OUT_DIR)/system1-iso-32.iso
 ISO64 := $(IMAGE_OUT_DIR)/system1-iso-x86_64.iso
 IMG32 := $(IMAGE_OUT_DIR)/system1-img-32.img
 
-COMMON_INCLUDES := -Iinclude -I$(COMMON_VGA_DIR) -I$(COMMON_PANIC_DIR) -I$(COMMON_BOOTLOG_DIR) -I$(COMMON_INTERRUPTS_DIR) -I$(COMMON_KEYBOARD_DIR)
-I386_INCLUDES := $(COMMON_INCLUDES) -I$(KDIR_I386)/modules/vga -I$(KDIR_I386)/modules/panic -I$(KDIR_I386)/modules/bootlog -I$(KDIR_I386)/modules/interrupts -I$(KDIR_I386)/modules/keyboard
-X64_INCLUDES  := $(COMMON_INCLUDES) -I$(KDIR_X64)/modules/vga -I$(KDIR_X64)/modules/panic -I$(KDIR_X64)/modules/bootlog -I$(KDIR_X64)/modules/interrupts -I$(KDIR_X64)/modules/keyboard
-FLP_INCLUDES  := $(COMMON_INCLUDES) -I$(KDIR_FLP)/modules/vga -I$(KDIR_FLP)/modules/panic -I$(KDIR_FLP)/modules/bootlog -I$(KDIR_FLP)/modules/interrupts -I$(KDIR_FLP)/modules/keyboard
+COMMON_INCLUDES := -Iinclude -I$(COMMON_VGA_DIR) -I$(COMMON_PANIC_DIR) -I$(COMMON_BOOTLOG_DIR) -I$(COMMON_INTERRUPTS_DIR) -I$(COMMON_KEYBOARD_DIR) -I$(COMMON_TTY_DIR)
+I386_INCLUDES := $(COMMON_INCLUDES) -I$(KDIR_I386)/modules/vga -I$(KDIR_I386)/modules/panic -I$(KDIR_I386)/modules/bootlog -I$(KDIR_I386)/modules/interrupts -I$(KDIR_I386)/modules/keyboard -I$(KDIR_I386)/modules/tty
+X64_INCLUDES  := $(COMMON_INCLUDES) -I$(KDIR_X64)/modules/vga -I$(KDIR_X64)/modules/panic -I$(KDIR_X64)/modules/bootlog -I$(KDIR_X64)/modules/interrupts -I$(KDIR_X64)/modules/keyboard -I$(KDIR_X64)/modules/tty
+FLP_INCLUDES  := $(COMMON_INCLUDES) -I$(KDIR_FLP)/modules/vga -I$(KDIR_FLP)/modules/panic -I$(KDIR_FLP)/modules/bootlog -I$(KDIR_FLP)/modules/interrupts -I$(KDIR_FLP)/modules/keyboard -I$(KDIR_FLP)/modules/tty
 
 I386_MOD_VGA_SRC := $(COMMON_VGA_DIR)/vga.c
 I386_MOD_PANIC_SRC := $(COMMON_PANIC_DIR)/panic.c
 I386_MOD_BOOTLOG_SRC := $(COMMON_BOOTLOG_DIR)/bootlog.c
 I386_MOD_INTERRUPTS_SRC := $(KDIR_I386)/modules/interrupts/interrupts.c
 I386_MOD_KEYBOARD_SRC := $(COMMON_KEYBOARD_DIR)/keyboard.c
+I386_MOD_TTY_SRC := $(COMMON_TTY_DIR)/tty.c
 
 X64_MOD_VGA_SRC := $(COMMON_VGA_DIR)/vga.c
 X64_MOD_PANIC_SRC := $(COMMON_PANIC_DIR)/panic.c
 X64_MOD_BOOTLOG_SRC := $(COMMON_BOOTLOG_DIR)/bootlog.c
 X64_MOD_INTERRUPTS_SRC := $(KDIR_X64)/modules/interrupts/interrupts.c
 X64_MOD_KEYBOARD_SRC := $(COMMON_KEYBOARD_DIR)/keyboard.c
+X64_MOD_TTY_SRC := $(COMMON_TTY_DIR)/tty.c
 
 FLP_MOD_VGA_SRC := $(COMMON_VGA_DIR)/vga.c
 FLP_MOD_PANIC_SRC := $(COMMON_PANIC_DIR)/panic.c
 FLP_MOD_BOOTLOG_SRC := $(COMMON_BOOTLOG_DIR)/bootlog.c
 FLP_MOD_INTERRUPTS_SRC := $(KDIR_FLP)/modules/interrupts/interrupts.c
 FLP_MOD_KEYBOARD_SRC := $(COMMON_KEYBOARD_DIR)/keyboard.c
+FLP_MOD_TTY_SRC := $(COMMON_TTY_DIR)/tty.c
 
 COMMON_VGA_CORE_SRC := $(COMMON_VGA_DIR)/vga_core.c
 COMMON_VGA_CORE_HDR := $(COMMON_VGA_DIR)/vga_core.h
@@ -81,27 +85,32 @@ COMMON_INTERRUPTS_CORE_SRC := $(COMMON_INTERRUPTS_DIR)/interrupts_common.c
 COMMON_INTERRUPTS_CORE_HDR := $(COMMON_INTERRUPTS_DIR)/interrupts_common.h
 COMMON_KEYBOARD_CORE_SRC := $(COMMON_KEYBOARD_DIR)/keyboard_core.c
 COMMON_KEYBOARD_CORE_HDR := $(COMMON_KEYBOARD_DIR)/keyboard_core.h
+COMMON_TTY_CORE_SRC := $(COMMON_TTY_DIR)/tty-core.c
+COMMON_TTY_CORE_HDR := $(COMMON_TTY_DIR)/tty-core.h
 
 I386_MOD_VGA_LIB := $(I386_OUT_DIR)/modules/vga/libvga.a
 I386_MOD_PANIC_LIB := $(I386_OUT_DIR)/modules/panic/libpanic.a
 I386_MOD_BOOTLOG_LIB := $(I386_OUT_DIR)/modules/bootlog/libbootlog.a
 I386_MOD_INTERRUPTS_LIB := $(I386_OUT_DIR)/modules/interrupts/libinterrupts.a
 I386_MOD_KEYBOARD_LIB := $(I386_OUT_DIR)/modules/keyboard/libkeyboard.a
-I386_MODULE_LIBS := $(I386_MOD_VGA_LIB) $(I386_MOD_PANIC_LIB) $(I386_MOD_BOOTLOG_LIB) $(I386_MOD_INTERRUPTS_LIB) $(I386_MOD_KEYBOARD_LIB)
+I386_MOD_TTY_LIB := $(I386_OUT_DIR)/modules/tty/libtty.a
+I386_MODULE_LIBS := $(I386_MOD_VGA_LIB) $(I386_MOD_PANIC_LIB) $(I386_MOD_BOOTLOG_LIB) $(I386_MOD_INTERRUPTS_LIB) $(I386_MOD_KEYBOARD_LIB) $(I386_MOD_TTY_LIB)
 
 X64_MOD_VGA_LIB := $(X64_OUT_DIR)/modules/vga/libvga.a
 X64_MOD_PANIC_LIB := $(X64_OUT_DIR)/modules/panic/libpanic.a
 X64_MOD_BOOTLOG_LIB := $(X64_OUT_DIR)/modules/bootlog/libbootlog.a
 X64_MOD_INTERRUPTS_LIB := $(X64_OUT_DIR)/modules/interrupts/libinterrupts.a
 X64_MOD_KEYBOARD_LIB := $(X64_OUT_DIR)/modules/keyboard/libkeyboard.a
-X64_MODULE_LIBS := $(X64_MOD_VGA_LIB) $(X64_MOD_PANIC_LIB) $(X64_MOD_BOOTLOG_LIB) $(X64_MOD_INTERRUPTS_LIB) $(X64_MOD_KEYBOARD_LIB)
+X64_MOD_TTY_LIB := $(X64_OUT_DIR)/modules/tty/libtty.a
+X64_MODULE_LIBS := $(X64_MOD_VGA_LIB) $(X64_MOD_PANIC_LIB) $(X64_MOD_BOOTLOG_LIB) $(X64_MOD_INTERRUPTS_LIB) $(X64_MOD_KEYBOARD_LIB) $(X64_MOD_TTY_LIB)
 
 FLP_MOD_VGA_LIB := $(FLP_OUT_DIR)/modules/vga/libvga.a
 FLP_MOD_PANIC_LIB := $(FLP_OUT_DIR)/modules/panic/libpanic.a
 FLP_MOD_BOOTLOG_LIB := $(FLP_OUT_DIR)/modules/bootlog/libbootlog.a
 FLP_MOD_INTERRUPTS_LIB := $(FLP_OUT_DIR)/modules/interrupts/libinterrupts.a
 FLP_MOD_KEYBOARD_LIB := $(FLP_OUT_DIR)/modules/keyboard/libkeyboard.a
-FLP_MODULE_LIBS := $(FLP_MOD_VGA_LIB) $(FLP_MOD_PANIC_LIB) $(FLP_MOD_BOOTLOG_LIB) $(FLP_MOD_INTERRUPTS_LIB) $(FLP_MOD_KEYBOARD_LIB)
+FLP_MOD_TTY_LIB := $(FLP_OUT_DIR)/modules/tty/libtty.a
+FLP_MODULE_LIBS := $(FLP_MOD_VGA_LIB) $(FLP_MOD_PANIC_LIB) $(FLP_MOD_BOOTLOG_LIB) $(FLP_MOD_INTERRUPTS_LIB) $(FLP_MOD_KEYBOARD_LIB) $(FLP_MOD_TTY_LIB)
 
 .PHONY: all help modules-i386 modules-x86_64 modules-i386-floppy iso-32 iso-64 iso-x86_64 floppy-kernel32 img-32 run-32 run-64 run-x86_64 run-img-32 clean
 
@@ -129,9 +138,9 @@ $(BUILD_OBJ) $(IMAGE_OUT_DIR):
 $(I386_OUT_DIR) $(X64_OUT_DIR) $(FLP_OUT_DIR):
 	mkdir -p $@
 
-$(I386_OUT_DIR)/modules/vga $(I386_OUT_DIR)/modules/panic $(I386_OUT_DIR)/modules/bootlog $(I386_OUT_DIR)/modules/interrupts $(I386_OUT_DIR)/modules/keyboard \
-$(X64_OUT_DIR)/modules/vga $(X64_OUT_DIR)/modules/panic $(X64_OUT_DIR)/modules/bootlog $(X64_OUT_DIR)/modules/interrupts $(X64_OUT_DIR)/modules/keyboard \
-$(FLP_OUT_DIR)/modules/vga $(FLP_OUT_DIR)/modules/panic $(FLP_OUT_DIR)/modules/bootlog $(FLP_OUT_DIR)/modules/interrupts $(FLP_OUT_DIR)/modules/keyboard:
+$(I386_OUT_DIR)/modules/vga $(I386_OUT_DIR)/modules/panic $(I386_OUT_DIR)/modules/bootlog $(I386_OUT_DIR)/modules/interrupts $(I386_OUT_DIR)/modules/keyboard $(I386_OUT_DIR)/modules/tty \
+$(X64_OUT_DIR)/modules/vga $(X64_OUT_DIR)/modules/panic $(X64_OUT_DIR)/modules/bootlog $(X64_OUT_DIR)/modules/interrupts $(X64_OUT_DIR)/modules/keyboard $(X64_OUT_DIR)/modules/tty \
+$(FLP_OUT_DIR)/modules/vga $(FLP_OUT_DIR)/modules/panic $(FLP_OUT_DIR)/modules/bootlog $(FLP_OUT_DIR)/modules/interrupts $(FLP_OUT_DIR)/modules/keyboard $(FLP_OUT_DIR)/modules/tty:
 	mkdir -p $@
 
 $(I386_OUT_DIR)/modules/vga/vga.o: $(I386_MOD_VGA_SRC) $(KDIR_I386)/modules/vga/vga.h $(COMMON_VGA_CORE_HDR) include/types.h | $(I386_OUT_DIR)/modules/vga
@@ -164,6 +173,12 @@ $(I386_OUT_DIR)/modules/keyboard/keyboard.o: $(I386_MOD_KEYBOARD_SRC) $(KDIR_I38
 $(I386_OUT_DIR)/modules/keyboard/keyboard_core.o: $(COMMON_KEYBOARD_CORE_SRC) $(COMMON_KEYBOARD_CORE_HDR) include/types.h | $(I386_OUT_DIR)/modules/keyboard
 	$(I386_CC) $(CFLAGS_COMMON) $(I386_INCLUDES) -m32 -c $< -o $@
 
+$(I386_OUT_DIR)/modules/tty/tty.o: $(I386_MOD_TTY_SRC) $(KDIR_I386)/modules/tty/tty.h $(COMMON_TTY_CORE_HDR) | $(I386_OUT_DIR)/modules/tty
+	$(I386_CC) $(CFLAGS_COMMON) $(I386_INCLUDES) -m32 -c $< -o $@
+
+$(I386_OUT_DIR)/modules/tty/tty-core.o: $(COMMON_TTY_CORE_SRC) $(COMMON_TTY_CORE_HDR) $(KDIR_I386)/modules/tty/tty.h $(KDIR_I386)/modules/keyboard/keyboard.h $(KDIR_I386)/modules/vga/vga.h | $(I386_OUT_DIR)/modules/tty
+	$(I386_CC) $(CFLAGS_COMMON) $(I386_INCLUDES) -m32 -c $< -o $@
+
 $(I386_MOD_VGA_LIB): $(I386_OUT_DIR)/modules/vga/vga.o $(I386_OUT_DIR)/modules/vga/vga_core.o
 	$(AR) rcs $@ $^
 
@@ -177,6 +192,9 @@ $(I386_MOD_INTERRUPTS_LIB): $(I386_OUT_DIR)/modules/interrupts/interrupts.o $(I3
 	$(AR) rcs $@ $^
 
 $(I386_MOD_KEYBOARD_LIB): $(I386_OUT_DIR)/modules/keyboard/keyboard.o $(I386_OUT_DIR)/modules/keyboard/keyboard_core.o
+	$(AR) rcs $@ $^
+
+$(I386_MOD_TTY_LIB): $(I386_OUT_DIR)/modules/tty/tty.o $(I386_OUT_DIR)/modules/tty/tty-core.o
 	$(AR) rcs $@ $^
 
 modules-i386: $(I386_MODULE_LIBS)
@@ -211,6 +229,12 @@ $(X64_OUT_DIR)/modules/keyboard/keyboard.o: $(X64_MOD_KEYBOARD_SRC) $(KDIR_X64)/
 $(X64_OUT_DIR)/modules/keyboard/keyboard_core.o: $(COMMON_KEYBOARD_CORE_SRC) $(COMMON_KEYBOARD_CORE_HDR) include/types.h | $(X64_OUT_DIR)/modules/keyboard
 	$(X64_CC) $(CFLAGS_COMMON) $(X64_INCLUDES) -m64 -mno-red-zone -c $< -o $@
 
+$(X64_OUT_DIR)/modules/tty/tty.o: $(X64_MOD_TTY_SRC) $(KDIR_X64)/modules/tty/tty.h $(COMMON_TTY_CORE_HDR) | $(X64_OUT_DIR)/modules/tty
+	$(X64_CC) $(CFLAGS_COMMON) $(X64_INCLUDES) -m64 -mno-red-zone -c $< -o $@
+
+$(X64_OUT_DIR)/modules/tty/tty-core.o: $(COMMON_TTY_CORE_SRC) $(COMMON_TTY_CORE_HDR) $(KDIR_X64)/modules/tty/tty.h $(KDIR_X64)/modules/keyboard/keyboard.h $(KDIR_X64)/modules/vga/vga.h | $(X64_OUT_DIR)/modules/tty
+	$(X64_CC) $(CFLAGS_COMMON) $(X64_INCLUDES) -m64 -mno-red-zone -c $< -o $@
+
 $(X64_MOD_VGA_LIB): $(X64_OUT_DIR)/modules/vga/vga.o $(X64_OUT_DIR)/modules/vga/vga_core.o
 	$(AR) rcs $@ $^
 
@@ -224,6 +248,9 @@ $(X64_MOD_INTERRUPTS_LIB): $(X64_OUT_DIR)/modules/interrupts/interrupts.o $(X64_
 	$(AR) rcs $@ $^
 
 $(X64_MOD_KEYBOARD_LIB): $(X64_OUT_DIR)/modules/keyboard/keyboard.o $(X64_OUT_DIR)/modules/keyboard/keyboard_core.o
+	$(AR) rcs $@ $^
+
+$(X64_MOD_TTY_LIB): $(X64_OUT_DIR)/modules/tty/tty.o $(X64_OUT_DIR)/modules/tty/tty-core.o
 	$(AR) rcs $@ $^
 
 modules-x86_64: $(X64_MODULE_LIBS)
@@ -258,6 +285,12 @@ $(FLP_OUT_DIR)/modules/keyboard/keyboard.o: $(FLP_MOD_KEYBOARD_SRC) $(KDIR_FLP)/
 $(FLP_OUT_DIR)/modules/keyboard/keyboard_core.o: $(COMMON_KEYBOARD_CORE_SRC) $(COMMON_KEYBOARD_CORE_HDR) include/types.h | $(FLP_OUT_DIR)/modules/keyboard
 	$(I386_CC) $(CFLAGS_COMMON) $(FLP_INCLUDES) -m32 -c $< -o $@
 
+$(FLP_OUT_DIR)/modules/tty/tty.o: $(FLP_MOD_TTY_SRC) $(KDIR_FLP)/modules/tty/tty.h $(COMMON_TTY_CORE_HDR) | $(FLP_OUT_DIR)/modules/tty
+	$(I386_CC) $(CFLAGS_COMMON) $(FLP_INCLUDES) -m32 -c $< -o $@
+
+$(FLP_OUT_DIR)/modules/tty/tty-core.o: $(COMMON_TTY_CORE_SRC) $(COMMON_TTY_CORE_HDR) $(KDIR_FLP)/modules/tty/tty.h $(KDIR_FLP)/modules/keyboard/keyboard.h $(KDIR_FLP)/modules/vga/vga.h | $(FLP_OUT_DIR)/modules/tty
+	$(I386_CC) $(CFLAGS_COMMON) $(FLP_INCLUDES) -m32 -c $< -o $@
+
 $(FLP_MOD_VGA_LIB): $(FLP_OUT_DIR)/modules/vga/vga.o $(FLP_OUT_DIR)/modules/vga/vga_core.o
 	$(AR) rcs $@ $^
 
@@ -271,6 +304,9 @@ $(FLP_MOD_INTERRUPTS_LIB): $(FLP_OUT_DIR)/modules/interrupts/interrupts.o $(FLP_
 	$(AR) rcs $@ $^
 
 $(FLP_MOD_KEYBOARD_LIB): $(FLP_OUT_DIR)/modules/keyboard/keyboard.o $(FLP_OUT_DIR)/modules/keyboard/keyboard_core.o
+	$(AR) rcs $@ $^
+
+$(FLP_MOD_TTY_LIB): $(FLP_OUT_DIR)/modules/tty/tty.o $(FLP_OUT_DIR)/modules/tty/tty-core.o
 	$(AR) rcs $@ $^
 
 modules-i386-floppy: $(FLP_MODULE_LIBS)
