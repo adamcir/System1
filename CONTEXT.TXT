@@ -18,17 +18,17 @@ Boot/config layout:
 
 Kernel artifact naming:
 - GRUB kernels are named .bin (still ELF format for multiboot):
-  - build/kernel32.bin
-  - build/kernel64.bin
+  - build/artifacts/i386/kernel.bin
+  - build/artifacts/x86_64/kernel.bin
 - Floppy raw kernel image:
-  - build/kernel32-floppy.bin
+  - build/artifacts/i386-floppy/kernel.bin
 
 Implemented modules in all branches:
 - vga
 - bootlog
 - panic
-- interrupts (skeleton)
-- keyboard (polling implementation)
+- interrupts (full IDT/PIC/IRQ implementation)
+- keyboard (IRQ1 + optional polling fallback)
 
 VGA status:
 - Default color: LIGHT_GREY
@@ -41,7 +41,8 @@ VGA status:
 - Enter/newline cursor movement fixed.
 
 Keyboard status:
-- Polling via ports 0x64/0x60.
+- IRQ1 handler reads scancodes from ports 0x64/0x60.
+- Polling path is optional fallback (disabled by default).
 - Supports regular ASCII keys + Shift.
 - Supports Backspace.
 - Supports arrow Left and Right.
@@ -51,10 +52,26 @@ Keyboard status:
   - keyboard_take_char()
 
 Kernel loop behavior:
-- Polls keyboard continuously.
+- Calls keyboard_poll() only as optional fallback path.
 - Echoes typed chars to VGA.
 - Backspace erases previous character on screen.
 - Left/Right arrows move cursor.
+
+Interrupts status:
+- PIC remap active: master 0x20, slave 0x28.
+- IRQ EOI handling implemented for master/slave.
+- PIT IRQ0 configured and timer ticks increment in IRQ handler.
+- `irq_register_handler(...)` now also updates PIC masks.
+- Slave IRQ enable path correctly handles cascade IRQ2.
+- `timer_ticks_get()` uses interrupt-safe read section.
+- IDT gate selector now uses runtime `CS` value (not hardcoded 0x08).
+
+Boot/runtime validation:
+- `make clean && make iso-32 iso-64 img-32` passes.
+- `iso-32` in QEMU `-nographic` no longer falls into reboot loop.
+- Root cause of previous reboot loop was triple fault after first timer IRQ:
+  - IDT entries used wrong selector (`0x08`) while runtime `CS` was `0x10`.
+  - Fixed by setting selector from current `CS` during `interrupts_init()`.
 
 Floppy stability fixes already in place:
 - stage1/stage2 LBA->CHS register clobber fix.
@@ -64,4 +81,4 @@ Known warnings:
 - Linker warns about RWX LOAD segments (accepted in current MVP).
 
 Next technical priority:
-- Replace interrupts skeleton with full IDT + PIC + IRQ1 keyboard handler.
+- Run equivalent runtime validation for `iso-64` and `img-32` paths.

@@ -14,6 +14,8 @@ void kmain_x86_64(uint32_t magic, uint32_t info) {
     vga_init();
     interrupts_init();
     keyboard_init();
+    irq_register_handler(1, keyboard_irq_handler);
+    interrupts_enable();
     bootlog_info("System/1 boot via GRUB");
     bootlog_info("modules: interrupts, keyboard");
     vga_set_cursor(2, 0);
@@ -22,6 +24,7 @@ void kmain_x86_64(uint32_t magic, uint32_t info) {
         keyboard_poll();
         key = keyboard_take_key();
         if (key == KEY_NONE) {
+            __asm__ volatile ("hlt");
             continue;
         }
 

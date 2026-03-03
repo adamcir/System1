@@ -1,14 +1,50 @@
 #include "types.h"
 #include "keyboard.h"
 
-static int last_key;
+#define KEY_BUFFER_SIZE 64u
+
+static volatile int key_buffer[KEY_BUFFER_SIZE];
+static volatile uint8_t key_head;
+static volatile uint8_t key_tail;
+
 static uint8_t shift_pressed;
 static uint8_t extended_prefix;
+static uint8_t poll_fallback_enabled;
 
 static uint8_t inb(uint16_t port) {
     uint8_t value;
     __asm__ volatile ("inb %1, %0" : "=a"(value) : "Nd"(port));
     return value;
+}
+
+static void queue_push(int key) {
+    uint8_t next = (uint8_t)((key_head + 1u) & (KEY_BUFFER_SIZE - 1u));
+    if (next == key_tail) {
+        return;
+    }
+
+    key_buffer[key_head] = key;
+    key_head = next;
+}
+
+static int queue_pop(void) {
+    int key;
+
+    if (key_head == key_tail) {
+        return KEY_NONE;
+    }
+
+    key = key_buffer[key_tail];
+    key_tail = (uint8_t)((key_tail + 1u) & (KEY_BUFFER_SIZE - 1u));
+    return key;
+}
+
+static int queue_peek(void) {
+    if (key_head == key_tail) {
+        return KEY_NONE;
+    }
+
+    return key_buffer[key_tail];
 }
 
 static char translate_scancode(uint8_t scancode) {
@@ -55,23 +91,8 @@ static char translate_scancode(uint8_t scancode) {
     return shift_pressed ? shift_map[scancode] : base_map[scancode];
 }
 
-void keyboard_init(void) {
-    last_key = KEY_NONE;
-    shift_pressed = 0;
-    extended_prefix = 0;
-}
-
-void keyboard_poll(void) {
-    uint8_t status;
-    uint8_t scancode;
+static void keyboard_process_scancode(uint8_t scancode) {
     char translated;
-
-    status = inb(0x64);
-    if ((status & 0x01u) == 0) {
-        return;
-    }
-
-    scancode = inb(0x60);
 
     if (scancode == 0xE0) {
         extended_prefix = 1;
@@ -81,9 +102,9 @@ void keyboard_poll(void) {
     if (extended_prefix) {
         if ((scancode & 0x80u) == 0) {
             if (scancode == 0x4B) {
-                last_key = KEY_LEFT;
+                queue_push(KEY_LEFT);
             } else if (scancode == 0x4D) {
-                last_key = KEY_RIGHT;
+                queue_push(KEY_RIGHT);
             }
         }
         extended_prefix = 0;
@@ -106,27 +127,57 @@ void keyboard_poll(void) {
 
     translated = translate_scancode(scancode);
     if (translated != 0) {
-        last_key = (int)translated;
+        queue_push((int)translated);
     }
 }
 
+void keyboard_init(void) {
+    key_head = 0;
+    key_tail = 0;
+    shift_pressed = 0;
+    extended_prefix = 0;
+    poll_fallback_enabled = 0;
+}
+
+void keyboard_set_poll_fallback(uint8_t enabled) {
+    poll_fallback_enabled = enabled ? 1u : 0u;
+}
+
+void keyboard_poll(void) {
+    uint8_t status;
+
+    if (poll_fallback_enabled == 0) {
+        return;
+    }
+
+    status = inb(0x64);
+    if ((status & 0x01u) == 0) {
+        return;
+    }
+
+    keyboard_process_scancode(inb(0x60));
+}
+
+void keyboard_irq_handler(void) {
+    keyboard_process_scancode(inb(0x60));
+}
+
 char keyboard_last_char(void) {
-    if (last_key > 0 && last_key < 128) {
-        return (char)last_key;
+    int key = queue_peek();
+    if (key > 0 && key < 128) {
+        return (char)key;
     }
     return 0;
 }
 
 char keyboard_take_char(void) {
-    char c = keyboard_last_char();
-    if (c != 0) {
-        last_key = KEY_NONE;
+    int key = queue_pop();
+    if (key > 0 && key < 128) {
+        return (char)key;
     }
-    return c;
+    return 0;
 }
 
 int keyboard_take_key(void) {
-    int key = last_key;
-    last_key = KEY_NONE;
-    return key;
+    return queue_pop();
 }

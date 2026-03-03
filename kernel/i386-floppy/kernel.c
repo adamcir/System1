@@ -21,6 +21,8 @@ void kmain_floppy_i386(uint32_t magic, uint32_t boot_info_ptr) {
     vga_init();
     interrupts_init();
     keyboard_init();
+    irq_register_handler(1, keyboard_irq_handler);
+    interrupts_enable();
     if (magic != FLOPPY_MAGIC) {
         bootlog_info("Bad boot magic");
         for (;;) {
@@ -43,6 +45,7 @@ void kmain_floppy_i386(uint32_t magic, uint32_t boot_info_ptr) {
         keyboard_poll();
         key = keyboard_take_key();
         if (key == KEY_NONE) {
+            __asm__ volatile ("hlt");
             continue;
         }
 

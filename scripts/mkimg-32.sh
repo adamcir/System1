@@ -3,10 +3,12 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="$ROOT_DIR/build"
-IMG="$BUILD_DIR/system1-img-32.img"
-STAGE1="$BUILD_DIR/stage1.bin"
-STAGE2="$BUILD_DIR/stage2.bin"
-KERNEL_BIN="$BUILD_DIR/kernel32-floppy.bin"
+ARTIFACT_DIR="$BUILD_DIR/artifacts"
+STAGING_DIR="$BUILD_DIR/staging/floppy"
+IMG="$ARTIFACT_DIR/images/system1-img-32.img"
+STAGE1="$STAGING_DIR/stage1.bin"
+STAGE2="$STAGING_DIR/stage2.bin"
+KERNEL_BIN="$ARTIFACT_DIR/i386-floppy/kernel.bin"
 
 NASM_BIN="${NASM:-nasm}"
 MKFS_FAT_BIN="${MKFS_FAT:-mkfs.fat}"
@@ -20,6 +22,8 @@ if [[ ! -f "$KERNEL_BIN" ]]; then
   echo "Missing $KERNEL_BIN"
   exit 1
 fi
+
+mkdir -p "$STAGING_DIR" "$(dirname "$IMG")"
 
 "$NASM_BIN" -f bin "$ROOT_DIR/boot/simple32/stage2.asm" -o "$STAGE2"
 
