@@ -6,8 +6,6 @@
 
 void kmain_x86_64(uint32_t magic, uint32_t info) {
     int key;
-    unsigned short row;
-    unsigned short col;
     (void)magic;
     (void)info;
 
@@ -18,7 +16,7 @@ void kmain_x86_64(uint32_t magic, uint32_t info) {
     interrupts_enable();
     bootlog_info("System/1 boot via GRUB");
     bootlog_info("modules: interrupts, keyboard");
-    vga_set_cursor(2, 0);
+    vga_text_begin(2, 0);
 
     for (;;) {
         keyboard_poll();
@@ -29,44 +27,42 @@ void kmain_x86_64(uint32_t magic, uint32_t info) {
         }
 
         if (key == '\b') {
-            vga_get_cursor(&row, &col);
-            if (col > 0) {
-                col--;
-            } else if (row > 0) {
-                row--;
-                col = 79;
-            }
-            vga_putc_at(row, col, ' ');
-            vga_set_cursor(row, col);
+            vga_text_backspace();
             continue;
         }
 
         if (key == KEY_LEFT) {
-            vga_get_cursor(&row, &col);
-            if (col > 0) {
-                col--;
-            } else if (row > 0) {
-                row--;
-                col = 79;
-            }
-            vga_set_cursor(row, col);
+            vga_text_left();
             continue;
         }
 
         if (key == KEY_RIGHT) {
-            vga_get_cursor(&row, &col);
-            if (col < 79) {
-                col++;
-            } else if (row < 24) {
-                row++;
-                col = 0;
-            }
-            vga_set_cursor(row, col);
+            vga_text_right();
+            continue;
+        }
+
+        if (key == KEY_DELETE) {
+            vga_text_delete();
+            continue;
+        }
+
+        if (key == KEY_HOME) {
+            vga_text_home();
+            continue;
+        }
+
+        if (key == KEY_END) {
+            vga_text_end();
+            continue;
+        }
+
+        if (key == KEY_INSERT) {
+            vga_text_toggle_insert();
             continue;
         }
 
         if (key > 0 && key < 128) {
-            vga_putc((char)key);
+            vga_text_putc((char)key);
         }
     }
 }

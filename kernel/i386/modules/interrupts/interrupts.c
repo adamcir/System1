@@ -1,19 +1,5 @@
 #include "interrupts.h"
-
-#define IDT_SIZE 256
-#define IRQ_COUNT 16
-
-#define PIC1_CMD  0x20
-#define PIC1_DATA 0x21
-#define PIC2_CMD  0xA0
-#define PIC2_DATA 0xA1
-
-#define PIC_EOI 0x20
-
-#define PIT_CMD      0x43
-#define PIT_CH0_DATA 0x40
-#define PIT_HZ       100u
-#define PIT_BASE_HZ  1193182u
+#include "interrupts_common.h"
 
 typedef struct __attribute__((packed)) {
     uint16_t offset_low;
@@ -29,8 +15,7 @@ typedef struct __attribute__((packed)) {
 } idtr_t;
 
 static idt_entry_t g_idt[IDT_SIZE];
-static irq_handler_t g_irq_handlers[IRQ_COUNT];
-static volatile uint64_t g_timer_ticks;
+static interrupts_common_state_t g_interrupts_state;
 
 #define DECL_ISR(n) extern void isr##n(void)
 DECL_ISR(0);  DECL_ISR(1);  DECL_ISR(2);  DECL_ISR(3);
@@ -56,20 +41,6 @@ static void (*const g_isr_stub_table[48])(void) = {
     isr40, isr41, isr42, isr43, isr44, isr45, isr46, isr47
 };
 
-static void outb(uint16_t port, uint8_t value) {
-    __asm__ volatile ("outb %0, %1" : : "a"(value), "Nd"(port));
-}
-
-static uint8_t inb(uint16_t port) {
-    uint8_t value;
-    __asm__ volatile ("inb %1, %0" : "=a"(value) : "Nd"(port));
-    return value;
-}
-
-static void io_wait(void) {
-    outb(0x80, 0);
-}
-
 static void lidt(const idtr_t* idtr) {
     __asm__ volatile ("lidt (%0)" : : "r"(idtr));
 }
@@ -88,95 +59,12 @@ static void idt_set_gate(uint8_t vector, uint32_t handler_addr, uint16_t selecto
     g_idt[vector].offset_high = (uint16_t)((handler_addr >> 16) & 0xFFFFu);
 }
 
-static void pic_remap(uint8_t offset1, uint8_t offset2) {
-    uint8_t master_mask = inb(PIC1_DATA);
-    uint8_t slave_mask = inb(PIC2_DATA);
-
-    outb(PIC1_CMD, 0x11);
-    io_wait();
-    outb(PIC2_CMD, 0x11);
-    io_wait();
-
-    outb(PIC1_DATA, offset1);
-    io_wait();
-    outb(PIC2_DATA, offset2);
-    io_wait();
-
-    outb(PIC1_DATA, 4);
-    io_wait();
-    outb(PIC2_DATA, 2);
-    io_wait();
-
-    outb(PIC1_DATA, 0x01);
-    io_wait();
-    outb(PIC2_DATA, 0x01);
-    io_wait();
-
-    outb(PIC1_DATA, master_mask);
-    outb(PIC2_DATA, slave_mask);
-}
-
-static void pic_send_eoi(uint8_t irq) {
-    if (irq >= 8) {
-        outb(PIC2_CMD, PIC_EOI);
-    }
-    outb(PIC1_CMD, PIC_EOI);
-}
-
-static void pic_set_mask(uint8_t irq, uint8_t masked) {
-    uint16_t port;
-    uint8_t bit;
-    uint8_t value;
-
-    if (irq < 8) {
-        port = PIC1_DATA;
-        bit = irq;
-    } else {
-        port = PIC2_DATA;
-        bit = (uint8_t)(irq - 8);
-    }
-
-    value = inb(port);
-    if (masked) {
-        value = (uint8_t)(value | (uint8_t)(1u << bit));
-    } else {
-        value = (uint8_t)(value & (uint8_t)~(1u << bit));
-    }
-    outb(port, value);
-}
-
-static void pit_init(uint32_t hz) {
-    uint16_t divisor;
-
-    if (hz == 0) {
-        hz = PIT_HZ;
-    }
-
-    divisor = (uint16_t)(PIT_BASE_HZ / hz);
-    outb(PIT_CMD, 0x36);
-    outb(PIT_CH0_DATA, (uint8_t)(divisor & 0xFFu));
-    outb(PIT_CH0_DATA, (uint8_t)((divisor >> 8) & 0xFFu));
-}
-
 static void timer_irq_handler(void) {
-    g_timer_ticks++;
+    interrupts_common_timer_irq(&g_interrupts_state);
 }
 
 void interrupts_dispatch(uint8_t vector) {
-    uint8_t irq;
-    irq_handler_t handler;
-
-    if (vector < 32 || vector >= 48) {
-        return;
-    }
-
-    irq = (uint8_t)(vector - 32);
-    handler = g_irq_handlers[irq];
-    if (handler != 0) {
-        handler();
-    }
-
-    pic_send_eoi(irq);
+    interrupts_common_dispatch(&g_interrupts_state, vector);
 }
 
 void interrupts_init(void) {
@@ -196,24 +84,17 @@ void interrupts_init(void) {
 
     code_selector = read_cs();
     for (i = 0; i < 48; i++) {
-        idt_set_gate(i, (uint32_t)(uintptr_t)g_isr_stub_table[i], code_selector, 0x8E);
+        idt_set_gate((uint8_t)i, (uint32_t)(uintptr_t)g_isr_stub_table[i], code_selector, 0x8E);
     }
 
     idtr.limit = (uint16_t)(sizeof(g_idt) - 1);
     idtr.base = (uint32_t)(uintptr_t)&g_idt[0];
     lidt(&idtr);
 
-    for (i = 0; i < IRQ_COUNT; i++) {
-        g_irq_handlers[i] = 0;
-    }
-
-    g_timer_ticks = 0;
-
-    pic_remap(0x20, 0x28);
-    outb(PIC1_DATA, 0xF8);
-    outb(PIC2_DATA, 0xFF);
-
-    pit_init(PIT_HZ);
+    interrupts_common_state_reset(&g_interrupts_state);
+    interrupts_common_pic_remap(0x20, 0x28);
+    interrupts_common_pic_set_default_masks();
+    interrupts_common_pit_init(100u);
     irq_register_handler(0, timer_irq_handler);
 }
 
@@ -226,37 +107,7 @@ void interrupts_disable(void) {
 }
 
 int irq_register_handler(uint8_t irq, irq_handler_t handler) {
-    uint8_t i;
-    uint8_t has_slave_handler = 0;
-
-    if (irq >= IRQ_COUNT) {
-        return -1;
-    }
-
-    g_irq_handlers[irq] = handler;
-
-    if (handler != 0) {
-        pic_set_mask(irq, 0);
-        if (irq >= 8) {
-            pic_set_mask(2, 0);
-        }
-        return 0;
-    }
-
-    pic_set_mask(irq, 1);
-    if (irq >= 8) {
-        for (i = 8; i < IRQ_COUNT; i++) {
-            if (g_irq_handlers[i] != 0) {
-                has_slave_handler = 1;
-                break;
-            }
-        }
-        if (has_slave_handler == 0) {
-            pic_set_mask(2, 1);
-        }
-    }
-
-    return 0;
+    return interrupts_common_irq_register_handler(&g_interrupts_state, irq, handler);
 }
 
 uint64_t timer_ticks_get(void) {
@@ -264,7 +115,7 @@ uint64_t timer_ticks_get(void) {
     uint64_t ticks;
 
     __asm__ volatile ("pushf; pop %0; cli" : "=r"(flags) : : "memory");
-    ticks = g_timer_ticks;
+    ticks = interrupts_common_timer_ticks_get_raw(&g_interrupts_state);
     if ((flags & (1u << 9)) != 0u) {
         __asm__ volatile ("sti" : : : "memory");
     }

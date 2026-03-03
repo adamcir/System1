@@ -7,6 +7,7 @@ Architecture layout:
 - kernel/i386
 - kernel/x86_64
 - kernel/i386-floppy
+- kernel/common/modules
 
 Boot/config layout:
 - GRUB configs:
@@ -17,68 +18,74 @@ Boot/config layout:
   - boot/simple32/stage2.asm
 
 Kernel artifact naming:
-- GRUB kernels are named .bin (still ELF format for multiboot):
+- GRUB kernels named `.bin` (ELF for multiboot):
   - build/artifacts/i386/kernel.bin
   - build/artifacts/x86_64/kernel.bin
 - Floppy raw kernel image:
   - build/artifacts/i386-floppy/kernel.bin
 
-Implemented modules in all branches:
-- vga
-- bootlog
-- panic
-- interrupts (full IDT/PIC/IRQ implementation)
-- keyboard (IRQ1 + optional polling fallback)
+Shared module model:
+- Common core modules:
+  - kernel/common/modules/vga/vga_core.c
+  - kernel/common/modules/bootlog/bootlog_core.c
+  - kernel/common/modules/panic/panic_core.c
+  - kernel/common/modules/keyboard/keyboard_core.c
+  - kernel/common/modules/interrupts/interrupts_common.c
+- Branch modules are wrappers in:
+  - kernel/i386/modules/*
+  - kernel/x86_64/modules/*
+  - kernel/i386-floppy/modules/*
 
 VGA status:
 - Default color: LIGHT_GREY
-- API:
+- Hardware text cursor sync active (ports 0x3D4/0x3D5)
+- Overflow behavior: scroll-up
+- API includes:
   - vga_set_color(...)
   - vga_set_cursor(row, col)
   - vga_get_cursor(&row, &col)
   - vga_putc_at(row, col, c)
-- Hardware text cursor is synchronized (port 0x3D4/0x3D5).
-- Enter/newline cursor movement fixed.
+  - vga_getc_at(row, col)
+  - vga_hex_u32(...)
+  - vga_text_begin(...)
+  - vga_text_putc(...)
+  - vga_text_backspace()
+  - vga_text_left()
+  - vga_text_right()
+- Text editing model:
+  - internal text buffer + cursor path
+  - right arrow cannot move beyond typed text
+  - space is treated as normal typed character
+  - Enter in middle of text splits line (moves tail text to next line)
 
 Keyboard status:
-- IRQ1 handler reads scancodes from ports 0x64/0x60.
-- Polling path is optional fallback (disabled by default).
-- Supports regular ASCII keys + Shift.
-- Supports Backspace.
-- Supports arrow Left and Right.
-- Arrow Up and Down intentionally ignored.
-- New API:
+- IRQ1 handler reads scancodes from ports 0x64/0x60
+- Poll path available as optional fallback (disabled by default)
+- Supports ASCII keys + Shift
+- Supports Backspace
+- Supports Left/Right arrows
+- Up/Down arrows intentionally ignored
+- API:
   - keyboard_take_key()
   - keyboard_take_char()
 
-Kernel loop behavior:
-- Calls keyboard_poll() only as optional fallback path.
-- Echoes typed chars to VGA.
-- Backspace erases previous character on screen.
-- Left/Right arrows move cursor.
-
 Interrupts status:
-- PIC remap active: master 0x20, slave 0x28.
-- IRQ EOI handling implemented for master/slave.
-- PIT IRQ0 configured and timer ticks increment in IRQ handler.
-- `irq_register_handler(...)` now also updates PIC masks.
-- Slave IRQ enable path correctly handles cascade IRQ2.
-- `timer_ticks_get()` uses interrupt-safe read section.
-- IDT gate selector now uses runtime `CS` value (not hardcoded 0x08).
+- PIC remap: master 0x20, slave 0x28
+- EOI handling for master/slave implemented
+- PIT IRQ0 configured; timer ticks increment
+- irq_register_handler(...) updates PIC masks, including cascade IRQ2 path
+- IDT gate selector uses runtime CS (fix for prior triple fault)
+- Shared/common split used where arch-neutral; IDT entry format and flags logic remain arch-specific
 
-Boot/runtime validation:
-- `make clean && make iso-32 iso-64 img-32` passes.
-- `iso-32` in QEMU `-nographic` no longer falls into reboot loop.
-- Root cause of previous reboot loop was triple fault after first timer IRQ:
-  - IDT entries used wrong selector (`0x08`) while runtime `CS` was `0x10`.
-  - Fixed by setting selector from current `CS` during `interrupts_init()`.
-
-Floppy stability fixes already in place:
-- stage1/stage2 LBA->CHS register clobber fix.
-- linker.floppy.i386.ld base aligned to 0x00010000.
+Build/runtime validation:
+- `make iso-32 iso-64 img-32` passes after refactor and VGA edits
+- Headless smoke (timeout-based) previously run for all targets without immediate crash
+- Full interactive QEMU validation still pending for final sign-off on new text-edit behavior
 
 Known warnings:
-- Linker warns about RWX LOAD segments (accepted in current MVP).
+- Linker warns about RWX LOAD segments (accepted for current MVP)
 
 Next technical priority:
-- Run equivalent runtime validation for `iso-64` and `img-32` paths.
+1. Run interactive QEMU validation on `iso-32`, `iso-64`, `img-32` focused on vga_text_* behavior.
+2. Confirm timer/IRQ parity after refactor in all targets.
+3. If stable, prepare commit set (source-only and optionally artifacts separated).

@@ -25,7 +25,18 @@ void vga_set_color(vga_color_t color);
 void vga_set_cursor(unsigned short new_row, unsigned short new_col);
 void vga_get_cursor(unsigned short* out_row, unsigned short* out_col);
 void vga_putc_at(unsigned short at_row, unsigned short at_col, char c);
+char vga_getc_at(unsigned short at_row, unsigned short at_col);
 void vga_putc(char c);
 void vga_puts(const char* s);
+void vga_hex_u32(unsigned int value);
+void vga_text_begin(unsigned short row, unsigned short col);
+void vga_text_putc(char c);
+void vga_text_backspace(void);
+void vga_text_left(void);
+void vga_text_right(void);
+void vga_text_delete(void);
+void vga_text_home(void);
+void vga_text_end(void);
+void vga_text_toggle_insert(void);
 
 #endif

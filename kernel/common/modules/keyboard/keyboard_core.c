@@ -1,5 +1,5 @@
 #include "types.h"
-#include "keyboard.h"
+#include "keyboard_core.h"
 
 #define KEY_BUFFER_SIZE 64u
 
@@ -105,6 +105,14 @@ static void keyboard_process_scancode(uint8_t scancode) {
                 queue_push(KEY_LEFT);
             } else if (scancode == 0x4D) {
                 queue_push(KEY_RIGHT);
+            } else if (scancode == 0x52) {
+                queue_push(KEY_INSERT);
+            } else if (scancode == 0x53) {
+                queue_push(KEY_DELETE);
+            } else if (scancode == 0x47) {
+                queue_push(KEY_HOME);
+            } else if (scancode == 0x4F) {
+                queue_push(KEY_END);
             }
         }
         extended_prefix = 0;
@@ -131,7 +139,7 @@ static void keyboard_process_scancode(uint8_t scancode) {
     }
 }
 
-void keyboard_init(void) {
+void keyboard_core_init(void) {
     key_head = 0;
     key_tail = 0;
     shift_pressed = 0;
@@ -139,11 +147,11 @@ void keyboard_init(void) {
     poll_fallback_enabled = 0;
 }
 
-void keyboard_set_poll_fallback(uint8_t enabled) {
+void keyboard_core_set_poll_fallback(uint8_t enabled) {
     poll_fallback_enabled = enabled ? 1u : 0u;
 }
 
-void keyboard_poll(void) {
+void keyboard_core_poll(void) {
     uint8_t status;
 
     if (poll_fallback_enabled == 0) {
@@ -158,11 +166,11 @@ void keyboard_poll(void) {
     keyboard_process_scancode(inb(0x60));
 }
 
-void keyboard_irq_handler(void) {
+void keyboard_core_irq_handler(void) {
     keyboard_process_scancode(inb(0x60));
 }
 
-char keyboard_last_char(void) {
+char keyboard_core_last_char(void) {
     int key = queue_peek();
     if (key > 0 && key < 128) {
         return (char)key;
@@ -170,7 +178,7 @@ char keyboard_last_char(void) {
     return 0;
 }
 
-char keyboard_take_char(void) {
+char keyboard_core_take_char(void) {
     int key = queue_pop();
     if (key > 0 && key < 128) {
         return (char)key;
@@ -178,6 +186,6 @@ char keyboard_take_char(void) {
     return 0;
 }
 
-int keyboard_take_key(void) {
+int keyboard_core_take_key(void) {
     return queue_pop();
 }
