@@ -152,6 +152,8 @@ kernel_found:
     jmp .load_clusters
 
 done_loading:
+    call floppy_motor_off
+
     ; Fill boot_info at BOOT_INFO_SEG:0
     mov ax, BOOT_INFO_SEG
     mov es, ax
@@ -185,10 +187,18 @@ disk_fail:
     call print
 
 halt:
+    call floppy_motor_off
     cli
 .hang:
     hlt
     jmp .hang
+
+floppy_motor_off:
+    ; DOR (0x3F2): keep controller enabled, all motor bits off.
+    mov dx, 0x03F2
+    mov al, 0x0C
+    out dx, al
+    ret
 
 ; AX = cluster
 fat12_next_cluster:

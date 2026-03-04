@@ -20,6 +20,7 @@ Boot/config layout:
 - Floppy bootloader:
   - boot/simple32/stage1.asm
   - boot/simple32/stage2.asm
+  - stage2 now powers floppy motor off after load/halt via FDC DOR (0x3F2)
 
 Kernel artifact naming:
 - GRUB kernels (`.bin`, ELF for multiboot):
@@ -89,6 +90,10 @@ VGA status:
 
 Keyboard status:
 - IRQ1 path active, polling fallback optional
+- Default lock state after init:
+  - `CapsLock=off`
+  - `NumLock=off`
+  - keyboard LEDs off (PS/2 LED sync)
 - Supported editor control keys:
   - Left, Right
   - Insert, Delete
@@ -104,6 +109,10 @@ Keyboard status:
   - KEY_LEFT/KEY_RIGHT
   - KEY_INSERT/KEY_DELETE
   - KEY_CTRL_ALT_DEL
+- Numpad mode behavior:
+  - number mode = `NumLock XOR Shift`
+  - with `NumLock=off`, numpad numbers are blocked
+  - real HW confirmation: numpad digits do not type when `NumLock` is off
 
 Bootlog note:
 - `bootlog_core` includes `vga.h` directly; yellow color usage is now explicit and type-safe.
@@ -137,6 +146,11 @@ Validation status:
   - `img-32`: editor smoke PASS, `HW_RESET` PASS, `HW_PWR_DOWN` PASS
 - Build regression after trigger removal completed on 2026-03-04:
   - `make clean && make iso-32 iso-64 img-32` PASS
+- Floppy loader motor-off patch validation:
+  - `make img-32` PASS (2026-03-04)
+- Keyboard lock/LED + numpad logic validation:
+  - `make iso-32 iso-64 img-32` PASS (2026-03-04)
+  - `make modules-32 modules-64 modules-img-32` PASS (2026-03-04)
 - Headless no-op runtime verification completed on 2026-03-04:
   - `iso-32`: `CTRL+ALT+BACKSPACE` no-op PASS
   - `iso-64`: `CTRL+ALT+BACKSPACE` no-op PASS
@@ -144,6 +158,7 @@ Validation status:
 - Remaining runtime step:
   - manual visual editor parity pass in interactive QEMU window (including unbound Home/End policy, CapsLock, Tab, Numpad)
   - manual interactive verification of `CTRL+ALT+DEL` reset path (headless monitor `sendkey` was non-deterministic in current environment)
+  - verify floppy motor idle-off behavior on `img-32` (motor should stop after loader completes)
 
 Known warnings:
 - Linker RWX LOAD segment warning accepted for MVP.

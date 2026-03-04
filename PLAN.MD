@@ -13,8 +13,15 @@ Date: 2026-03-04
    - `iso-32`: PASS (`CTRL+ALT+BACKSPACE` no-op)
    - `iso-64`: PASS (`CTRL+ALT+BACKSPACE` no-op)
    - `img-32`: PASS (`CTRL+ALT+BACKSPACE` no-op)
-5. Next execution step:
-   - manual interactive reset verification (`CTRL+ALT+DEL`) in QEMU window.
+5. Implemented floppy motor idle-off in stage2 loader:
+   - motor is turned off after successful kernel load
+   - motor is turned off in halt path on loader errors
+6. Keyboard lock/LED behavior updated:
+   - default state is `CapsLock=off`, `NumLock=off`, LEDs off after init
+   - keyboard LEDs are synchronized via PS/2 command `0xED`
+   - numpad mode logic fixed: with `NumLock=off`, numpad digits are blocked
+7. Next execution step:
+   - runtime verification that floppy motor stops spinning after boot idle.
 
 ## Goal
 Stabilize shared module architecture, complete interactive VGA text editing, and standardize hardware control signals across all 3 outputs:
@@ -87,6 +94,10 @@ Stabilize shared module architecture, complete interactive VGA text editing, and
    - `make iso-32 iso-64 img-32`
 26. Build validation passes after removing temporary `CTRL+ALT+BACKSPACE` trigger:
    - `make clean && make iso-32 iso-64 img-32`
+27. Keyboard lock/LED defaults and numpad mode behavior updated:
+   - init defaults: `CapsLock=off`, `NumLock=off`, LEDs off
+   - fixed number/navigation mode mapping for numpad (`NumLock XOR Shift`)
+   - user-verified on real HW: with `NumLock=off`, numpad numbers do not type
 
 ## Active Work Items
 1. Full interactive QEMU validation on all 3 targets for editor behavior parity (visual/manual pass), including:
@@ -99,6 +110,8 @@ Stabilize shared module architecture, complete interactive VGA text editing, and
    - document exact VGA text API contract in module docs/comments.
 4. Refresh runtime verification after trigger removal (`CTRL+ALT+BACKSPACE` must be no-op).
 5. Final manual reset verification in interactive QEMU (`CTRL+ALT+DEL` path).
+6. Verify floppy idle behavior on `img-32`:
+   - floppy motor stops after loader finishes disk I/O.
 
 ## Validation Checklist
 1. `make clean && make iso-32 iso-64 img-32`.
@@ -147,6 +160,13 @@ Notes:
    - `img-32`: PASS (2026-03-04)
 7. Headless reset via monitor `sendkey ctrl-alt-delete` was non-deterministic in this environment;
    interactive verification remains required for final sign-off.
+8. Floppy loader motor-off patch build validation:
+   - `make img-32` PASS (2026-03-04), no assembler warnings.
+9. Keyboard lock/LED + numpad logic build validations:
+   - `make iso-32 iso-64 img-32` PASS (2026-03-04)
+   - `make modules-32 modules-64 modules-img-32` PASS (2026-03-04)
+10. Real hardware observation:
+   - numpad numbers no longer type when `NumLock` is off (confirmed).
 
 ## Risks
 1. Any direct screen writes outside `vga_text_*` may desync editor model.

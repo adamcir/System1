@@ -2,6 +2,14 @@
 #include "keyboard_core.h"
 
 #define KEY_BUFFER_SIZE 64u
+#define KBD_DATA_PORT 0x60u
+#define KBD_STATUS_PORT 0x64u
+#define KBD_STATUS_IBF 0x02u
+#define KBD_STATUS_OBF 0x01u
+#define KBD_CMD_SET_LEDS 0xEDu
+#define KBD_ACK 0xFAu
+#define KBD_RESEND 0xFEu
+#define KBD_IO_TIMEOUT 65535u
 
 static volatile int key_buffer[KEY_BUFFER_SIZE];
 static volatile uint8_t key_head;
@@ -19,6 +27,78 @@ static uint8_t inb(uint16_t port) {
     uint8_t value;
     __asm__ volatile ("inb %1, %0" : "=a"(value) : "Nd"(port));
     return value;
+}
+
+static void outb(uint16_t port, uint8_t value) {
+    __asm__ volatile ("outb %0, %1" : : "a"(value), "Nd"(port));
+}
+
+static uint8_t keyboard_wait_input_clear(void) {
+    uint32_t i;
+
+    for (i = 0; i < KBD_IO_TIMEOUT; ++i) {
+        if ((inb(KBD_STATUS_PORT) & KBD_STATUS_IBF) == 0u) {
+            return 1u;
+        }
+    }
+    return 0u;
+}
+
+static uint8_t keyboard_wait_output_full(void) {
+    uint32_t i;
+
+    for (i = 0; i < KBD_IO_TIMEOUT; ++i) {
+        if ((inb(KBD_STATUS_PORT) & KBD_STATUS_OBF) != 0u) {
+            return 1u;
+        }
+    }
+    return 0u;
+}
+
+static uint8_t keyboard_send_led_mask(uint8_t leds) {
+    uint8_t ack;
+
+    if (keyboard_wait_input_clear() == 0u) {
+        return 0u;
+    }
+    outb(KBD_DATA_PORT, KBD_CMD_SET_LEDS);
+
+    if (keyboard_wait_output_full() == 0u) {
+        return 0u;
+    }
+    ack = inb(KBD_DATA_PORT);
+    if (ack != KBD_ACK) {
+        return 0u;
+    }
+
+    if (keyboard_wait_input_clear() == 0u) {
+        return 0u;
+    }
+    outb(KBD_DATA_PORT, leds);
+
+    if (keyboard_wait_output_full() == 0u) {
+        return 0u;
+    }
+    ack = inb(KBD_DATA_PORT);
+    return (uint8_t)(ack == KBD_ACK);
+}
+
+static void keyboard_sync_leds(void) {
+    uint8_t leds = 0u;
+    uint8_t attempt;
+
+    if (numlock_on) {
+        leds |= 0x02u;
+    }
+    if (capslock_on) {
+        leds |= 0x04u;
+    }
+
+    for (attempt = 0u; attempt < 2u; ++attempt) {
+        if (keyboard_send_led_mask(leds)) {
+            return;
+        }
+    }
 }
 
 static void queue_push(int key) {
@@ -209,6 +289,7 @@ static void keyboard_process_scancode(uint8_t scancode) {
     if (scancode == 0x3A) {
         if ((scancode & 0x80u) == 0u) {
             capslock_on = (uint8_t)(capslock_on ? 0u : 1u);
+            keyboard_sync_leds();
         }
         return;
     }
@@ -216,6 +297,7 @@ static void keyboard_process_scancode(uint8_t scancode) {
     if (scancode == 0x45) {
         if ((scancode & 0x80u) == 0u) {
             numlock_on = (uint8_t)(numlock_on ? 0u : 1u);
+            keyboard_sync_leds();
         }
         return;
     }
@@ -225,21 +307,21 @@ static void keyboard_process_scancode(uint8_t scancode) {
     }
 
     if (scancode >= 0x47u && scancode <= 0x53u) {
-        uint8_t nav_mode = (uint8_t)((numlock_on ? 1u : 0u) ^ (shift_pressed ? 1u : 0u));
+        uint8_t number_mode = (uint8_t)((numlock_on ? 1u : 0u) ^ (shift_pressed ? 1u : 0u));
         switch (scancode) {
-            case 0x47: queue_push('7'); return;
-            case 0x48: if (!nav_mode) { queue_push('8'); } return;
-            case 0x49: if (!nav_mode) { queue_push('9'); } return;
+            case 0x47: if (number_mode) { queue_push('7'); } return;
+            case 0x48: if (number_mode) { queue_push('8'); } return;
+            case 0x49: if (number_mode) { queue_push('9'); } return;
             case 0x4A: queue_push('-'); return;
-            case 0x4B: queue_push(nav_mode ? KEY_LEFT : '4'); return;
-            case 0x4C: queue_push('5'); return;
-            case 0x4D: queue_push(nav_mode ? KEY_RIGHT : '6'); return;
+            case 0x4B: queue_push(number_mode ? '4' : KEY_LEFT); return;
+            case 0x4C: if (number_mode) { queue_push('5'); } return;
+            case 0x4D: queue_push(number_mode ? '6' : KEY_RIGHT); return;
             case 0x4E: queue_push('+'); return;
-            case 0x4F: queue_push('1'); return;
-            case 0x50: if (!nav_mode) { queue_push('2'); } return;
-            case 0x51: if (!nav_mode) { queue_push('3'); } return;
-            case 0x52: queue_push(nav_mode ? KEY_INSERT : '0'); return;
-            case 0x53: queue_push(nav_mode ? KEY_DELETE : '.'); return;
+            case 0x4F: if (number_mode) { queue_push('1'); } return;
+            case 0x50: if (number_mode) { queue_push('2'); } return;
+            case 0x51: if (number_mode) { queue_push('3'); } return;
+            case 0x52: queue_push(number_mode ? '0' : KEY_INSERT); return;
+            case 0x53: queue_push(number_mode ? '.' : KEY_DELETE); return;
             default: break;
         }
     }
@@ -262,9 +344,10 @@ void keyboard_core_init(void) {
     ctrl_pressed = 0;
     alt_pressed = 0;
     capslock_on = 0;
-    numlock_on = 1u;
+    numlock_on = 0u;
     extended_prefix = 0;
     poll_fallback_enabled = 0;
+    keyboard_sync_leds();
 }
 
 void keyboard_core_set_poll_fallback(uint8_t enabled) {
