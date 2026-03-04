@@ -1,7 +1,11 @@
-System/1 context (updated 2026-03-03)
+System/1 context (updated 2026-03-04)
 
 Current build command:
 - make iso-32 iso-64 img-32
+- Optional module-only commands:
+  - make modules-32
+  - make modules-64
+  - make modules-img-32
 
 Architecture layout:
 - kernel/i386
@@ -31,12 +35,25 @@ Module model (current):
   - panic
   - keyboard
   - tty
+  - signals
 - Interrupts:
   - common logic: `kernel/common/modules/interrupts/interrupts_common.c`
   - arch-specific wrappers:
     - kernel/i386/modules/interrupts/interrupts.c
     - kernel/x86_64/modules/interrupts/interrupts.c
     - kernel/i386-floppy/modules/interrupts/interrupts.c
+- Signals:
+  - common wrapper/core:
+    - `kernel/common/modules/signals/signals.c`
+    - `kernel/common/modules/signals/signals_core.c`
+  - arch headers:
+    - kernel/i386/modules/signals/signals.h
+    - kernel/x86_64/modules/signals/signals.h
+    - kernel/i386-floppy/modules/signals/signals.h
+  - API:
+    - `signal_raise(int signal)`
+    - `HW_RESET` (`0`)
+    - `HW_PWR_DOWN` (`1`)
 
 TTY status:
 - Shared `tty` module is active for all 3 outputs.
@@ -47,7 +64,7 @@ TTY status:
   - delete/home/end
   - insert toggle
   - printable chars
-  - `CTRL+ALT+DEL` (hard reset via i8042)
+  - `CTRL+ALT+DEL` via `signal_raise(HW_RESET)` (implemented in `signals_core`)
 
 VGA status:
 - Hardware cursor sync active (0x3D4/0x3D5)
@@ -92,10 +109,24 @@ Interrupts status:
 - `irq_register_handler` updates masks (including cascade IRQ2)
 - IDT selector uses runtime CS
 
+Build system status:
+- Makefile is dynamic/flexible for modules:
+  - module set auto-discovered from `kernel/common/modules/*` via `MODULES`
+  - wrapper source resolution:
+    - prefer `kernel/<arch>/modules/<mod>/<mod>.c`
+    - fallback to `kernel/common/modules/<mod>/<mod>.c`
+  - core source resolution supports:
+    - `<mod>_core.c`
+    - `<mod>-core.c`
+    - `<mod>_common.c`
+
 Validation status:
-- Build passes after refactor and key support updates:
+- Build passes with dynamic Makefile and signals module:
   - make iso-32 iso-64 img-32
-- Interactive QEMU runtime validation still pending as next step.
+- Interactive QEMU runtime validation still pending as next step:
+  - editor parity (all targets)
+  - `HW_RESET` runtime path
+  - `HW_PWR_DOWN` runtime path
 
 Known warnings:
 - Linker RWX LOAD segment warning accepted for MVP.
