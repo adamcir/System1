@@ -66,7 +66,7 @@ TTY status:
   - tab (`\t`) as 4 spaces
   - printable chars
   - `CTRL+ALT+DEL` via `signal_raise(HW_RESET)` (implemented in `signals_core`)
-  - temporary validation path: `CTRL+ALT+BACKSPACE` -> `signal_raise(HW_PWR_DOWN)`
+  - `CTRL+ALT+BACKSPACE` currently has no signal action (validation trigger removed)
 
 VGA status:
 - Hardware cursor sync active (0x3D4/0x3D5)
@@ -100,12 +100,10 @@ Keyboard status:
     - Left, Right, Insert, Delete
   - Numpad `7` and `1` stay numeric (no Home/End mapping)
   - Ctrl+Alt+Del
-  - Ctrl+Alt+Backspace (temporary validation trigger)
 - Key constants include:
   - KEY_LEFT/KEY_RIGHT
   - KEY_INSERT/KEY_DELETE
   - KEY_CTRL_ALT_DEL
-  - KEY_CTRL_ALT_BKSP
 
 Bootlog note:
 - `bootlog_core` includes `vga.h` directly; yellow color usage is now explicit and type-safe.
@@ -137,9 +135,15 @@ Validation status:
   - `iso-32`: editor smoke PASS, `HW_RESET` PASS, `HW_PWR_DOWN` PASS
   - `iso-64`: editor smoke PASS, `HW_RESET` PASS, `HW_PWR_DOWN` PASS
   - `img-32`: editor smoke PASS, `HW_RESET` PASS, `HW_PWR_DOWN` PASS
+- Build regression after trigger removal completed on 2026-03-04:
+  - `make clean && make iso-32 iso-64 img-32` PASS
+- Headless no-op runtime verification completed on 2026-03-04:
+  - `iso-32`: `CTRL+ALT+BACKSPACE` no-op PASS
+  - `iso-64`: `CTRL+ALT+BACKSPACE` no-op PASS
+  - `img-32`: `CTRL+ALT+BACKSPACE` no-op PASS
 - Remaining runtime step:
   - manual visual editor parity pass in interactive QEMU window (including unbound Home/End policy, CapsLock, Tab, Numpad)
-  - optional: remove temporary validation trigger `CTRL+ALT+BACKSPACE` after sign-off
+  - manual interactive verification of `CTRL+ALT+DEL` reset path (headless monitor `sendkey` was non-deterministic in current environment)
 
 Known warnings:
 - Linker RWX LOAD segment warning accepted for MVP.

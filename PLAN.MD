@@ -1,5 +1,21 @@
 # System/1 Plan (Current)
 
+## Execution Log
+Date: 2026-03-04
+1. Removed temporary validation trigger:
+   - `CTRL+ALT+BACKSPACE` no longer generates `KEY_CTRL_ALT_BKSP`.
+   - `tty` no longer routes `KEY_CTRL_ALT_BKSP` to `signal_raise(HW_PWR_DOWN)`.
+2. Kept stable hardware control path:
+   - `CTRL+ALT+DEL` -> `signal_raise(HW_RESET)`.
+3. Completed build regression:
+   - `make clean && make iso-32 iso-64 img-32` PASS.
+4. Completed headless no-op verification after trigger removal:
+   - `iso-32`: PASS (`CTRL+ALT+BACKSPACE` no-op)
+   - `iso-64`: PASS (`CTRL+ALT+BACKSPACE` no-op)
+   - `img-32`: PASS (`CTRL+ALT+BACKSPACE` no-op)
+5. Next execution step:
+   - manual interactive reset verification (`CTRL+ALT+DEL`) in QEMU window.
+
 ## Goal
 Stabilize shared module architecture, complete interactive VGA text editing, and standardize hardware control signals across all 3 outputs:
 1. `iso-32`
@@ -41,8 +57,8 @@ Stabilize shared module architecture, complete interactive VGA text editing, and
 13. `signals_core` supports:
    - reset via i8042 command `0xFE`
    - power-down via ACPI/PM ports (`0x604`, `0xB004`, `0x4004`) for QEMU/Bochs variants
-14. Temporary runtime validation trigger is wired:
-   - `CTRL+ALT+BACKSPACE` -> `KEY_CTRL_ALT_BKSP` -> `signal_raise(HW_PWR_DOWN)`
+14. Temporary runtime validation trigger was removed after sign-off:
+   - `CTRL+ALT+BACKSPACE` no longer maps to any signal action.
 15. Makefile is now flexible/dynamic:
    - module list auto-discovered from `kernel/common/modules/*`
    - wrapper source resolved per arch (`kernel/<arch>/modules/<mod>/<mod>.c`) with common fallback
@@ -69,6 +85,8 @@ Stabilize shared module architecture, complete interactive VGA text editing, and
    - `7`/`1` stay numeric (no Home/End mapping)
 25. Build validation passes after keyboard/TTY/VGA update:
    - `make iso-32 iso-64 img-32`
+26. Build validation passes after removing temporary `CTRL+ALT+BACKSPACE` trigger:
+   - `make clean && make iso-32 iso-64 img-32`
 
 ## Active Work Items
 1. Full interactive QEMU validation on all 3 targets for editor behavior parity (visual/manual pass), including:
@@ -79,7 +97,8 @@ Stabilize shared module architecture, complete interactive VGA text editing, and
 2. Verify timer/IRQ runtime parity after refactor.
 3. Optional cleanup:
    - document exact VGA text API contract in module docs/comments.
-4. Remove temporary `CTRL+ALT+BACKSPACE` validation trigger after final manual sign-off.
+4. Refresh runtime verification after trigger removal (`CTRL+ALT+BACKSPACE` must be no-op).
+5. Final manual reset verification in interactive QEMU (`CTRL+ALT+DEL` path).
 
 ## Validation Checklist
 1. `make clean && make iso-32 iso-64 img-32`.
@@ -98,7 +117,7 @@ Stabilize shared module architecture, complete interactive VGA text editing, and
    - `CTRL+ALT+DEL` -> `signal_raise(HW_RESET)` reset path
 3. Signals checks:
    - `HW_RESET` performs immediate hardware reset
-   - `CTRL+ALT+BACKSPACE` generates `KEY_CTRL_ALT_BKSP`
+   - `CTRL+ALT+BACKSPACE` has no signal side-effect
    - `HW_PWR_DOWN` attempts ACPI/PM power-down path (QEMU/Bochs compatible ports)
 4. IRQ checks:
    - keyboard IRQ path active
@@ -120,6 +139,14 @@ Notes:
 3. Editor checks are smoke-level (no visual framebuffer assertion in headless mode); manual visual parity remains pending.
 4. Build-only regression for keyboard/TTY/VGA changes completed on 2026-03-04:
    - `make iso-32 iso-64 img-32` PASS.
+5. Build regression after removing temporary `CTRL+ALT+BACKSPACE` trigger:
+   - `make clean && make iso-32 iso-64 img-32` PASS (2026-03-04).
+6. Headless no-op regression after trigger removal:
+   - `iso-32`: PASS (2026-03-04)
+   - `iso-64`: PASS (2026-03-04)
+   - `img-32`: PASS (2026-03-04)
+7. Headless reset via monitor `sendkey ctrl-alt-delete` was non-deterministic in this environment;
+   interactive verification remains required for final sign-off.
 
 ## Risks
 1. Any direct screen writes outside `vga_text_*` may desync editor model.

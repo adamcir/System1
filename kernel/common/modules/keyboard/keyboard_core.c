@@ -206,14 +206,6 @@ static void keyboard_process_scancode(uint8_t scancode) {
         return;
     }
 
-    if (scancode == 0x0E && ctrl_pressed && alt_pressed) {
-        if ((scancode & 0x80u) != 0u) {
-            return;
-        }
-        queue_push(KEY_CTRL_ALT_BKSP);
-        return;
-    }
-
     if (scancode == 0x3A) {
         if ((scancode & 0x80u) == 0u) {
             capslock_on = (uint8_t)(capslock_on ? 0u : 1u);

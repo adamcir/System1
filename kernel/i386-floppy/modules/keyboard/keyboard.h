@@ -9,7 +9,6 @@
 #define KEY_INSERT 0x82
 #define KEY_DELETE 0x83
 #define KEY_CTRL_ALT_DEL 0x86
-#define KEY_CTRL_ALT_BKSP 0x87
 
 void keyboard_init(void);
 void keyboard_set_poll_fallback(uint8_t enabled);

@@ -53,10 +53,6 @@ void tty_core_run(void) {
             continue;
         }
 
-        if (key == KEY_CTRL_ALT_BKSP) {
-            signal_raise(HW_PWR_DOWN);
-        }
-
         if (key > 0 && key < 128) {
             vga_text_putc((char)key);
         }
