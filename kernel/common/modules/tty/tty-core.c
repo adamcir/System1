@@ -52,6 +52,11 @@ void tty_core_run(void) {
 
         if (key == KEY_CTRL_ALT_DEL) {
             signal_raise(HW_RESET);
+            continue;
+        }
+
+        if (key == KEY_CTRL_ALT_BKSP) {
+            signal_raise(HW_PWR_DOWN);
         }
 
         if (key > 0 && key < 128) {

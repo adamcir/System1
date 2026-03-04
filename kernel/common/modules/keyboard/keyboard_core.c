@@ -176,6 +176,11 @@ static void keyboard_process_scancode(uint8_t scancode) {
         return;
     }
 
+    if (scancode == 0x0E && ctrl_pressed && alt_pressed) {
+        queue_push(KEY_CTRL_ALT_BKSP);
+        return;
+    }
+
     translated = translate_scancode(scancode);
     if (translated != 0) {
         queue_push((int)translated);

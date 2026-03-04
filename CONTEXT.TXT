@@ -65,6 +65,7 @@ TTY status:
   - insert toggle
   - printable chars
   - `CTRL+ALT+DEL` via `signal_raise(HW_RESET)` (implemented in `signals_core`)
+  - temporary validation path: `CTRL+ALT+BACKSPACE` -> `signal_raise(HW_PWR_DOWN)`
 
 VGA status:
 - Hardware cursor sync active (0x3D4/0x3D5)
@@ -93,11 +94,13 @@ Keyboard status:
   - Insert, Delete
   - Home, End
   - Ctrl+Alt+Del
+  - Ctrl+Alt+Backspace (temporary validation trigger)
 - Key constants include:
   - KEY_LEFT/KEY_RIGHT
   - KEY_INSERT/KEY_DELETE
   - KEY_HOME/KEY_END
   - KEY_CTRL_ALT_DEL
+  - KEY_CTRL_ALT_BKSP
 
 Bootlog note:
 - `bootlog_core` includes `vga.h` directly; yellow color usage is now explicit and type-safe.
@@ -123,10 +126,13 @@ Build system status:
 Validation status:
 - Build passes with dynamic Makefile and signals module:
   - make iso-32 iso-64 img-32
-- Interactive QEMU runtime validation still pending as next step:
-  - editor parity (all targets)
-  - `HW_RESET` runtime path
-  - `HW_PWR_DOWN` runtime path
+- Runtime smoke matrix completed on 2026-03-04 (headless QEMU + `sendkey`):
+  - `iso-32`: editor smoke PASS, `HW_RESET` PASS, `HW_PWR_DOWN` PASS
+  - `iso-64`: editor smoke PASS, `HW_RESET` PASS, `HW_PWR_DOWN` PASS
+  - `img-32`: editor smoke PASS, `HW_RESET` PASS, `HW_PWR_DOWN` PASS
+- Remaining runtime step:
+  - manual visual editor parity pass in interactive QEMU window
+  - optional: remove temporary validation trigger `CTRL+ALT+BACKSPACE` after sign-off
 
 Known warnings:
 - Linker RWX LOAD segment warning accepted for MVP.

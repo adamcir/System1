@@ -41,27 +41,27 @@ Stabilize shared module architecture, complete interactive VGA text editing, and
 13. `signals_core` supports:
    - reset via i8042 command `0xFE`
    - power-down via ACPI/PM ports (`0x604`, `0xB004`, `0x4004`) for QEMU/Bochs variants
-14. Makefile is now flexible/dynamic:
+14. Temporary runtime validation trigger is wired:
+   - `CTRL+ALT+BACKSPACE` -> `KEY_CTRL_ALT_BKSP` -> `signal_raise(HW_PWR_DOWN)`
+15. Makefile is now flexible/dynamic:
    - module list auto-discovered from `kernel/common/modules/*`
    - wrapper source resolved per arch (`kernel/<arch>/modules/<mod>/<mod>.c`) with common fallback
    - core source auto-discovered (`<mod>_core.c`, `<mod>-core.c`, `<mod>_common.c`)
-15. Module build helper targets are now:
+16. Module build helper targets are now:
    - `modules-32`
    - `modules-64`
    - `modules-img-32`
-16. Build validation passes:
+17. Build validation passes:
    - `make iso-32 iso-64 img-32`
-17. VGA headers expose explicit color-number list via `#define VGA_COLOR_*` plus enum aliases (including `YELLOW` compatibility alias).
-18. `bootlog_core` now includes `vga.h` directly (no implicit VGA declarations).
+18. VGA headers expose explicit color-number list via `#define VGA_COLOR_*` plus enum aliases (including `YELLOW` compatibility alias).
+19. `bootlog_core` now includes `vga.h` directly (no implicit VGA declarations).
 
 ## Active Work Items
-1. Full interactive QEMU validation on all 3 targets for editor behavior parity.
-2. Runtime validation of `signals` parity:
-   - `HW_RESET` behavior via `CTRL+ALT+DEL`
-   - `HW_PWR_DOWN` behavior (dedicated test trigger path still to be wired for manual testing)
-3. Verify timer/IRQ runtime parity after refactor.
-4. Optional cleanup:
+1. Full interactive QEMU validation on all 3 targets for editor behavior parity (visual/manual pass).
+2. Verify timer/IRQ runtime parity after refactor.
+3. Optional cleanup:
    - document exact VGA text API contract in module docs/comments.
+4. Remove temporary `CTRL+ALT+BACKSPACE` validation trigger after final manual sign-off.
 
 ## Validation Checklist
 1. `make clean && make iso-32 iso-64 img-32`.
@@ -76,10 +76,26 @@ Stabilize shared module architecture, complete interactive VGA text editing, and
    - `CTRL+ALT+DEL` -> `signal_raise(HW_RESET)` reset path
 3. Signals checks:
    - `HW_RESET` performs immediate hardware reset
+   - `CTRL+ALT+BACKSPACE` generates `KEY_CTRL_ALT_BKSP`
    - `HW_PWR_DOWN` attempts ACPI/PM power-down path (QEMU/Bochs compatible ports)
 4. IRQ checks:
    - keyboard IRQ path active
    - `timer_ticks_get()` increases
+
+## Validation Results
+Date: 2026-03-04
+Method: headless QEMU + monitor `sendkey` smoke matrix
+
+| Target | Editor smoke | HW_RESET (`CTRL+ALT+DEL`) | HW_PWR_DOWN (`CTRL+ALT+BACKSPACE`) |
+|---|---|---|---|
+| `iso-32` | PASS | PASS | PASS |
+| `iso-64` | PASS | PASS | PASS |
+| `img-32` | PASS | PASS | PASS |
+
+Notes:
+1. Reset validated with QEMU `-no-reboot` (VM exits on reboot request).
+2. Power-down validated by VM exit after key trigger.
+3. Editor checks are smoke-level (no visual framebuffer assertion in headless mode); manual visual parity remains pending.
 
 ## Risks
 1. Any direct screen writes outside `vga_text_*` may desync editor model.

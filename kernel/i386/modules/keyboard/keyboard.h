@@ -11,6 +11,7 @@
 #define KEY_HOME 0x84
 #define KEY_END 0x85
 #define KEY_CTRL_ALT_DEL 0x86
+#define KEY_CTRL_ALT_BKSP 0x87
 
 void keyboard_init(void);
 void keyboard_set_poll_fallback(uint8_t enabled);
