@@ -46,6 +46,7 @@ Guaranteed key events:
 Behavior:
 - `CapsLock` affects letters only (`Shift XOR CapsLock`).
 - Numpad supports numeric mode and navigation mode (`NumLock` with `Shift` inversion).
+- Numpad decimal key always emits `.` regardless of `NumLock` state.
 - `CTRL+ALT+BACKSPACE` is intentionally unbound (no dedicated key event).
 
 ## `tty` Contract

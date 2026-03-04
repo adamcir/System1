@@ -102,7 +102,7 @@ Keyboard status:
   - Caps Lock (letters-only, `Shift XOR CapsLock`)
   - Numpad numeric: `0-9`, `.`, `+`, `-`, `*`, `/`, Enter
   - Numpad navigation mode (with NumLock/Shift inversion):
-    - Left, Right, Insert, Delete
+    - Left, Right, Insert
   - Numpad `7` and `1` stay numeric (no Home/End mapping)
   - Ctrl+Alt+Del
 - Key constants include:
@@ -112,6 +112,7 @@ Keyboard status:
 - Numpad mode behavior:
   - number mode = `NumLock XOR Shift`
   - with `NumLock=off`, numpad numbers are blocked
+  - numpad decimal (`.`) is always emitted as `.` (independent of `NumLock`)
   - real HW confirmation: numpad digits do not type when `NumLock` is off
 
 Bootlog note:
@@ -155,10 +156,22 @@ Validation status:
   - `iso-32`: `CTRL+ALT+BACKSPACE` no-op PASS
   - `iso-64`: `CTRL+ALT+BACKSPACE` no-op PASS
   - `img-32`: `CTRL+ALT+BACKSPACE` no-op PASS
+- Additional headless key-sequence smoke regression on 2026-03-04:
+  - method: monitor `sendkey` sequence (`abc`, backspace, arrows, insert/delete, tab, capslock, numpad with `NumLock` toggles)
+  - `iso-32`: PASS (VM remained running)
+  - `iso-64`: PASS (VM remained running)
+  - `img-32`: PASS (VM remained running)
+- User-confirmed runtime checks on 2026-03-04:
+  - `CTRL+ALT+DEL` reset path works in interactive flow
+  - `img-32` floppy motor idle-off behavior works after loader finishes I/O
+- Timer/IRQ runtime parity regression via QEMU interrupt trace on 2026-03-04:
+  - method: headless run with `-d int` and trace vector counts
+  - `iso-32`: `v=20` count 704, `v=21` count 1
+  - `iso-64`: `v=20` count 709, `v=21` count 1
+  - `img-32`: `v=20` count 772, `v=21` count 1
+  - conclusion: timer IRQ path active on all targets; parity PASS
 - Remaining runtime step:
   - manual visual editor parity pass in interactive QEMU window (including unbound Home/End policy, CapsLock, Tab, Numpad)
-  - manual interactive verification of `CTRL+ALT+DEL` reset path (headless monitor `sendkey` was non-deterministic in current environment)
-  - verify floppy motor idle-off behavior on `img-32` (motor should stop after loader completes)
 
 Known warnings:
 - Linker RWX LOAD segment warning accepted for MVP.

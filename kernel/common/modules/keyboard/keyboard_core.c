@@ -321,7 +321,7 @@ static void keyboard_process_scancode(uint8_t scancode) {
             case 0x50: if (number_mode) { queue_push('2'); } return;
             case 0x51: if (number_mode) { queue_push('3'); } return;
             case 0x52: queue_push(number_mode ? '0' : KEY_INSERT); return;
-            case 0x53: queue_push(number_mode ? '.' : KEY_DELETE); return;
+            case 0x53: queue_push('.'); return;
             default: break;
         }
     }

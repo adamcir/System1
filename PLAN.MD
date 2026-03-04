@@ -88,7 +88,7 @@ Stabilize shared module architecture, complete interactive VGA text editing, and
    - numeric input: `0-9`, `.`, `+`, `-`, `*`, `/`, `Enter`
    - `NumLock` + `Shift` inversion supported for navigation/number mode
 24. Numpad navigation mapping is active for editor-supported keys:
-   - `Left`, `Right`, `Insert`, `Delete`
+   - `Left`, `Right`, `Insert`
    - `7`/`1` stay numeric (no Home/End mapping)
 25. Build validation passes after keyboard/TTY/VGA update:
    - `make iso-32 iso-64 img-32`
@@ -97,6 +97,7 @@ Stabilize shared module architecture, complete interactive VGA text editing, and
 27. Keyboard lock/LED defaults and numpad mode behavior updated:
    - init defaults: `CapsLock=off`, `NumLock=off`, LEDs off
    - fixed number/navigation mode mapping for numpad (`NumLock XOR Shift`)
+   - numpad decimal (`.`) emits `.` independently of `NumLock`
    - user-verified on real HW: with `NumLock=off`, numpad numbers do not type
 
 ## Active Work Items
@@ -105,7 +106,7 @@ Stabilize shared module architecture, complete interactive VGA text editing, and
    - `Caps Lock` behavior (`Shift XOR CapsLock`)
    - `Tab` (4 spaces)
    - numpad numeric + navigation mode parity (`NumLock` and `Shift` inversion)
-2. Verify timer/IRQ runtime parity after refactor.
+2. Timer/IRQ runtime parity after refactor is verified (2026-03-04, QEMU `-d int` trace PASS).
 3. Optional cleanup:
    - document exact VGA text API contract in module docs/comments.
 4. Refresh runtime verification after trigger removal (`CTRL+ALT+BACKSPACE` must be no-op).
@@ -125,7 +126,7 @@ Stabilize shared module architecture, complete interactive VGA text editing, and
    - tab inserts 4 spaces
    - caps lock letters-only behavior (`Shift XOR CapsLock`)
    - numpad numeric input (`0-9`, `.`, `+`, `-`, `*`, `/`, `Enter`)
-   - numpad navigation mode for supported keys (`Left`, `Right`, `Insert`, `Delete`)
+   - numpad navigation mode for supported keys (`Left`, `Right`, `Insert`)
    - scroll stability at bottom
    - `CTRL+ALT+DEL` -> `signal_raise(HW_RESET)` reset path
 3. Signals checks:
@@ -167,6 +168,20 @@ Notes:
    - `make modules-32 modules-64 modules-img-32` PASS (2026-03-04)
 10. Real hardware observation:
    - numpad numbers no longer type when `NumLock` is off (confirmed).
+11. Additional headless key-sequence smoke regression (2026-03-04):
+   - method: QEMU monitor `sendkey` sequence (`abc`, backspace, arrows, insert/delete, tab, capslock, numpad with `NumLock` toggles)
+   - `iso-32`: PASS (VM remained running)
+   - `iso-64`: PASS (VM remained running)
+   - `img-32`: PASS (VM remained running)
+12. User confirmation (2026-03-04):
+   - manual `CTRL+ALT+DEL` behavior works in interactive flow
+   - floppy motor idle-off behavior on `img-32` confirmed
+13. Timer/IRQ runtime parity regression via QEMU interrupt trace (2026-03-04):
+   - method: headless run with `-d int`, counting vectors in trace logs
+   - `iso-32`: `v=20` count 704, `v=21` count 1
+   - `iso-64`: `v=20` count 709, `v=21` count 1
+   - `img-32`: `v=20` count 772, `v=21` count 1
+   - conclusion: timer IRQ path active on all targets; parity PASS
 
 ## Risks
 1. Any direct screen writes outside `vga_text_*` may desync editor model.
