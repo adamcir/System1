@@ -22,12 +22,69 @@ Date: 2026-03-04
    - numpad mode logic fixed: with `NumLock=off`, numpad digits are blocked
 7. Next execution step:
    - runtime verification that floppy motor stops spinning after boot idle.
+8. Started Shell V1 implementation (all targets):
+   - added shared `shell` module (`shell.c`, `shell_core.c`)
+   - added arch headers for `shell` (`i386`, `x86_64`, `i386-floppy`)
+   - `kmain_*` switched from `tty_run()` to `shell_run()`
+   - shell commands implemented: `help`, `clear`, `echo`, `reboot`, `shutdown`, `ticks`
+9. Extended shared `tty` API for shell input:
+   - added `tty_readline(char* buf, uint32_t cap)`
+   - line editing path supports backspace/left/right/insert/delete/tab/enter
+   - `CTRL+ALT+DEL` hotkey remains active via `signal_raise(HW_RESET)`
+10. Fixed floppy ASCII art visibility regression:
+   - shell text model now starts at current cursor (`vga_get_cursor` + `vga_text_begin`)
+   - fixed escaped backslashes in floppy banner strings
+11. Build validation after shell integration:
+   - `make clean && make iso-32 iso-64 img-32` PASS
+   - headless boot smoke (`iso-32`, `iso-64`, `img-32`) PASS
 
 ## Goal
 Stabilize shared module architecture, complete interactive VGA text editing, and standardize hardware control signals across all 3 outputs:
 1. `iso-32`
 2. `iso-64`
 3. `img-32`
+
+## Next Milestone (Planned): Shell V1
+Date: 2026-03-04
+Prompt:
+- `kernel> `
+
+Scope:
+1. Replace `tty_run()` boot flow with `shell_run()` on all targets:
+   - `iso-32`
+   - `iso-64`
+   - `img-32`
+2. Keep current editor behavior (insert/delete/tab/capslock/numpad rules) as input layer.
+3. Add commands:
+   - `help`
+   - `clear`
+   - `echo`
+   - `reboot` (routes to `signal_raise(HW_RESET)`)
+   - `shutdown` (routes to `signal_raise(HW_PWR_DOWN)`)
+   - `ticks` (reads `timer_ticks_get()`)
+4. Parser format:
+   - `command arg1 arg2 ...` (whitespace tokenization)
+   - no quoted args in V1
+5. Unknown command response:
+   - `unknown command`
+
+Interface plan:
+1. New shared module:
+   - `kernel/common/modules/shell/shell.c`
+   - `kernel/common/modules/shell/shell_core.c`
+2. New arch headers:
+   - `kernel/i386/modules/shell/shell.h`
+   - `kernel/x86_64/modules/shell/shell.h`
+   - `kernel/i386-floppy/modules/shell/shell.h`
+3. `tty` API extension (for shell line input):
+   - planned `tty_readline(char* buf, uint32_t cap)`
+
+Milestone sign-off criteria:
+1. `make clean && make iso-32 iso-64 img-32` PASS.
+2. On each target, prompt appears as `kernel> `.
+3. `help`, `clear`, `echo`, `reboot`, `shutdown`, `ticks` function identically on all targets.
+4. `ticks` values increase between calls.
+5. Unknown command prints exactly `unknown command`.
 
 ## Current Completed
 1. Shared module base in `kernel/common/modules/*` is active.
@@ -101,18 +158,15 @@ Stabilize shared module architecture, complete interactive VGA text editing, and
    - user-verified on real HW: with `NumLock=off`, numpad numbers do not type
 
 ## Active Work Items
-1. Full interactive QEMU validation on all 3 targets for editor behavior parity (visual/manual pass), including:
-   - no-op `Home/End` (not bound in TTY)
-   - `Caps Lock` behavior (`Shift XOR CapsLock`)
-   - `Tab` (4 spaces)
-   - numpad numeric + navigation mode parity (`NumLock` and `Shift` inversion)
-2. Timer/IRQ runtime parity after refactor is verified (2026-03-04, QEMU `-d int` trace PASS).
+1. Shell V1 interactive verification on all 3 targets:
+   - prompt `kernel> `
+   - commands: `help`, `clear`, `echo`, `reboot`, `shutdown`, `ticks`
+   - unknown command output: `unknown command`
+2. Shell behavior parity (`iso-32`, `iso-64`, `img-32`):
+   - same parser behavior (`command arg1 arg2 ...`)
+   - same command outputs and control flow
 3. Optional cleanup:
    - document exact VGA text API contract in module docs/comments.
-4. Refresh runtime verification after trigger removal (`CTRL+ALT+BACKSPACE` must be no-op).
-5. Final manual reset verification in interactive QEMU (`CTRL+ALT+DEL` path).
-6. Verify floppy idle behavior on `img-32`:
-   - floppy motor stops after loader finishes disk I/O.
 
 ## Validation Checklist
 1. `make clean && make iso-32 iso-64 img-32`.
