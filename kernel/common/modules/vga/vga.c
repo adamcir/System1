@@ -62,14 +62,6 @@ void vga_text_delete(void) {
     vga_core_text_delete();
 }
 
-void vga_text_home(void) {
-    vga_core_text_home();
-}
-
-void vga_text_end(void) {
-    vga_core_text_end();
-}
-
 void vga_text_toggle_insert(void) {
     vga_core_text_toggle_insert();
 }

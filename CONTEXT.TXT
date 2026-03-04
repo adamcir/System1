@@ -61,8 +61,9 @@ TTY status:
 - TTY handles:
   - backspace
   - left/right
-  - delete/home/end
+  - delete
   - insert toggle
+  - tab (`\t`) as 4 spaces
   - printable chars
   - `CTRL+ALT+DEL` via `signal_raise(HW_RESET)` (implemented in `signals_core`)
   - temporary validation path: `CTRL+ALT+BACKSPACE` -> `signal_raise(HW_PWR_DOWN)`
@@ -79,26 +80,30 @@ VGA status:
   - vga_text_left()
   - vga_text_right()
   - vga_text_delete()
-  - vga_text_home()
-  - vga_text_end()
   - vga_text_toggle_insert()
 - Behavior:
   - right arrow bounded by text model
   - Enter in middle splits text to next line
   - Insert toggles insert/overwrite mode
+  - `Home`/`End` APIs exist in VGA module, but are not bound in TTY key handling
 
 Keyboard status:
 - IRQ1 path active, polling fallback optional
 - Supported editor control keys:
   - Left, Right
   - Insert, Delete
-  - Home, End
+  - Home, End (currently not bound to TTY actions)
+  - Tab
+  - Caps Lock (letters-only, `Shift XOR CapsLock`)
+  - Numpad numeric: `0-9`, `.`, `+`, `-`, `*`, `/`, Enter
+  - Numpad navigation mode (with NumLock/Shift inversion):
+    - Left, Right, Insert, Delete
+  - Numpad `7` and `1` stay numeric (no Home/End mapping)
   - Ctrl+Alt+Del
   - Ctrl+Alt+Backspace (temporary validation trigger)
 - Key constants include:
   - KEY_LEFT/KEY_RIGHT
   - KEY_INSERT/KEY_DELETE
-  - KEY_HOME/KEY_END
   - KEY_CTRL_ALT_DEL
   - KEY_CTRL_ALT_BKSP
 
@@ -126,12 +131,14 @@ Build system status:
 Validation status:
 - Build passes with dynamic Makefile and signals module:
   - make iso-32 iso-64 img-32
+- Build passes after Home/End + CapsLock + Tab + Numpad update:
+  - make iso-32 iso-64 img-32
 - Runtime smoke matrix completed on 2026-03-04 (headless QEMU + `sendkey`):
   - `iso-32`: editor smoke PASS, `HW_RESET` PASS, `HW_PWR_DOWN` PASS
   - `iso-64`: editor smoke PASS, `HW_RESET` PASS, `HW_PWR_DOWN` PASS
   - `img-32`: editor smoke PASS, `HW_RESET` PASS, `HW_PWR_DOWN` PASS
 - Remaining runtime step:
-  - manual visual editor parity pass in interactive QEMU window
+  - manual visual editor parity pass in interactive QEMU window (including unbound Home/End policy, CapsLock, Tab, Numpad)
   - optional: remove temporary validation trigger `CTRL+ALT+BACKSPACE` after sign-off
 
 Known warnings:

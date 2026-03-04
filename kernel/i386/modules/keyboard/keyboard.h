@@ -8,8 +8,6 @@
 #define KEY_RIGHT 0x81
 #define KEY_INSERT 0x82
 #define KEY_DELETE 0x83
-#define KEY_HOME 0x84
-#define KEY_END 0x85
 #define KEY_CTRL_ALT_DEL 0x86
 #define KEY_CTRL_ALT_BKSP 0x87
 

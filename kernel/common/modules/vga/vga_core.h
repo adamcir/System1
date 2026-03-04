@@ -18,8 +18,6 @@ void vga_core_text_backspace(void);
 void vga_core_text_left(void);
 void vga_core_text_right(void);
 void vga_core_text_delete(void);
-void vga_core_text_home(void);
-void vga_core_text_end(void);
 void vga_core_text_toggle_insert(void);
 
 #endif

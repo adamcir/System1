@@ -239,40 +239,6 @@ void vga_core_text_delete(void) {
     vga_text_rerender();
 }
 
-void vga_core_text_home(void) {
-    uint16_t idx;
-    uint16_t row_now;
-
-    idx = text_cursor;
-    row_now = (uint16_t)(text_path[idx] / VGA_WIDTH);
-    while (idx > 0u) {
-        if ((text_path[idx - 1u] / VGA_WIDTH) != row_now) {
-            break;
-        }
-        idx--;
-    }
-
-    text_cursor = idx;
-    vga_cursor_pos_set(text_path[text_cursor]);
-}
-
-void vga_core_text_end(void) {
-    uint16_t idx;
-    uint16_t row_now;
-
-    idx = text_cursor;
-    row_now = (uint16_t)(text_path[idx] / VGA_WIDTH);
-    while (idx < text_len) {
-        if ((text_path[idx + 1u] / VGA_WIDTH) != row_now) {
-            break;
-        }
-        idx++;
-    }
-
-    text_cursor = idx;
-    vga_cursor_pos_set(text_path[text_cursor]);
-}
-
 void vga_core_text_toggle_insert(void) {
     text_insert_mode = (uint8_t)(text_insert_mode ? 0u : 1u);
 }

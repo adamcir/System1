@@ -6,6 +6,7 @@
 
 void tty_core_run(void) {
     int key;
+    int i;
 
     for (;;) {
         keyboard_poll();
@@ -35,18 +36,15 @@ void tty_core_run(void) {
             continue;
         }
 
-        if (key == KEY_HOME) {
-            vga_text_home();
-            continue;
-        }
-
-        if (key == KEY_END) {
-            vga_text_end();
-            continue;
-        }
-
         if (key == KEY_INSERT) {
             vga_text_toggle_insert();
+            continue;
+        }
+
+        if (key == '\t') {
+            for (i = 0; i < 4; ++i) {
+                vga_text_putc(' ');
+            }
             continue;
         }
 

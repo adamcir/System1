@@ -17,7 +17,7 @@ Stabilize shared module architecture, complete interactive VGA text editing, and
 6. VGA text editing supports:
    - insert/overwrite mode toggle (`Insert`)
    - delete at cursor (`Delete`)
-   - line start/end navigation (`Home`, `End`)
+   - line start/end navigation (`Home`, `End`) [legacy behavior]
    - left/right cursor movement bounded by text model
    - backspace
    - newline split behavior in middle of text
@@ -55,9 +55,27 @@ Stabilize shared module architecture, complete interactive VGA text editing, and
    - `make iso-32 iso-64 img-32`
 18. VGA headers expose explicit color-number list via `#define VGA_COLOR_*` plus enum aliases (including `YELLOW` compatibility alias).
 19. `bootlog_core` now includes `vga.h` directly (no implicit VGA declarations).
+20. `Home`/`End` key handling was intentionally removed from active TTY flow
+   (reserved for future shell-era keymap decisions).
+21. Keyboard now supports `Caps Lock` (letters-only effect):
+   - case logic uses `Shift XOR CapsLock`
+   - symbols/numbers remain `Shift`-only
+22. `Tab` is now handled in `tty` as 4 spaces insertion.
+23. Numpad support expanded:
+   - numeric input: `0-9`, `.`, `+`, `-`, `*`, `/`, `Enter`
+   - `NumLock` + `Shift` inversion supported for navigation/number mode
+24. Numpad navigation mapping is active for editor-supported keys:
+   - `Left`, `Right`, `Insert`, `Delete`
+   - `7`/`1` stay numeric (no Home/End mapping)
+25. Build validation passes after keyboard/TTY/VGA update:
+   - `make iso-32 iso-64 img-32`
 
 ## Active Work Items
-1. Full interactive QEMU validation on all 3 targets for editor behavior parity (visual/manual pass).
+1. Full interactive QEMU validation on all 3 targets for editor behavior parity (visual/manual pass), including:
+   - no-op `Home/End` (not bound in TTY)
+   - `Caps Lock` behavior (`Shift XOR CapsLock`)
+   - `Tab` (4 spaces)
+   - numpad numeric + navigation mode parity (`NumLock` and `Shift` inversion)
 2. Verify timer/IRQ runtime parity after refactor.
 3. Optional cleanup:
    - document exact VGA text API contract in module docs/comments.
@@ -70,8 +88,12 @@ Stabilize shared module architecture, complete interactive VGA text editing, and
    - left/right bounds
    - insert toggle behavior
    - delete behavior
-   - home/end behavior
+   - home/end behavior (currently unbound in TTY)
    - enter split in middle
+   - tab inserts 4 spaces
+   - caps lock letters-only behavior (`Shift XOR CapsLock`)
+   - numpad numeric input (`0-9`, `.`, `+`, `-`, `*`, `/`, `Enter`)
+   - numpad navigation mode for supported keys (`Left`, `Right`, `Insert`, `Delete`)
    - scroll stability at bottom
    - `CTRL+ALT+DEL` -> `signal_raise(HW_RESET)` reset path
 3. Signals checks:
@@ -96,6 +118,8 @@ Notes:
 1. Reset validated with QEMU `-no-reboot` (VM exits on reboot request).
 2. Power-down validated by VM exit after key trigger.
 3. Editor checks are smoke-level (no visual framebuffer assertion in headless mode); manual visual parity remains pending.
+4. Build-only regression for keyboard/TTY/VGA changes completed on 2026-03-04:
+   - `make iso-32 iso-64 img-32` PASS.
 
 ## Risks
 1. Any direct screen writes outside `vga_text_*` may desync editor model.

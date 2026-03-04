@@ -55,8 +55,6 @@ void vga_text_backspace(void);
 void vga_text_left(void);
 void vga_text_right(void);
 void vga_text_delete(void);
-void vga_text_home(void);
-void vga_text_end(void);
 void vga_text_toggle_insert(void);
 
 #endif
