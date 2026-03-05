@@ -12,6 +12,18 @@ Date: 2026-03-05
    - `vga_core_init()` now explicitly enables VGA hardware cursor (scanline 14..15)
 4. Verification status:
    - post-cursor-fix full clean build verification is pending (last run interrupted)
+5. Renamed logging module from `bootlog` to `klog`:
+   - common module path renamed to `kernel/common/modules/klog`
+   - arch headers renamed to `kernel/*/modules/klog/klog.h`
+   - API renamed from `bootlog_*` to `klog_*` across kernel and shell
+6. Removed legacy TTY run path:
+   - dropped `tty_run()` and `tty_core_run()` (unused)
+   - retained `tty_readline()` as the shell input path
+7. Removed global shell cursor state:
+   - `row`/`col` in `shell_core.c` moved to locals in `shell_core_run()`
+8. Verification status update:
+   - post-rename full clean build run was manually interrupted
+   - fresh full regression run remains pending
 
 Date: 2026-03-04
 1. Removed temporary validation trigger:
@@ -100,7 +112,7 @@ Milestone sign-off criteria:
 
 ## Current Completed
 1. Shared module base in `kernel/common/modules/*` is active.
-2. `vga`, `bootlog`, `panic`, `keyboard`, `tty` wrapper implementations moved to `common`.
+2. `vga`, `klog`, `panic`, `keyboard`, `tty` wrapper implementations moved to `common`.
 3. Arch module folders keep headers and only required arch-specific sources.
 4. `interrupts` remains split as intended:
    - shared logic in `interrupts_common`
@@ -146,7 +158,7 @@ Milestone sign-off criteria:
 17. Build validation passes:
    - `make iso-32 iso-64 img-32`
 18. VGA headers expose explicit color-number list via `#define VGA_COLOR_*` plus enum aliases (including `YELLOW` compatibility alias).
-19. `bootlog_core` now includes `vga.h` directly (no implicit VGA declarations).
+19. `klog_core` now includes `vga.h` directly (no implicit VGA declarations).
 20. `Home`/`End` key handling was intentionally removed from active TTY flow
    (reserved for future shell-era keymap decisions).
 21. Keyboard now supports `Caps Lock` (letters-only effect):
@@ -170,20 +182,23 @@ Milestone sign-off criteria:
    - user-verified on real HW: with `NumLock=off`, numpad numbers do not type
 
 ## Active Work Items
-1. Full clean build regression after cursor fix:
+1. Full clean build regression after `klog` + TTY + shell-state refactor:
    - run `make clean && make iso-32 iso-64 img-32`
    - confirm all 3 artifacts are produced
 2. Shell cursor visibility verification on all 3 targets:
    - prompt cursor is visible and tracks editing position
    - verify both fresh boot and after `clear`
-3. Shell V1 interactive verification on all 3 targets:
+3. Logging rename runtime sanity:
+   - confirm `klog` output appears in boot/shell paths where expected
+   - ensure there are no remaining `bootlog_*` symbol references
+4. Shell V1 interactive verification on all 3 targets:
    - prompt `kernel> `
    - commands: `help`, `clear`, `echo`, `reboot`, `shutdown`, `ticks`
    - unknown command output: `unknown command`
-4. Shell behavior parity (`iso-32`, `iso-64`, `img-32`):
+5. Shell behavior parity (`iso-32`, `iso-64`, `img-32`):
    - same parser behavior (`command arg1 arg2 ...`)
    - same command outputs and control flow
-5. Optional cleanup:
+6. Optional cleanup:
    - document exact VGA text API contract in module docs/comments.
 
 ## Validation Checklist

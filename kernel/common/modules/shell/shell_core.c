@@ -4,13 +4,10 @@
 #include "signals.h"
 #include "tty.h"
 #include "vga.h"
-#include "bootlog.h"
+#include "klog.h"
 
 #define SHELL_LINE_CAP 256u
 #define SHELL_ARGV_MAX 16u
-
-uint16_t row;
-uint16_t col;
 
 static int shell_streq(const char* a, const char* b) {
     while (*a && *b) {
@@ -112,8 +109,10 @@ static void shell_version(void){
 }
 
 void shell_core_run(void) {
-	bootlog_info("shell", "Starting shell...\n");
+	klog_info("shell", "Starting shell...\n");
 	vga_set_color(WHITE);
+    uint16_t row = 0u;
+    uint16_t col = 0u;
     vga_get_cursor(&row, &col);
     vga_text_begin(row, col);
     char line[SHELL_LINE_CAP];

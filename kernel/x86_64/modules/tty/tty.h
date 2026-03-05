@@ -3,7 +3,6 @@
 
 #include "types.h"
 
-void tty_run(void);
 int tty_readline(char* buf, uint32_t cap);
 
 #endif

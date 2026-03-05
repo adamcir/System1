@@ -32,7 +32,7 @@ Kernel artifact naming:
 Module model (current):
 - Common wrappers + cores used by all targets for:
   - vga
-  - bootlog
+  - klog
   - panic
   - keyboard
   - tty
@@ -135,8 +135,8 @@ Keyboard status:
   - numpad decimal (`.`) is always emitted as `.` (independent of `NumLock`)
   - real HW confirmation: numpad digits do not type when `NumLock` is off
 
-Bootlog note:
-- `bootlog_core` includes `vga.h` directly; yellow color usage is now explicit and type-safe.
+Klog note:
+- `klog_core` includes `vga.h` directly; yellow color usage is now explicit and type-safe.
 
 Interrupts status:
 - PIC remap 0x20/0x28
@@ -209,6 +209,19 @@ Validation status:
 - Shell cursor visibility regression on 2026-03-05:
   - root cause fixed in `vga_core.c` by explicit hardware cursor enable during VGA init
   - full post-fix clean build verification is pending (interrupted run)
+- Logging module rename to `klog` on 2026-03-05:
+  - module paths, headers, include guards and public API renamed from `bootlog_*` to `klog_*`
+  - common module path: `kernel/common/modules/klog`
+  - arch header paths: `kernel/*/modules/klog/klog.h`
+- TTY API cleanup on 2026-03-05:
+  - removed legacy `tty_run()` / `tty_core_run()` path
+  - kept and validated readline path: `tty_readline(char* buf, uint32_t cap)`
+- Shell state cleanup on 2026-03-05:
+  - removed global `row`/`col` in `shell_core.c`
+  - cursor start position now uses local state in `shell_core_run()`
+- Post-rename build verification:
+  - full `make clean && make iso-32 iso-64 img-32` run was manually interrupted
+  - fresh full regression run is still pending for final sign-off
 - Floppy banner visibility fix after shell integration:
   - start text model from current cursor (`vga_get_cursor` + `vga_text_begin`)
   - fixed escaped backslashes in ASCII art strings
