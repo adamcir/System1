@@ -1,6 +1,18 @@
 # System/1 Plan (Current)
 
 ## Execution Log
+Date: 2026-03-05
+1. Fixed one-command build fallback in `Makefile`:
+   - added fallback to system `gcc`/`ld` when `i686-*` toolchain is unavailable
+   - removed need for manual override (`I386_CC=... I386_LD=...`) in normal local flow
+2. Fixed `panic` compile regressions:
+   - `panic_core.c` now includes `vga.h` for color constants (`RED`)
+   - `panic_core()` now terminates through explicit halt path to satisfy `noreturn`
+3. Fixed shell cursor visibility regression:
+   - `vga_core_init()` now explicitly enables VGA hardware cursor (scanline 14..15)
+4. Verification status:
+   - post-cursor-fix full clean build verification is pending (last run interrupted)
+
 Date: 2026-03-04
 1. Removed temporary validation trigger:
    - `CTRL+ALT+BACKSPACE` no longer generates `KEY_CTRL_ALT_BKSP`.
@@ -158,14 +170,20 @@ Milestone sign-off criteria:
    - user-verified on real HW: with `NumLock=off`, numpad numbers do not type
 
 ## Active Work Items
-1. Shell V1 interactive verification on all 3 targets:
+1. Full clean build regression after cursor fix:
+   - run `make clean && make iso-32 iso-64 img-32`
+   - confirm all 3 artifacts are produced
+2. Shell cursor visibility verification on all 3 targets:
+   - prompt cursor is visible and tracks editing position
+   - verify both fresh boot and after `clear`
+3. Shell V1 interactive verification on all 3 targets:
    - prompt `kernel> `
    - commands: `help`, `clear`, `echo`, `reboot`, `shutdown`, `ticks`
    - unknown command output: `unknown command`
-2. Shell behavior parity (`iso-32`, `iso-64`, `img-32`):
+4. Shell behavior parity (`iso-32`, `iso-64`, `img-32`):
    - same parser behavior (`command arg1 arg2 ...`)
    - same command outputs and control flow
-3. Optional cleanup:
+5. Optional cleanup:
    - document exact VGA text API contract in module docs/comments.
 
 ## Validation Checklist

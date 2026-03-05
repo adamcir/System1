@@ -1,4 +1,4 @@
-System/1 context (updated 2026-03-04)
+System/1 context (updated 2026-03-05)
 
 Current build command:
 - make iso-32 iso-64 img-32
@@ -90,6 +90,7 @@ Shell status:
 
 VGA status:
 - Hardware cursor sync active (0x3D4/0x3D5)
+- Hardware cursor visibility is explicitly enabled in `vga_core_init()` (scanline 14..15)
 - Scroll-up on overflow enabled
 - Color list exposed in `vga.h` via `#define VGA_COLOR_*` (0..15), with enum aliases.
 - Compatibility alias for yellow is present (`VGA_COLOR_YELLOW`, `YELLOW`).
@@ -154,6 +155,11 @@ Build system status:
     - `<mod>_core.c`
     - `<mod>-core.c`
     - `<mod>_common.c`
+- Toolchain fallback is now robust for one-command build:
+  - `I386_CC`: `i686-elf-gcc` -> `i686-linux-gnu-gcc` -> `gcc`
+  - `I386_LD`: `i686-elf-ld` -> `i686-linux-gnu-ld` -> `ld`
+  - `X64_CC`: `x86_64-elf-gcc` -> `x86_64-linux-gnu-gcc` -> `gcc`
+  - `X64_LD`: `x86_64-elf-ld` -> `x86_64-linux-gnu-ld` -> `ld`
 
 Validation status:
 - Build passes with dynamic Makefile and signals module:
@@ -192,6 +198,17 @@ Validation status:
 - Shell integration build/smoke validation on 2026-03-04:
   - `make clean && make iso-32 iso-64 img-32` PASS
   - headless boot smoke: `iso-32` PASS, `iso-64` PASS, `img-32` PASS
+- Build/toolchain fallback regression on 2026-03-05:
+  - root cause fixed: empty `I386_CC`/`I386_LD` no longer break command lines
+  - one-command build works without explicit `I386_CC=... I386_LD=...` overrides
+- Panic module compile regression on 2026-03-05:
+  - root cause fixed in `panic_core.c` (`RED` source + explicit no-return halt path)
+  - previous compile errors resolved:
+    - `RED undeclared`
+    - `implicit declaration of function 'halt'`
+- Shell cursor visibility regression on 2026-03-05:
+  - root cause fixed in `vga_core.c` by explicit hardware cursor enable during VGA init
+  - full post-fix clean build verification is pending (interrupted run)
 - Floppy banner visibility fix after shell integration:
   - start text model from current cursor (`vga_get_cursor` + `vga_text_begin`)
   - fixed escaped backslashes in ASCII art strings

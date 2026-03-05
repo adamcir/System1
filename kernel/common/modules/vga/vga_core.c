@@ -19,6 +19,19 @@ static void outb(uint16_t port, uint8_t value) {
     __asm__ volatile ("outb %0, %1" : : "a"(value), "Nd"(port));
 }
 
+static uint8_t inb(uint16_t port) {
+    uint8_t value;
+    __asm__ volatile ("inb %1, %0" : "=a"(value) : "Nd"(port));
+    return value;
+}
+
+static void vga_hw_cursor_enable(uint8_t start, uint8_t end) {
+    outb(0x3D4, 0x0A);
+    outb(0x3D5, (uint8_t)((inb(0x3D5) & 0xC0u) | (start & 0x1Fu)));
+    outb(0x3D4, 0x0B);
+    outb(0x3D5, (uint8_t)((inb(0x3D5) & 0xE0u) | (end & 0x1Fu)));
+}
+
 static void vga_hw_cursor_update(void) {
     uint16_t pos = (uint16_t)(row * VGA_WIDTH + col);
     outb(0x3D4, 0x0F);
@@ -83,6 +96,7 @@ void vga_core_init(void) {
 
     row = 0;
     col = 0;
+    vga_hw_cursor_enable(14u, 15u);
     for (i = 0; i < VGA_WIDTH * VGA_HEIGHT; ++i) {
         VGA[i] = ((uint16_t)color << 8) | ' ';
     }
