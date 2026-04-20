@@ -1,1 +1,1 @@
-# System1
+# System/1 OS by adamcir in 2026
