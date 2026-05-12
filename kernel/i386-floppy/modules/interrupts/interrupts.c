@@ -1,5 +1,6 @@
 #include "interrupts.h"
 #include "interrupts_common.h"
+#include "paging.h"
 
 typedef struct __attribute__((packed)) {
     uint16_t offset_low;
@@ -64,6 +65,10 @@ static void timer_irq_handler(void) {
 }
 
 void interrupts_dispatch(uint8_t vector) {
+    if (vector == 14u) {
+        paging_handle_page_fault();
+        return;
+    }
     interrupts_common_dispatch(&g_interrupts_state, vector);
 }
 

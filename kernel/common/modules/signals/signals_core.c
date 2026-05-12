@@ -33,7 +33,6 @@ static __attribute__((noreturn)) void hw_reset(void) {
 static __attribute__((noreturn)) void hw_power_down(void) {
     __asm__ volatile ("cli");
 
-    /* Common ACPI/PM shutdown ports used by QEMU/Bochs variants. */
     outw(0x604, 0x2000);
     outw(0xB004, 0x2000);
     outw(0x4004, 0x3400);

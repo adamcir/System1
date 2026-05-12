@@ -1,6 +1,6 @@
 # System/1 Module Contracts
 
-Last updated: 2026-03-04
+Last updated: 2026-03-12
 
 ## Scope
 This document defines the expected runtime contract for shared modules:
@@ -8,6 +8,7 @@ This document defines the expected runtime contract for shared modules:
 - `tty`
 - `keyboard`
 - `signals`
+- `paging`
 
 ## `vga` Contract
 Public editing API:
@@ -73,3 +74,26 @@ Behavior:
 Notes:
 - Current interactive keyboard path intentionally exposes only reset hotkey (`CTRL+ALT+DEL`).
 - Power-down signal remains available for non-keyboard callers through `signal_raise(HW_PWR_DOWN)`.
+
+## `paging` Contract
+Public API:
+- `paging_init(uint32_t boot_magic, uint32_t boot_info_ptr)`
+- `paging_is_enabled()`
+- `paging_identity_limit()`
+- `paging_handle_page_fault()`
+
+Behavior (V1):
+- Enables paging with identity map of first 64 MiB using 4 KiB pages.
+- Initialization is idempotent; repeated `paging_init` calls are no-op success.
+- Boot source detection:
+  - Multiboot2 path if magic is valid and mmap contains usable region.
+  - Floppy/generic fallback path otherwise.
+- Page fault vector (`#PF`, 14) is handled by paging module:
+  - reads `CR2`
+  - prints fault address
+  - halts via `panic`
+
+Limitations (V1):
+- Identity mapping only; no higher-half mapping.
+- No userspace split.
+- No demand paging / copy-on-write.

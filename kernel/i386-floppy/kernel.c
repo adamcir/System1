@@ -4,7 +4,7 @@
 #include "keyboard.h"
 #include "shell.h"
 #include "vga.h"
-#include "panic.h"
+#include "paging.h"
 
 #define FLOPPY_MAGIC 0x53314D47u
 
@@ -19,6 +19,9 @@ void kmain_floppy_i386(uint32_t magic, uint32_t boot_info_ptr) {
     
 
     vga_init();
+    if (paging_init(magic, boot_info_ptr) != 0) {
+        panic("paging_init failed");
+    }
     interrupts_init();
     keyboard_init();
     irq_register_handler(1, keyboard_irq_handler);
@@ -31,7 +34,7 @@ void kmain_floppy_i386(uint32_t magic, uint32_t boot_info_ptr) {
     }
 
     klog_info("boot", "System/1 boot via floppy loader");
-    klog_info("kernel", "modules: panic, vga, signals, interrupts, keyboard, shell");
+    klog_info("kernel", "modules: vga, signals, interrupts, keyboard, shell");
     vga_set_color(GREEN);
     vga_puts("drive: ");
     vga_hex_u32(info->boot_drive);

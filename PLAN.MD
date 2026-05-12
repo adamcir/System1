@@ -282,3 +282,32 @@ Notes:
 2. Artifact names and output paths stay unchanged.
 3. Common-first module policy remains default unless arch/media constraints require local code.
 4. Linker RWX warning remains accepted for MVP.
+
+Date: 2026-03-12
+1. Implemented Paging V1 module across all targets:
+   - added shared module `paging` (`paging.c`, `paging_core.c`, `paging_core.h`)
+   - added arch headers for `paging` (`i386`, `x86_64`, `i386-floppy`)
+2. Paging V1 behavior:
+   - identity map first 64 MiB with 4 KiB pages
+   - i386/i386-floppy: runtime PDE/PTE build + CR3 load + CR0.PG enable
+   - x86_64: runtime 4-level table rebuild (4 KiB pages) + CR3 reload
+   - init path logs for multiboot2 vs fallback flow
+3. Integrated paging init into boot order:
+   - `kmain_*`: `vga_init()` -> `paging_init(...)` -> `interrupts_init()` -> ...
+4. Added page fault integration:
+   - vector `14` now dispatches to `paging_handle_page_fault()` on all targets
+   - handler reports CR2 fault address and halts via `panic`
+5. Verification status:
+   - `make clean && make iso-32 iso-64 img-32` PASS
+6. Remaining sign-off step:
+   - runtime interactive verification in QEMU for paging boot path + shell parity on all targets.
+
+Date: 2026-03-12 (update)
+1. Implementation plan was saved for Paging V1 execution:
+   - `docs/plans/2026-03-12-paging-v1-implementation.md`
+2. Current status:
+   - code integration for `paging` is in place
+   - build regression (`make clean && make iso-32 iso-64 img-32`) passes
+   - headless QEMU smoke (`iso-32`, `iso-64`, `img-32`) passes
+3. Remaining validation for full sign-off:
+   - interactive runtime pass in windowed QEMU (prompt/cursor/command parity + paging boot logs).
