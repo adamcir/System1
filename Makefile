@@ -56,10 +56,10 @@ $(if $(wildcard $(1)/modules/$(2)/$(2).c),$(1)/modules/$(2)/$(2).c,$(COMMON_MODU
 endef
 
 define module_core_src
-$(firstword $(wildcard \
-$(COMMON_MODULE_DIR)/$(1)/$(1)_core.c \
-$(COMMON_MODULE_DIR)/$(1)/$(1)-core.c \
-$(COMMON_MODULE_DIR)/$(1)/$(1)_common.c))
+$(wildcard \
+$(COMMON_MODULE_DIR)/$(1)/*_core.c \
+$(COMMON_MODULE_DIR)/$(1)/*-core.c \
+$(COMMON_MODULE_DIR)/$(1)/*_common.c)
 endef
 
 define module_all_srcs

@@ -18,6 +18,7 @@
 #define FS_ERR_NOT_DIR -3
 #define FS_ERR_INVALID -4
 #define FS_ERR_NO_SPACE -5
+#define FS_ERR_READ_ONLY -6
 
 typedef struct {
     const char* name;

@@ -475,6 +475,11 @@ static void shell_print_fs_error(const char* cmd, int rc) {
         return;
     }
 
+    if (rc == FS_ERR_READ_ONLY) {
+        vga_puts("read-only filesystem\n");
+        return;
+    }
+
     vga_puts("unknown fs error\n");
 }
 
