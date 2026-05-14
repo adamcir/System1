@@ -8,6 +8,8 @@
 #define KEY_RIGHT 0x81
 #define KEY_INSERT 0x82
 #define KEY_DELETE 0x83
+#define KEY_UP 0x84
+#define KEY_DOWN 0x85
 #define KEY_CTRL_ALT_DEL 0x86
 
 void keyboard_core_init(void);

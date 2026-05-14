@@ -5,6 +5,7 @@
 #include "shell.h"
 #include "vga.h"
 #include "paging.h"
+#include "fs.h"
 
 #define FLOPPY_MAGIC 0x53314D47u
 
@@ -35,6 +36,9 @@ void kmain_floppy_i386(uint32_t magic, uint32_t boot_info_ptr) {
 
     klog_info("boot", "System/1 boot via floppy loader");
     klog_info("kernel", "modules: vga, signals, interrupts, keyboard, shell");
+    if (fs_init() != FS_OK) {
+        panic("fs_init failed");
+    }
     vga_set_color(GREEN);
     vga_puts("drive: ");
     vga_hex_u32(info->boot_drive);

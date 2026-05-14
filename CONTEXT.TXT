@@ -1,4 +1,4 @@
-System/1 context (updated 2026-03-05)
+System/1 context (updated 2026-05-14)
 
 Current build command:
 - make iso-32 iso-64 img-32
@@ -23,14 +23,15 @@ Boot/config layout:
   - stage2 now powers floppy motor off after load/halt via FDC DOR (0x3F2)
 
 Kernel artifact naming:
-- GRUB kernels (`.bin`, ELF for multiboot):
-  - build/artifacts/i386/kernel.bin
-  - build/artifacts/x86_64/kernel.bin
-- Floppy raw image:
-  - build/artifacts/i386-floppy/kernel.bin
+- GRUB kernels (ELF for multiboot):
+  - build/artifacts/i386/kernel.elf
+  - build/artifacts/x86_64/kernel.elf
+- Floppy kernel payload (ELF loaded by stage2):
+  - build/artifacts/i386-floppy/kernel.elf
 
 Module model (current):
 - Common wrappers + cores used by all targets for:
+  - fs
   - vga
   - klog
   - panic
@@ -84,9 +85,45 @@ Shell status:
   - `reboot` -> `signal_raise(HW_RESET)`
   - `shutdown` -> `signal_raise(HW_PWR_DOWN)`
   - `ticks` -> `timer_ticks_get()` (hex output)
+  - `version`
+  - `pwd`
+  - `ls [path]`
+  - `cd <path>`
+  - `mkdir <path>`
 - Parser:
   - whitespace tokenization (`command arg1 arg2 ...`)
   - unknown command output: `unknown command`
+
+Filesystem status:
+- Shared `fs` module is active for all 3 outputs.
+- Bootloader remains unchanged:
+  - FAT12 floppy image is only the boot transport for loading the kernel
+  - kernel filesystem is separate and starts after `fs_init()`
+- Current filesystem type:
+  - static RAM rootfs
+  - no heap
+  - no block device
+  - no persistence
+- Bootstrap tree:
+  - `/boot`
+  - `/dev`
+  - `/etc`
+  - `/tmp`
+- Bootstrap placeholder files:
+  - `/boot/kernel`
+  - `/etc/init`
+  - `/dev/tty0`
+- Path behavior:
+  - absolute and relative paths supported
+  - `.` and `..` supported
+  - `mkdir` creates only the final segment
+  - no recursive `mkdir -p`
+- Public API:
+  - `fs_init(void)`
+  - `fs_get_cwd_path(void)`
+  - `fs_change_dir(const char* path)`
+  - `fs_make_dir(const char* path)`
+  - `fs_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, uint32_t* out_count)`
 
 VGA status:
 - Hardware cursor sync active (0x3D4/0x3D5)
@@ -162,6 +199,13 @@ Build system status:
   - `X64_LD`: `x86_64-elf-ld` -> `x86_64-linux-gnu-ld` -> `ld`
 
 Validation status:
+- Filesystem V1 build/smoke validation on 2026-05-14:
+  - `make modules-32 modules-64 modules-img-32` PASS
+  - `make iso-32 iso-64 img-32` PASS
+  - 5s headless boot smoke:
+    - `iso-32`: PASS
+    - `iso-64`: PASS
+    - `img-32`: PASS
 - Build passes with dynamic Makefile and signals module:
   - make iso-32 iso-64 img-32
 - Build passes after Home/End + CapsLock + Tab + Numpad update:

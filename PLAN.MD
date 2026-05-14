@@ -1,6 +1,28 @@
 # System/1 Plan (Current)
 
 ## Execution Log
+Date: 2026-05-14
+1. Added first filesystem implementation plan:
+   - `docs/plans/2026-05-14-ramfs-rootfs-implementation.md`
+2. Added shared `fs` module as RAM rootfs:
+   - new common sources: `kernel/common/modules/fs/fs.c`, `fs_core.c`, `fs_core.h`
+   - new arch headers: `kernel/*/modules/fs/fs.h`
+3. RAM rootfs V1 behavior:
+   - static in-memory tree, no heap, no block device
+   - bootstrap directories: `/boot`, `/dev`, `/etc`, `/tmp`
+   - bootstrap file placeholders: `/boot/kernel`, `/etc/init`, `/dev/tty0`
+4. Shell commands added:
+   - `pwd`
+   - `ls [path]`
+   - `cd <path>`
+   - `mkdir <path>`
+5. Kernel boot flow updated:
+   - all `kmain_*` paths now call `fs_init()` before `shell_run()`
+6. Verification status:
+   - `make modules-32 modules-64 modules-img-32` PASS
+   - `make iso-32 iso-64 img-32` PASS
+   - 5s headless boot smoke: `iso-32` PASS, `iso-64` PASS, `img-32` PASS
+
 Date: 2026-03-05
 1. Fixed one-command build fallback in `Makefile`:
    - added fallback to system `gcc`/`ld` when `i686-*` toolchain is unavailable
@@ -182,9 +204,12 @@ Milestone sign-off criteria:
    - user-verified on real HW: with `NumLock=off`, numpad numbers do not type
 
 ## Active Work Items
-1. Full clean build regression after `klog` + TTY + shell-state refactor:
-   - run `make clean && make iso-32 iso-64 img-32`
-   - confirm all 3 artifacts are produced
+1. Interactive filesystem shell verification on all 3 targets:
+   - `pwd` returns `/`
+   - `ls /` shows bootstrap tree
+   - `cd /boot` works
+   - `mkdir /tmp/test` works
+   - `ls /tmp` shows `test/`
 2. Shell cursor visibility verification on all 3 targets:
    - prompt cursor is visible and tracks editing position
    - verify both fresh boot and after `clear`
@@ -193,13 +218,14 @@ Milestone sign-off criteria:
    - ensure there are no remaining `bootlog_*` symbol references
 4. Shell V1 interactive verification on all 3 targets:
    - prompt `kernel> `
-   - commands: `help`, `clear`, `echo`, `reboot`, `shutdown`, `ticks`
+   - commands: `help`, `clear`, `echo`, `reboot`, `shutdown`, `ticks`, `version`, `pwd`, `ls`, `cd`, `mkdir`
    - unknown command output: `unknown command`
 5. Shell behavior parity (`iso-32`, `iso-64`, `img-32`):
    - same parser behavior (`command arg1 arg2 ...`)
    - same command outputs and control flow
-6. Optional cleanup:
-   - document exact VGA text API contract in module docs/comments.
+6. Filesystem V2 planning:
+   - add file read API (`cat`)
+   - decide whether next step is writable ramfs files or block device layer
 
 ## Validation Checklist
 1. `make clean && make iso-32 iso-64 img-32`.

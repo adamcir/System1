@@ -56,7 +56,24 @@ static void tty_delete_at_cursor(char* buf, uint32_t* len, uint32_t cursor) {
     (*len)--;
 }
 
+static void tty_redraw_line(char* buf, uint32_t len, uint32_t cursor, uint16_t row, uint16_t col) {
+    uint32_t i;
+
+    vga_text_begin(row, col);
+    for (i = 0u; i < len; ++i) {
+        vga_text_putc(buf[i]);
+    }
+
+    for (i = len; i > cursor; --i) {
+        vga_text_left();
+    }
+}
+
 int tty_core_readline(char* buf, uint32_t cap) {
+    return tty_core_readline_ex(buf, cap, 0);
+}
+
+int tty_core_readline_ex(char* buf, uint32_t cap, const tty_readline_hooks_t* hooks) {
     int key;
     uint32_t len = 0u;
     uint32_t cursor = 0u;
@@ -130,7 +147,31 @@ int tty_core_readline(char* buf, uint32_t cap) {
             continue;
         }
 
+        if (key == KEY_UP) {
+            if (hooks != 0 && hooks->history_hook != 0) {
+                if (hooks->history_hook(-1, buf, cap, &len, &cursor, hooks->ctx) != 0) {
+                    tty_redraw_line(buf, len, cursor, row, col);
+                }
+            }
+            continue;
+        }
+
+        if (key == KEY_DOWN) {
+            if (hooks != 0 && hooks->history_hook != 0) {
+                if (hooks->history_hook(1, buf, cap, &len, &cursor, hooks->ctx) != 0) {
+                    tty_redraw_line(buf, len, cursor, row, col);
+                }
+            }
+            continue;
+        }
+
         if (key == '\t') {
+            if (hooks != 0 && hooks->tab_hook != 0) {
+                hooks->tab_hook(buf, cap, &len, &cursor, hooks->ctx);
+                tty_redraw_line(buf, len, cursor, row, col);
+                continue;
+            }
+
             for (i = 0; i < 4; ++i) {
                 if (tty_insert_char(buf, cap, &len, &cursor, insert_mode, ' ') == 0) {
                     break;

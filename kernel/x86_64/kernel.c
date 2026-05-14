@@ -5,6 +5,7 @@
 #include "shell.h"
 #include "vga.h"
 #include "paging.h"
+#include "fs.h"
 
 void kmain_x86_64(uint32_t magic, uint32_t info) {
     vga_init();
@@ -17,6 +18,9 @@ void kmain_x86_64(uint32_t magic, uint32_t info) {
     interrupts_enable();
     klog_info("boot", "System/1 boot via GRUB");
     klog_info("kernel", "modules: vga, signals, interrupts, keyboard, shell");
+    if (fs_init() != FS_OK) {
+        panic("fs_init failed");
+    }
     klog_system_logo();
     shell_run();
     panic("Kernel loop ended!");

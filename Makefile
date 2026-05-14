@@ -34,10 +34,9 @@ LDS32        := linker/linker.i386.ld
 LDS64        := linker/linker.x86_64.ld
 LDSFLP       := linker/linker.floppy.i386.ld
 
-KERNEL32_ELF  := $(I386_OUT_DIR)/kernel.bin
-KERNEL64_ELF  := $(X64_OUT_DIR)/kernel.bin
+KERNEL32_ELF  := $(I386_OUT_DIR)/kernel.elf
+KERNEL64_ELF  := $(X64_OUT_DIR)/kernel.elf
 KERNELFLP_ELF := $(FLP_OUT_DIR)/kernel.elf
-KERNELFLP_BIN := $(FLP_OUT_DIR)/kernel.bin
 
 ISO32 := $(IMAGE_OUT_DIR)/system1-iso-32.iso
 ISO64 := $(IMAGE_OUT_DIR)/system1-iso-x86_64.iso
@@ -161,9 +160,6 @@ $(KERNELFLP_ELF): $(LDSFLP) $(BUILD_OBJ)/entry_floppy_i386.o $(BUILD_OBJ)/isr_fl
 	$(I386_LD) -m elf_i386 -T $(LDSFLP) -o $@ \
 		$(BUILD_OBJ)/entry_floppy_i386.o $(BUILD_OBJ)/isr_floppy_i386.o $(BUILD_OBJ)/kernel_i386_floppy.o $(FLP_MODULE_OBJS)
 
-$(KERNELFLP_BIN): $(KERNELFLP_ELF)
-	$(I386_OBJCOPY) -O binary $< $@
-
 $(ISO32): $(KERNEL32_ELF) scripts/mkiso-i386.sh | $(IMAGE_OUT_DIR)
 	chmod +x scripts/mkiso-i386.sh
 	./scripts/mkiso-i386.sh
@@ -172,7 +168,7 @@ $(ISO64): $(KERNEL64_ELF) scripts/mkiso-x86_64.sh | $(IMAGE_OUT_DIR)
 	chmod +x scripts/mkiso-x86_64.sh
 	./scripts/mkiso-x86_64.sh
 
-$(IMG32): $(KERNELFLP_BIN) scripts/mkimg-32.sh boot/simple32/stage1.asm boot/simple32/stage2.asm | $(IMAGE_OUT_DIR)
+$(IMG32): $(KERNELFLP_ELF) scripts/mkimg-32.sh boot/simple32/stage1.asm boot/simple32/stage2.asm | $(IMAGE_OUT_DIR)
 	chmod +x scripts/mkimg-32.sh
 	./scripts/mkimg-32.sh
 
@@ -182,7 +178,7 @@ iso-64: $(ISO64)
 
 iso-x86_64: $(ISO64)
 
-floppy-kernel32: $(KERNELFLP_BIN)
+floppy-kernel32: $(KERNELFLP_ELF)
 
 img-32: $(IMG32)
 

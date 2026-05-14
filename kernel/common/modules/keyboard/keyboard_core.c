@@ -236,8 +236,12 @@ static void keyboard_process_scancode(uint8_t scancode) {
         if (is_break == 0) {
             if (code == 0x4B) {
                 queue_push(KEY_LEFT);
+            } else if (code == 0x48) {
+                queue_push(KEY_UP);
             } else if (code == 0x4D) {
                 queue_push(KEY_RIGHT);
+            } else if (code == 0x50) {
+                queue_push(KEY_DOWN);
             } else if (code == 0x52) {
                 queue_push(KEY_INSERT);
             } else if (code == 0x53) {
@@ -310,7 +314,7 @@ static void keyboard_process_scancode(uint8_t scancode) {
         uint8_t number_mode = (uint8_t)((numlock_on ? 1u : 0u) ^ (shift_pressed ? 1u : 0u));
         switch (scancode) {
             case 0x47: if (number_mode) { queue_push('7'); } return;
-            case 0x48: if (number_mode) { queue_push('8'); } return;
+            case 0x48: queue_push(number_mode ? '8' : KEY_UP); return;
             case 0x49: if (number_mode) { queue_push('9'); } return;
             case 0x4A: queue_push('-'); return;
             case 0x4B: queue_push(number_mode ? '4' : KEY_LEFT); return;
@@ -318,7 +322,7 @@ static void keyboard_process_scancode(uint8_t scancode) {
             case 0x4D: queue_push(number_mode ? '6' : KEY_RIGHT); return;
             case 0x4E: queue_push('+'); return;
             case 0x4F: if (number_mode) { queue_push('1'); } return;
-            case 0x50: if (number_mode) { queue_push('2'); } return;
+            case 0x50: queue_push(number_mode ? '2' : KEY_DOWN); return;
             case 0x51: if (number_mode) { queue_push('3'); } return;
             case 0x52: queue_push(number_mode ? '0' : KEY_INSERT); return;
             case 0x53: queue_push('.'); return;
