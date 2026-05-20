@@ -5,6 +5,10 @@ int fs_init(void) {
     return fs_core_init();
 }
 
+void fs_set_boot_context(uint32_t boot_magic, uint32_t boot_info_ptr) {
+    fs_core_set_boot_context(boot_magic, boot_info_ptr);
+}
+
 const char* fs_get_cwd_path(void) {
     return fs_core_get_cwd_path();
 }

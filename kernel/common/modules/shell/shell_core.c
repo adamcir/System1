@@ -471,7 +471,7 @@ static void shell_print_fs_error(const char* cmd, int rc) {
     }
 
     if (rc == FS_ERR_NO_SPACE) {
-        vga_puts("no space left in ramfs\n");
+        vga_puts("no space left in filesystem\n");
         return;
     }
 

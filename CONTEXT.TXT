@@ -17,6 +17,10 @@ Boot/config layout:
 - GRUB configs:
   - boot/grub/i386/grub.cfg
   - boot/grub/x86_64/grub.cfg
+- Persistent root filesystem sources:
+  - filesystem/fs32img (FAT12 floppy image root)
+  - filesystem/fs32 (i386 ISO rootfs image source)
+  - filesystem/fs64 (x86_64 ISO rootfs image source)
 - Floppy bootloader:
   - boot/simple32/stage1.asm
   - boot/simple32/stage2.asm
@@ -96,30 +100,36 @@ Shell status:
 
 Filesystem status:
 - Shared `fs` module is active for all 3 outputs.
-- Bootloader remains unchanged:
-  - FAT12 floppy image is only the boot transport for loading the kernel
-  - kernel filesystem is separate and starts after `fs_init()`
-- Current filesystem type:
-  - static RAM rootfs
-  - no heap
-  - no block device
-  - no persistence
-- Bootstrap tree:
-  - `/boot`
-  - `/dev`
-  - `/etc`
-  - `/tmp`
-- Bootstrap placeholder files:
-  - `/boot/kernel`
-  - `/etc/init`
-  - `/dev/tty0`
+- Current root filesystem policy:
+  - root `/` must mount from boot media
+  - root is read-only
+  - no normal RAM rootfs fallback
+  - mount failure calls exactly `panic("Unable to mount FS")`
+- VFS/block structure:
+  - public shell API remains `fs_*`
+  - `fs_core.c` dispatches through a mounted read-only driver
+  - `block_core.*` provides the block-device boundary
+  - `fat12_core.*` reads FAT12 root directories
+  - `iso9660_core.*` reads ISO9660 root directories
+- Boot media mapping:
+  - `i386-floppy`: `scripts/mkimg-32.sh` copies `filesystem/fs32img` into `build/staging/rootfs-img32`, injects `KERNEL32.BIN`, `/boot/KERNEL.BIN`, `/boot/STAGE1.BIN`, and `/boot/STAGE2.BIN` into staging, then packs FAT12; stage2-loaded FAT12 data is exposed as the root block device
+  - `iso-32`: `scripts/mkiso-i386.sh` copies `filesystem/fs32` into `build/staging/rootfs-iso32`, injects `/boot/kernel32.elf`, builds `rootfs.iso` from that staging tree, then adds `/boot/rootfs.iso` to the same staging tree; `grub-mkrescue` packs that staging tree directly, so GRUB reads `/boot/grub/grub.cfg` from the filesystem source
+  - `iso-64`: `scripts/mkiso-x86_64.sh` copies `filesystem/fs64` into `build/staging/rootfs-iso64`, injects `/boot/kernel64.elf`, builds `rootfs.iso` from that staging tree, then adds `/boot/rootfs.iso` to the same staging tree; `grub-mkrescue` packs that staging tree directly, so GRUB reads `/boot/grub/grub.cfg` from the filesystem source
+- Legacy RAM rootfs:
+  - split into `ramfs_core.*`
+  - retained as internal code, but no longer used as normal boot fallback
+- Root image contents:
+  - filesystem layout is edited in `filesystem/`, not generated from scratch by build scripts
+  - build scripts must not write generated kernel files back into `filesystem/`; generated files belong only in `build/staging/*`
+  - ISO filesystem sources own `/boot/grub/grub.cfg`; `boot/grub/*/grub.cfg` is no longer the ISO product source
+  - baseline root folders follow Linux-style layout: `/bin`, `/boot`, `/dev`, `/etc`, `/home`, `/lib`, `/mnt`, `/opt`, `/proc`, `/root`, `/sbin`, `/sys`, `/tmp`, `/usr`, `/var`
 - Path behavior:
   - absolute and relative paths supported
   - `.` and `..` supported
-  - `mkdir` creates only the final segment
-  - no recursive `mkdir -p`
+  - `mkdir` returns read-only filesystem
 - Public API:
   - `fs_init(void)`
+  - `fs_set_boot_context(uint32_t boot_magic, uint32_t boot_info_ptr)`
   - `fs_get_cwd_path(void)`
   - `fs_change_dir(const char* path)`
   - `fs_make_dir(const char* path)`

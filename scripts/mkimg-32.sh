@@ -5,15 +5,18 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="$ROOT_DIR/build"
 ARTIFACT_DIR="$BUILD_DIR/artifacts"
 STAGING_DIR="$BUILD_DIR/staging/floppy"
+ROOTFS_SRC_DIR="$ROOT_DIR/filesystem/fs32img"
+ROOTFS_BUILD_DIR="$BUILD_DIR/staging/rootfs-img32"
 IMG="$ARTIFACT_DIR/images/system1-img-32.img"
 STAGE1="$STAGING_DIR/stage1.bin"
 STAGE2="$STAGING_DIR/stage2.bin"
 KERNEL_ELF="$ARTIFACT_DIR/i386-floppy/kernel.elf"
-KERNEL_RAW="$STAGING_DIR/kernel32.bin"
+KERNEL_RAW="$STAGING_DIR/kernel.bin"
 
 NASM_BIN="${NASM:-nasm}"
 MKFS_FAT_BIN="${MKFS_FAT:-mkfs.fat}"
 MCOPY_BIN="${MCOPY:-mcopy}"
+MMD_BIN="${MMD:-mmd}"
 DD_BIN="${DD:-dd}"
 OBJCOPY_BIN="${OBJCOPY:-$(command -v i686-elf-objcopy 2>/dev/null || command -v i686-linux-gnu-objcopy 2>/dev/null || command -v objcopy 2>/dev/null)}"
 PERL_BIN="${PERL:-perl}"
@@ -36,7 +39,13 @@ if ! command -v "$PERL_BIN" >/dev/null 2>&1; then
   exit 1
 fi
 
+if [[ ! -d "$ROOTFS_SRC_DIR" ]]; then
+  echo "Missing root filesystem source: $ROOTFS_SRC_DIR"
+  exit 1
+fi
+
 mkdir -p "$STAGING_DIR" "$(dirname "$IMG")"
+rm -rf "$ROOTFS_BUILD_DIR"
 
 "$NASM_BIN" -f bin "$ROOT_DIR/boot/simple32/stage2.asm" -o "$STAGE2"
 
@@ -54,6 +63,13 @@ fi
   "$ROOT_DIR/boot/simple32/stage1.asm" -o "$STAGE1"
 
 "$OBJCOPY_BIN" -O binary "$KERNEL_ELF" "$KERNEL_RAW"
+
+cp -a "$ROOTFS_SRC_DIR" "$ROOTFS_BUILD_DIR"
+if [[ -d "$ROOTFS_BUILD_DIR/boot" ]]; then
+  cp "$KERNEL_RAW" "$ROOTFS_BUILD_DIR/boot/KERNEL.BIN"
+  cp "$STAGE1" "$ROOTFS_BUILD_DIR/boot/STAGE1.BIN"
+  cp "$STAGE2" "$ROOTFS_BUILD_DIR/boot/STAGE2.BIN"
+fi
 
 truncate -s 1474560 "$IMG"
 "$MKFS_FAT_BIN" -F 12 -n SYSTEM1 "$IMG"
@@ -88,6 +104,11 @@ truncate -s 1474560 "$IMG"
   }
 ' "$STAGE2" "$IMG" $(( STAGE2_LBA * 512 ))
 
-"$MCOPY_BIN" -i "$IMG" "$KERNEL_RAW" ::KERNEL32.BIN
+shopt -s nullglob dotglob
+ROOTFS_ITEMS=("$ROOTFS_BUILD_DIR"/*)
+if (( ${#ROOTFS_ITEMS[@]} > 0 )); then
+  "$MCOPY_BIN" -i "$IMG" -s "${ROOTFS_ITEMS[@]}" ::
+fi
+shopt -u nullglob dotglob
 
 echo "Created $IMG"

@@ -1,4 +1,4 @@
-.section .multiboot2
+.section .multiboot2, "a"
 .align 8
 
 .set MB2_MAGIC, 0xE85250D6
