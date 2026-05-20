@@ -2,6 +2,34 @@
 
 ## Execution Log
 Date: 2026-05-14
+1. Started read-only disk rootfs migration:
+   - added design: `docs/plans/2026-05-14-readonly-disk-rootfs-design.md`
+   - added implementation plan: `docs/plans/2026-05-14-readonly-disk-rootfs-implementation.md`
+2. Added read-only VFS dispatch under the public `fs_*` API:
+   - `fs_core.c` now dispatches through mounted filesystem drivers
+   - legacy RAM tree was split into `ramfs_core.*` and is no longer the normal boot fallback
+3. Added block/media filesystem driver foundation:
+   - `block_core.*`
+   - read-only `fat12_core.*`
+   - read-only `iso9660_core.*`
+4. Boot media root behavior:
+   - `i386-floppy` exposes FAT12 data loaded by stage2 as a root block device
+   - `iso-32` and `iso-64` include `/boot/rootfs.iso` as a GRUB `module2`
+   - kernel mounts FAT12 or ISO9660 as `/`
+   - if mount fails, all kernels call `panic("Unable to mount FS")`
+5. Verification status:
+   - `make modules-32 modules-64 modules-img-32` PASS
+   - `make iso-32 iso-64 img-32` PASS
+6. Root filesystem source layout updated:
+   - persistent source trees live under `filesystem/`
+   - `filesystem/fs32img` is copied to `build/staging/rootfs-img32`, then kernel/bootloader files are injected into staging and packed into the FAT12 floppy image
+   - `filesystem/fs32` is copied to `build/staging/rootfs-iso32`, then `/boot/kernel32.elf` is injected, `rootfs.iso` is created, `/boot/rootfs.iso` is added to the same staging tree, and `grub-mkrescue` packs that filesystem tree directly
+   - `filesystem/fs64` is copied to `build/staging/rootfs-iso64`, then `/boot/kernel64.elf` is injected, `rootfs.iso` is created, `/boot/rootfs.iso` is added to the same staging tree, and `grub-mkrescue` packs that filesystem tree directly
+   - scripts no longer generate the Linux-style root directory tree every build
+   - scripts no longer write generated kernel files into `filesystem/`
+   - GRUB config for ISO builds now lives in `filesystem/fs32/boot/grub/grub.cfg` and `filesystem/fs64/boot/grub/grub.cfg`
+
+Date: 2026-05-14
 1. Added first filesystem implementation plan:
    - `docs/plans/2026-05-14-ramfs-rootfs-implementation.md`
 2. Added shared `fs` module as RAM rootfs:

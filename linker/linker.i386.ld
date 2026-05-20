@@ -3,8 +3,8 @@ ENTRY(_start_i386)
 SECTIONS {
   . = 1M;
 
-  .multiboot2 : {
-    *(.multiboot2)
+  .multiboot2 ALIGN(8) : {
+    KEEP(*(.multiboot2))
   }
 
   .text : {

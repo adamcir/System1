@@ -3,8 +3,8 @@ ENTRY(_start_x86_64)
 SECTIONS {
   . = 1M;
 
-  .multiboot2 : {
-    *(.multiboot2)
+  .multiboot2 ALIGN(8) : {
+    KEEP(*(.multiboot2))
   }
 
   .text : {

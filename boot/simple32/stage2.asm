@@ -75,7 +75,7 @@ start:
     inc ax
     loop .read_fat
 
-    ; Search KERNEL32.BIN in root dir
+    ; Search BOOT directory in root dir
     mov ax, [root_lba]
     mov cx, [root_dir_sectors]
     mov di, root_buffer
@@ -88,11 +88,55 @@ start:
 
     mov si, di
     mov dx, 16            ; 16 entries per sector
-.scan_entries:
+.scan_root_entries:
     cmp byte [si], 0x00
     je kernel_not_found
     cmp byte [si], 0xE5
-    je .next_entry
+    je .next_root_entry
+
+    push si
+    mov di, boot_dir_name
+    mov cx, 11
+    repe cmpsb
+    pop si
+    je boot_dir_found
+
+.next_root_entry:
+    add si, 32
+    dec dx
+    jnz .scan_root_entries
+
+    pop cx
+    pop ax
+    inc ax
+    add di, 512
+    loop .read_root
+    jmp kernel_not_found
+
+boot_dir_found:
+    pop cx  ; clean up stack
+    pop ax  ; clean up stack
+
+    ; Get cluster of BOOT directory
+    mov ax, [si + 26]
+
+    ; lba = data_lba + cluster - 2
+    sub ax, 2
+    add ax, [data_lba]
+
+    ; Load the BOOT directory sector into root_buffer
+    mov bx, root_buffer
+    call read_lba_sector
+    jc disk_fail
+
+    ; Search KERNEL in BOOT directory sector
+    mov si, root_buffer
+    mov dx, 16            ; 16 entries in 512-byte sector
+.scan_boot_entries:
+    cmp byte [si], 0x00
+    je kernel_not_found
+    cmp byte [si], 0xE5
+    je .next_boot_entry
 
     push si
     mov di, kernel_name
@@ -101,16 +145,10 @@ start:
     pop si
     je kernel_found
 
-.next_entry:
+.next_boot_entry:
     add si, 32
     dec dx
-    jnz .scan_entries
-
-    pop cx
-    pop ax
-    inc ax
-    add di, 512
-    loop .read_root
+    jnz .scan_boot_entries
     jmp kernel_not_found
 
 kernel_found:
@@ -154,6 +192,45 @@ kernel_found:
 done_loading:
     call floppy_motor_off
 
+    ; Enter Unreal Mode to load the entire floppy disk to 0x00200000 (2 MB)
+    call enter_unreal
+
+    ; Loop through LBA 0 to 2879
+    xor cx, cx              ; CX = current_lba = 0
+.load_floppy_loop:
+    push cx
+    mov ax, cx
+    mov bx, boot_sector
+    call read_lba_sector
+    pop cx
+    jnc .copy_sector
+    jmp disk_fail
+
+.copy_sector:
+    ; Copy 512 bytes (128 dwords) from boot_sector to GS:[0x00200000 + CX * 512]
+    push cx
+    
+    ; EDI = 0x00200000 + CX * 512
+    xor edi, edi
+    mov di, cx
+    shl edi, 9
+    add edi, 0x00200000
+
+    mov ecx, 128
+    mov esi, boot_sector
+.copy_dword:
+    mov eax, [esi]
+    mov [gs:edi], eax
+    add esi, 4
+    add edi, 4
+    dec ecx
+    jnz .copy_dword
+
+    pop cx
+    inc cx
+    cmp cx, 2880
+    jne .load_floppy_loop
+
     ; Fill boot_info at BOOT_INFO_SEG:0
     mov ax, BOOT_INFO_SEG
     mov es, ax
@@ -167,6 +244,35 @@ done_loading:
     stosd
 
     mov eax, [kernel_size]
+    stosd
+
+    mov eax, boot_sector
+    stosd
+
+    mov eax, fat_buffer
+    stosd
+
+    mov eax, root_buffer
+    stosd
+
+    xor eax, eax
+    mov ax, [fat_lba]
+    stosd
+
+    xor eax, eax
+    mov ax, [sectors_per_fat]
+    stosd
+
+    xor eax, eax
+    mov ax, [root_lba]
+    stosd
+
+    xor eax, eax
+    mov ax, [root_dir_sectors]
+    stosd
+
+    ; Member 11: floppy_image_addr
+    mov eax, 0x00200000
     stosd
 
     call enter_protected_mode
@@ -268,6 +374,31 @@ read_lba_sector_esbx:
     pop ax
     ret
 
+enter_unreal:
+    push ds
+    push es
+    cli
+    lgdt [gdt_ptr]
+
+    ; Switch to protected mode
+    mov eax, cr0
+    or eax, 1
+    mov cr0, eax
+
+    ; Load flat 4GB selector into GS
+    mov ax, 0x10
+    mov gs, ax
+
+    ; Switch back to real mode
+    mov eax, cr0
+    and eax, 0xFFFFFFFE
+    mov cr0, eax
+
+    pop es
+    pop ds
+    sti
+    ret
+
 enter_protected_mode:
     in al, 0x92
     or al, 0x02
@@ -331,10 +462,11 @@ current_cluster  dw 0
 load_segment     dw 0
 kernel_size      dd 0
 
-msg_not_found db 'KERNEL32.BIN not found', 0
+msg_not_found db 'boot/kernel.bin not found', 0
 msg_badfs     db 'FAT12 expected', 0
 msg_disk      db 'Disk read failure', 0
-kernel_name   db 'KERNEL32BIN'
+kernel_name   db 'KERNEL  BIN'
+boot_dir_name db 'BOOT       '
 
 align 2
 boot_sector: times 512 db 0

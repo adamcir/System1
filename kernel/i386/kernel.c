@@ -18,8 +18,9 @@ void kmain_i386(uint32_t magic, uint32_t info) {
     interrupts_enable();
     klog_info("boot", "System/1 boot via GRUB");
     klog_info("kernel", "modules: vga, signals, interrupts, keyboard, shell");
+    fs_set_boot_context(magic, info);
     if (fs_init() != FS_OK) {
-        panic("fs_init failed");
+        panic("Unable to mount FS");
     }
     klog_system_logo();
     shell_run();
