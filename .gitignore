@@ -1,0 +1,9 @@
+build/
+*.o
+*.bin
+*.elf
+*.img
+*.iso
+.agents/
+.antigravitycli/
+.codex/
