@@ -441,7 +441,6 @@ static void shell_cmd_ticks(void) {
 
 static void shell_version(void){
 	vga_puts("System/1 by Adava (AdavaSoftware) (C) 2026\n");
-	vga_puts("All rights reserved.\n");
 }
 
 static void shell_print_fs_error(const char* cmd, int rc) {
