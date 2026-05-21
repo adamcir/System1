@@ -276,6 +276,8 @@ static int iso_find_entry_in_dir(uint32_t dir_lba, uint32_t dir_size, const char
 }
 
 static int iso_resolve_path(const char* path, uint32_t* out_lba, uint32_t* out_size, uint8_t* out_is_dir) {
+    uint8_t current_is_dir = 1u;
+
     if (path == 0 || path[0] == '\0') {
         return FS_ERR_INVALID;
     }
@@ -331,8 +333,9 @@ static int iso_resolve_path(const char* path, uint32_t* out_lba, uint32_t* out_s
 
         current_lba = next_lba;
         current_size = next_size;
+        current_is_dir = ((flags & 0x02u) != 0u) ? 1u : 0u;
         if (out_is_dir) {
-            *out_is_dir = ((flags & 0x02u) != 0u) ? 1u : 0u;
+            *out_is_dir = current_is_dir;
         }
     }
 
@@ -342,8 +345,8 @@ static int iso_resolve_path(const char* path, uint32_t* out_lba, uint32_t* out_s
     if (out_size) {
         *out_size = current_size;
     }
-    if (out_is_dir && current_lba == g_iso_root_lba) {
-        *out_is_dir = 1u;
+    if (out_is_dir) {
+        *out_is_dir = current_is_dir;
     }
 
     return FS_OK;

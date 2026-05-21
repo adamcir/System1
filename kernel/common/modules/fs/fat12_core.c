@@ -360,6 +360,8 @@ static int fat12_find_entry_in_dir(uint32_t dir_cluster, const char* name, uint3
 }
 
 static int fat12_resolve_path(const char* path, uint32_t* out_cluster, uint8_t* out_is_dir) {
+    uint8_t current_is_dir = 1u;
+
     if (path == 0 || path[0] == '\0') {
         return FS_ERR_INVALID;
     }
@@ -411,16 +413,17 @@ static int fat12_resolve_path(const char* path, uint32_t* out_cluster, uint8_t* 
         }
 
         current_cluster = next_cluster;
+        current_is_dir = ((attr & FAT12_ATTR_DIRECTORY) != 0u) ? 1u : 0u;
         if (out_is_dir) {
-            *out_is_dir = ((attr & FAT12_ATTR_DIRECTORY) != 0u) ? 1u : 0u;
+            *out_is_dir = current_is_dir;
         }
     }
 
     if (out_cluster) {
         *out_cluster = current_cluster;
     }
-    if (out_is_dir && current_cluster == 0u) {
-        *out_is_dir = 1u;
+    if (out_is_dir) {
+        *out_is_dir = current_is_dir;
     }
 
     return FS_OK;
