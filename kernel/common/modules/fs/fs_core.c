@@ -951,3 +951,27 @@ int fs_core_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, uint3
 
     return g_root_driver->list_dir(path, entries, cap, out_count);
 }
+
+int fs_core_read_file(const char* path, char* buffer, uint32_t cap, uint32_t* out_size) {
+    char full_path[FS_PATH_CAP];
+    int rc;
+
+    if (path == 0 || buffer == 0 || out_size == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    if (g_media_driver != 0 && g_media_driver->read_file != 0) {
+        rc = fs_normalize_mutation_path(fs_core_get_cwd_path(), path, full_path);
+        if (rc != FS_OK) {
+            return rc;
+        }
+
+        return g_media_driver->read_file(full_path, buffer, cap, out_size);
+    }
+
+    if (g_root_driver != 0 && g_root_driver->read_file != 0) {
+        return g_root_driver->read_file(path, buffer, cap, out_size);
+    }
+
+    return FS_ERR_INVALID;
+}

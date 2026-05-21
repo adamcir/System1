@@ -44,6 +44,54 @@ static int fs_streq(const char* a, const char* b) {
     return (int)(a[i] == '\0' && b[i] == '\0');
 }
 
+static char fs_lower(char c) {
+    if (c >= 'A' && c <= 'Z') {
+        return (char)(c + ('a' - 'A'));
+    }
+
+    return c;
+}
+
+static int fs_name_eq(const char* stored, const char* requested) {
+    uint32_t i = 0u;
+    uint32_t alias_len = 0u;
+
+    while (stored[i] != '\0' && requested[i] != '\0') {
+        if (fs_lower(stored[i]) != fs_lower(requested[i])) {
+            break;
+        }
+        ++i;
+    }
+
+    if (stored[i] == '\0' && requested[i] == '\0') {
+        return 1;
+    }
+
+    while (stored[alias_len] != '\0' && stored[alias_len] != '~') {
+        ++alias_len;
+    }
+
+    if (stored[alias_len] != '~' || alias_len == 0u || requested[alias_len] == '\0') {
+        return 0;
+    }
+
+    i = alias_len + 1u;
+    while (stored[i] != '\0') {
+        if (stored[i] < '0' || stored[i] > '9') {
+            return 0;
+        }
+        ++i;
+    }
+
+    for (i = 0u; i < alias_len; ++i) {
+        if (fs_lower(stored[i]) != fs_lower(requested[i])) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
 static int fs_name_copy(char* dst, const char* src) {
     uint32_t i = 0u;
 
@@ -90,7 +138,7 @@ static fs_node_t* fs_find_child(fs_node_t* dir, const char* name) {
     }
 
     for (i = 0u; i < dir->child_count; ++i) {
-        if (fs_streq(dir->children[i]->name, name) != 0) {
+        if (fs_name_eq(dir->children[i]->name, name) != 0) {
             return dir->children[i];
         }
     }
@@ -526,6 +574,28 @@ int ramfs_core_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, ui
     return FS_OK;
 }
 
+int ramfs_core_read_file(const char* path, char* buffer, uint32_t cap, uint32_t* out_size) {
+    fs_node_t* node = 0;
+    int rc;
+
+    if (path == 0 || buffer == 0 || out_size == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    rc = fs_resolve_path(path, &node);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    if (node->type != FS_NODE_FILE) {
+        return FS_ERR_NOT_DIR;
+    }
+
+    (void)cap;
+    *out_size = 0u;
+    return FS_ERR_INVALID;
+}
+
 static int ramfs_core_driver_init(void) {
     return (g_root == 0) ? FS_ERR_INVALID : FS_OK;
 }
@@ -535,7 +605,8 @@ static const vfs_driver_t g_ramfs_driver = {
     ramfs_core_get_cwd_path,
     ramfs_core_change_dir,
     ramfs_core_make_dir,
-    ramfs_core_list_dir
+    ramfs_core_list_dir,
+    ramfs_core_read_file
 };
 
 const vfs_driver_t* ramfs_core_driver(void) {

@@ -35,5 +35,6 @@ const char* fs_get_cwd_path(void);
 int fs_change_dir(const char* path);
 int fs_make_dir(const char* path);
 int fs_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, uint32_t* out_count);
+int fs_read_file(const char* path, char* buffer, uint32_t cap, uint32_t* out_size);
 
 #endif

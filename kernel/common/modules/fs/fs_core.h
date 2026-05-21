@@ -35,5 +35,6 @@ const char* fs_core_get_cwd_path(void);
 int fs_core_change_dir(const char* path);
 int fs_core_make_dir(const char* path);
 int fs_core_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, uint32_t* out_count);
+int fs_core_read_file(const char* path, char* buffer, uint32_t cap, uint32_t* out_size);
 
 #endif

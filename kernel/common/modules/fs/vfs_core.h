@@ -9,6 +9,7 @@ typedef struct {
     int (*change_dir)(const char* path);
     int (*make_dir)(const char* path);
     int (*list_dir)(const char* path, fs_dirent_t* entries, uint32_t cap, uint32_t* out_count);
+    int (*read_file)(const char* path, char* buffer, uint32_t cap, uint32_t* out_size);
 } vfs_driver_t;
 
 #endif

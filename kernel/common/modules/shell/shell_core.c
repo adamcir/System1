@@ -11,10 +11,11 @@
 #define SHELL_ARGV_MAX 16u
 #define SHELL_HISTORY_CAP 16u
 #define SHELL_LIST_CAP 16u
+#define SHELL_CAT_BUF_CAP 4096u
 
 static const char* g_shell_commands[] = {
     "help", "clear", "echo", "reboot", "shutdown", "ticks",
-    "version", "pwd", "ls", "cd", "mkdir"
+    "version", "pwd", "ls", "cd", "mkdir", "cat"
 };
 
 static char g_shell_history[SHELL_HISTORY_CAP][SHELL_LINE_CAP];
@@ -403,7 +404,7 @@ static void shell_put_u64_hex(uint64_t value) {
 }
 
 static void shell_cmd_help(void) {
-    vga_puts("help clear echo reboot shutdown ticks version pwd ls cd mkdir\n");
+    vga_puts("help clear echo reboot shutdown ticks version pwd ls cd mkdir cat\n");
 }
 
 static void shell_cmd_clear(void) {
@@ -567,6 +568,32 @@ static void shell_cmd_mkdir(char** argv, uint32_t argc) {
     }
 }
 
+static void shell_cmd_cat(char** argv, uint32_t argc) {
+    static char buffer[SHELL_CAT_BUF_CAP];
+    uint32_t size = 0u;
+    uint32_t i;
+    int rc;
+
+    if (argc < 2u) {
+        vga_puts("usage: cat <file>\n");
+        return;
+    }
+
+    rc = fs_read_file(argv[1], buffer, SHELL_CAT_BUF_CAP, &size);
+    if (rc != FS_OK) {
+        shell_print_fs_error("cat", rc);
+        return;
+    }
+
+    for (i = 0u; i < size; ++i) {
+        vga_putc(buffer[i]);
+    }
+
+    if (size == 0u || buffer[size - 1u] != '\n') {
+        vga_putc('\n');
+    }
+}
+
 static void shell_print_prompt(void) {
     vga_puts(fs_get_cwd_path());
     vga_puts(" > ");
@@ -660,6 +687,11 @@ void shell_core_run(void) {
 
         if (shell_streq(argv[0], "mkdir")) {
             shell_cmd_mkdir(argv, argc);
+            continue;
+        }
+
+        if (shell_streq(argv[0], "cat")) {
+            shell_cmd_cat(argv, argc);
             continue;
         }
 

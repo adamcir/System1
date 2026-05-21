@@ -38,15 +38,43 @@ static char iso_lower(char c) {
 }
 
 static int iso_name_eq(const char* a, const char* b) {
-    while (*a != '\0' && *b != '\0') {
-        if (iso_lower(*a) != iso_lower(*b)) {
-            return 0;
+    uint32_t i = 0u;
+    uint32_t alias_len = 0u;
+
+    while (a[i] != '\0' && b[i] != '\0') {
+        if (iso_lower(a[i]) != iso_lower(b[i])) {
+            break;
         }
-        ++a;
-        ++b;
+        ++i;
     }
 
-    return (int)(*a == '\0' && *b == '\0');
+    if (a[i] == '\0' && b[i] == '\0') {
+        return 1;
+    }
+
+    while (a[alias_len] != '\0' && a[alias_len] != '~') {
+        ++alias_len;
+    }
+
+    if (a[alias_len] != '~' || alias_len == 0u || b[alias_len] == '\0') {
+        return 0;
+    }
+
+    i = alias_len + 1u;
+    while (a[i] != '\0') {
+        if (a[i] < '0' || a[i] > '9') {
+            return 0;
+        }
+        ++i;
+    }
+
+    for (i = 0u; i < alias_len; ++i) {
+        if (iso_lower(a[i]) != iso_lower(b[i])) {
+            return 0;
+        }
+    }
+
+    return 1;
 }
 
 static void iso_copy_string(char* dst, uint32_t cap, const char* src) {
@@ -62,39 +90,6 @@ static void iso_copy_string(char* dst, uint32_t cap, const char* src) {
     }
 
     dst[i] = '\0';
-}
-
-static int iso_extract_root_name(const char* path, char* out) {
-    uint32_t pos = 0u;
-    const char* cursor = path;
-
-    if (path == 0 || path[0] == '\0' || iso_streq(path, ".") != 0) {
-        out[0] = '\0';
-        return FS_OK;
-    }
-
-    while (*cursor == '/') {
-        ++cursor;
-    }
-
-    while (*cursor != '\0' && *cursor != '/') {
-        if ((pos + 1u) >= FS_NAME_CAP) {
-            return FS_ERR_INVALID;
-        }
-        out[pos++] = iso_lower(*cursor);
-        ++cursor;
-    }
-
-    while (*cursor == '/') {
-        ++cursor;
-    }
-
-    if (*cursor != '\0') {
-        return FS_ERR_NOT_FOUND;
-    }
-
-    out[pos] = '\0';
-    return FS_OK;
 }
 
 static void iso_clear_names(void) {
@@ -131,48 +126,6 @@ static void iso_copy_name(char* out, const uint8_t* name, uint8_t len) {
     }
 
     out[pos] = '\0';
-}
-
-static int iso_root_dir_exists(const char* name) {
-    uint32_t offset = 0u;
-    char entry_name[FS_NAME_CAP];
-    int rc;
-
-    rc = iso_read_2048(g_iso_dev, g_iso_root_lba, g_iso_sector);
-    if (rc != FS_OK) {
-        return rc;
-    }
-
-    while (offset < g_iso_root_size && offset < ISO9660_SECTOR_SIZE) {
-        uint8_t len = g_iso_sector[offset];
-        uint8_t flags;
-        uint8_t name_len;
-        const uint8_t* record;
-
-        if (len == 0u) {
-            break;
-        }
-
-        record = g_iso_sector + offset;
-        flags = record[25u];
-        name_len = record[32u];
-
-        if (name_len == 1u && (record[33u] == 0u || record[33u] == 1u)) {
-            offset += len;
-            continue;
-        }
-
-        if ((flags & 0x02u) != 0u) {
-            iso_copy_name(entry_name, record + 33u, name_len);
-            if (iso_name_eq(entry_name, name) != 0) {
-                return FS_OK;
-            }
-        }
-
-        offset += len;
-    }
-
-    return FS_ERR_NOT_FOUND;
 }
 
 int iso9660_core_mount(block_device_t* dev) {
@@ -452,6 +405,55 @@ static int iso_make_dir(const char* path) {
     return FS_ERR_READ_ONLY;
 }
 
+static int iso_read_file(const char* path, char* buffer, uint32_t cap, uint32_t* out_size) {
+    uint32_t target_lba = 0u;
+    uint32_t target_size = 0u;
+    uint8_t is_dir = 0u;
+    uint32_t remaining;
+    uint32_t copied = 0u;
+    uint32_t sector_idx = 0u;
+    int rc;
+
+    if (buffer == 0 || out_size == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    rc = iso_resolve_path(path, &target_lba, &target_size, &is_dir);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    if (is_dir != 0u) {
+        return FS_ERR_NOT_DIR;
+    }
+
+    *out_size = target_size;
+    if (cap < target_size) {
+        return FS_ERR_NO_SPACE;
+    }
+
+    remaining = target_size;
+    while (remaining > 0u) {
+        uint32_t chunk = (remaining > ISO9660_SECTOR_SIZE) ? ISO9660_SECTOR_SIZE : remaining;
+        uint32_t i;
+
+        rc = iso_read_2048(g_iso_dev, target_lba + sector_idx, g_iso_sector);
+        if (rc != FS_OK) {
+            return rc;
+        }
+
+        for (i = 0u; i < chunk; ++i) {
+            buffer[copied + i] = (char)g_iso_sector[i];
+        }
+
+        copied += chunk;
+        remaining -= chunk;
+        ++sector_idx;
+    }
+
+    return FS_OK;
+}
+
 static int iso_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, uint32_t* out_count) {
     uint32_t count = 0u;
     int rc;
@@ -522,7 +524,8 @@ static const vfs_driver_t g_iso_driver = {
     iso_get_cwd_path,
     iso_change_dir,
     iso_make_dir,
-    iso_list_dir
+    iso_list_dir,
+    iso_read_file
 };
 
 const vfs_driver_t* iso9660_core_driver(void) {

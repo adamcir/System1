@@ -67,16 +67,50 @@ static char fat12_lower(char c) {
     return c;
 }
 
-static int fat12_name_eq(const char* a, const char* b) {
-    while (*a != '\0' && *b != '\0') {
-        if (fat12_lower(*a) != fat12_lower(*b)) {
-            return 0;
-        }
-        ++a;
-        ++b;
+static int fat12_short_alias_eq(const char* stored, const char* requested) {
+    uint32_t alias_len = 0u;
+    uint32_t i;
+
+    while (stored[alias_len] != '\0' && stored[alias_len] != '~') {
+        ++alias_len;
     }
 
-    return (int)(*a == '\0' && *b == '\0');
+    if (stored[alias_len] != '~' || alias_len == 0u || requested[alias_len] == '\0') {
+        return 0;
+    }
+
+    i = alias_len + 1u;
+    while (stored[i] != '\0') {
+        if (stored[i] < '0' || stored[i] > '9') {
+            return 0;
+        }
+        ++i;
+    }
+
+    for (i = 0u; i < alias_len; ++i) {
+        if (fat12_lower(stored[i]) != fat12_lower(requested[i])) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+static int fat12_name_eq(const char* a, const char* b) {
+    uint32_t i = 0u;
+
+    while (a[i] != '\0' && b[i] != '\0') {
+        if (fat12_lower(a[i]) != fat12_lower(b[i])) {
+            break;
+        }
+        ++i;
+    }
+
+    if (a[i] == '\0' && b[i] == '\0') {
+        return 1;
+    }
+
+    return fat12_short_alias_eq(a, b);
 }
 
 static void fat12_copy_string(char* dst, uint32_t cap, const char* src) {
@@ -92,39 +126,6 @@ static void fat12_copy_string(char* dst, uint32_t cap, const char* src) {
     }
 
     dst[i] = '\0';
-}
-
-static int fat12_extract_root_name(const char* path, char* out) {
-    uint32_t pos = 0u;
-    const char* cursor = path;
-
-    if (path == 0 || path[0] == '\0' || fat12_streq(path, ".") != 0) {
-        out[0] = '\0';
-        return FS_OK;
-    }
-
-    while (*cursor == '/') {
-        ++cursor;
-    }
-
-    while (*cursor != '\0' && *cursor != '/') {
-        if ((pos + 1u) >= FS_NAME_CAP) {
-            return FS_ERR_INVALID;
-        }
-        out[pos++] = fat12_lower(*cursor);
-        ++cursor;
-    }
-
-    while (*cursor == '/') {
-        ++cursor;
-    }
-
-    if (*cursor != '\0') {
-        return FS_ERR_NOT_FOUND;
-    }
-
-    out[pos] = '\0';
-    return FS_OK;
 }
 
 static void fat12_copy_83_name(char* out, const uint8_t* entry) {
@@ -153,43 +154,6 @@ static void fat12_copy_83_name(char* out, const uint8_t* entry) {
     }
 
     out[pos] = '\0';
-}
-
-static int fat12_root_dir_exists(const char* name) {
-    uint32_t sector_index;
-    uint32_t entry_index;
-    char entry_name[FS_NAME_CAP];
-    int rc;
-
-    for (sector_index = 0u; sector_index < g_fat12.root_dir_sectors; ++sector_index) {
-        rc = block_core_read(g_fat12_dev, g_fat12.root_dir_lba + sector_index, 1u, g_fat12_sector);
-        if (rc != FS_OK) {
-            return rc;
-        }
-
-        for (entry_index = 0u; entry_index < 16u; ++entry_index) {
-            const uint8_t* entry = g_fat12_sector + (entry_index * 32u);
-            uint8_t first = entry[0];
-            uint8_t attr = entry[11];
-
-            if (first == FAT12_ENTRY_FREE) {
-                return FS_ERR_NOT_FOUND;
-            }
-
-            if (first == FAT12_ENTRY_DELETED ||
-                (attr & FAT12_ATTR_VOLUME_ID) != 0u ||
-                (attr & FAT12_ATTR_DIRECTORY) == 0u) {
-                continue;
-            }
-
-            fat12_copy_83_name(entry_name, entry);
-            if (fat12_name_eq(entry_name, name) != 0) {
-                return FS_OK;
-            }
-        }
-    }
-
-    return FS_ERR_NOT_FOUND;
 }
 
 static int fat12_parse_bpb(const uint8_t* sector, fat12_bpb_t* out) {
@@ -755,7 +719,7 @@ static uint32_t fat12_get_next_cluster(uint32_t cluster) {
     return val;
 }
 
-static int fat12_find_entry_in_dir(uint32_t dir_cluster, const char* name, uint32_t* out_cluster, uint8_t* out_attr) {
+static int fat12_find_entry_in_dir(uint32_t dir_cluster, const char* name, uint32_t* out_cluster, uint8_t* out_attr, uint32_t* out_size) {
     uint32_t current_cluster = dir_cluster;
     char entry_name[FS_NAME_CAP];
     int rc;
@@ -788,6 +752,7 @@ static int fat12_find_entry_in_dir(uint32_t dir_cluster, const char* name, uint3
                     uint16_t start_clust = fat12_le16(entry + 26u);
                     if (out_cluster) *out_cluster = start_clust;
                     if (out_attr) *out_attr = attr;
+                    if (out_size) *out_size = fat12_le32(entry + 28u);
                     return FS_OK;
                 }
             }
@@ -823,6 +788,7 @@ static int fat12_find_entry_in_dir(uint32_t dir_cluster, const char* name, uint3
                         uint16_t start_clust = fat12_le16(entry + 26u);
                         if (out_cluster) *out_cluster = start_clust;
                         if (out_attr) *out_attr = attr;
+                        if (out_size) *out_size = fat12_le32(entry + 28u);
                         return FS_OK;
                     }
                 }
@@ -833,8 +799,9 @@ static int fat12_find_entry_in_dir(uint32_t dir_cluster, const char* name, uint3
     }
 }
 
-static int fat12_resolve_path(const char* path, uint32_t* out_cluster, uint8_t* out_is_dir) {
+static int fat12_resolve_path_info(const char* path, uint32_t* out_cluster, uint8_t* out_is_dir, uint32_t* out_size) {
     uint8_t current_is_dir = 1u;
+    uint32_t current_size = 0u;
 
     if (path == 0 || path[0] == '\0') {
         return FS_ERR_INVALID;
@@ -874,8 +841,9 @@ static int fat12_resolve_path(const char* path, uint32_t* out_cluster, uint8_t* 
         }
 
         uint32_t next_cluster = 0u;
+        uint32_t next_size = 0u;
         uint8_t attr = 0u;
-        int rc = fat12_find_entry_in_dir(current_cluster, component, &next_cluster, &attr);
+        int rc = fat12_find_entry_in_dir(current_cluster, component, &next_cluster, &attr, &next_size);
         if (rc != FS_OK) {
             return rc;
         }
@@ -887,6 +855,7 @@ static int fat12_resolve_path(const char* path, uint32_t* out_cluster, uint8_t* 
         }
 
         current_cluster = next_cluster;
+        current_size = next_size;
         current_is_dir = ((attr & FAT12_ATTR_DIRECTORY) != 0u) ? 1u : 0u;
         if (out_is_dir) {
             *out_is_dir = current_is_dir;
@@ -899,8 +868,15 @@ static int fat12_resolve_path(const char* path, uint32_t* out_cluster, uint8_t* 
     if (out_is_dir) {
         *out_is_dir = current_is_dir;
     }
+    if (out_size) {
+        *out_size = current_size;
+    }
 
     return FS_OK;
+}
+
+static int fat12_resolve_path(const char* path, uint32_t* out_cluster, uint8_t* out_is_dir) {
+    return fat12_resolve_path_info(path, out_cluster, out_is_dir, 0);
 }
 
 static void fat12_normalize_path(char* dst, const char* path) {
@@ -999,6 +975,67 @@ static int fat12_change_dir(const char* path) {
 static int fat12_make_dir(const char* path) {
     (void)path;
     return FS_ERR_READ_ONLY;
+}
+
+static int fat12_read_file(const char* path, char* buffer, uint32_t cap, uint32_t* out_size) {
+    uint32_t cluster = 0u;
+    uint32_t size = 0u;
+    uint32_t copied = 0u;
+    uint8_t is_dir = 0u;
+    int rc;
+
+    if (buffer == 0 || out_size == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    rc = fat12_resolve_path_info(path, &cluster, &is_dir, &size);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    if (is_dir != 0u) {
+        return FS_ERR_NOT_DIR;
+    }
+
+    *out_size = size;
+    if (cap < size) {
+        return FS_ERR_NO_SPACE;
+    }
+
+    while (copied < size) {
+        uint32_t sector_idx;
+        uint32_t base_lba;
+
+        if (cluster < 2u || cluster >= 0xFF8u) {
+            return FS_ERR_INVALID;
+        }
+
+        base_lba = fat12_cluster_to_lba(cluster);
+        for (sector_idx = 0u; sector_idx < g_fat12.sectors_per_cluster && copied < size; ++sector_idx) {
+            uint32_t chunk = size - copied;
+            uint32_t i;
+
+            if (chunk > 512u) {
+                chunk = 512u;
+            }
+
+            rc = block_core_read(g_fat12_dev, base_lba + sector_idx, 1u, g_fat12_sector);
+            if (rc != FS_OK) {
+                return rc;
+            }
+
+            for (i = 0u; i < chunk; ++i) {
+                buffer[copied + i] = (char)g_fat12_sector[i];
+            }
+            copied += chunk;
+        }
+
+        if (copied < size) {
+            cluster = fat12_get_next_cluster(cluster);
+        }
+    }
+
+    return FS_OK;
 }
 
 static int fat12_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, uint32_t* out_count) {
@@ -1109,7 +1146,8 @@ static const vfs_driver_t g_fat12_driver = {
     fat12_get_cwd_path,
     fat12_change_dir,
     fat12_make_dir,
-    fat12_list_dir
+    fat12_list_dir,
+    fat12_read_file
 };
 
 const vfs_driver_t* fat12_core_driver(void) {

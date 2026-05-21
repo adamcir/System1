@@ -32,3 +32,7 @@ int fs_make_dir(const char* path) {
 int fs_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, uint32_t* out_count) {
     return fs_core_list_dir(path, entries, cap, out_count);
 }
+
+int fs_read_file(const char* path, char* buffer, uint32_t cap, uint32_t* out_size) {
+    return fs_core_read_file(path, buffer, cap, out_size);
+}
