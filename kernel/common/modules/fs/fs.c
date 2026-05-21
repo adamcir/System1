@@ -9,6 +9,14 @@ void fs_set_boot_context(uint32_t boot_magic, uint32_t boot_info_ptr) {
     fs_core_set_boot_context(boot_magic, boot_info_ptr);
 }
 
+uint8_t fs_has_pending_changes(void) {
+    return fs_core_has_pending_changes();
+}
+
+int fs_shutdown(uint8_t write_changes) {
+    return fs_core_shutdown(write_changes);
+}
+
 const char* fs_get_cwd_path(void) {
     return fs_core_get_cwd_path();
 }

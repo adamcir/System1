@@ -23,6 +23,8 @@ static uint32_t g_shell_history_head;
 static int g_shell_history_nav = -1;
 static char g_shell_history_draft[SHELL_LINE_CAP];
 
+static void shell_print_fs_error(const char* cmd, int rc);
+
 static int shell_streq(const char* a, const char* b) {
     while (*a && *b) {
         if (*a != *b) {
@@ -421,12 +423,36 @@ static void shell_cmd_echo(char** argv, uint32_t argc) {
     vga_putc('\n');
 }
 
+static void shell_flush_pending_changes(void) {
+    uint8_t write_changes = 0u;
+    int rc;
+
+    if (fs_has_pending_changes() != 0u) {
+        char answer[8];
+
+        vga_puts("Write changes to boot media? [Y/n] ");
+        tty_readline(answer, 8u);
+        if (answer[0] == '\0' || answer[0] == 'y' || answer[0] == 'Y') {
+            write_changes = 1u;
+        }
+    }
+
+    rc = fs_shutdown(write_changes);
+    if (rc != FS_OK) {
+        shell_print_fs_error("shutdown", rc);
+    } else if (write_changes != 0u) {
+        vga_puts("Changes written.\n");
+    }
+}
+
 static void shell_cmd_reboot(void) {
+    shell_flush_pending_changes();
     vga_puts("Rebooting...\n");
     signal_raise(HW_RESET);
 }
 
 static void shell_cmd_shutdown(void) {
+    shell_flush_pending_changes();
     vga_puts("Shutting down...\n");
     signal_raise(HW_PWR_DOWN);
 }

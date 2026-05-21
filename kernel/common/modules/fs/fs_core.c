@@ -2,9 +2,11 @@
 #include "block_core.h"
 #include "fat12_core.h"
 #include "iso9660_core.h"
+#include "ramfs_core.h"
 #include "vfs_core.h"
 
 static const vfs_driver_t* g_root_driver = 0;
+static const vfs_driver_t* g_media_driver = 0;
 static uint32_t g_boot_magic = 0u;
 static uint32_t g_boot_info_ptr = 0u;
 
@@ -12,6 +14,14 @@ static uint32_t g_boot_info_ptr = 0u;
 #define FS_MB2_BOOTLOADER_MAGIC 0x36D76289u
 #define FS_MB2_TAG_TYPE_END 0u
 #define FS_MB2_TAG_TYPE_MODULE 3u
+#define FS_IMPORT_ENTRY_CAP 32u
+#define FS_DIRTY_DIR_CAP 16u
+
+typedef enum {
+    FS_MEDIA_NONE = 0,
+    FS_MEDIA_FAT12 = 1,
+    FS_MEDIA_ISO9660 = 2
+} fs_media_kind_t;
 
 typedef struct {
     uint32_t boot_drive;
@@ -44,6 +54,23 @@ static fs_floppy_boot_info_t* g_boot_floppy_info = 0;
 static block_device_t g_mb2_module_device;
 static uint32_t g_mb2_module_start = 0u;
 static uint32_t g_mb2_module_size = 0u;
+static fs_media_kind_t g_media_kind = FS_MEDIA_NONE;
+static char g_dirty_dirs[FS_DIRTY_DIR_CAP][FS_PATH_CAP];
+static uint32_t g_dirty_dir_count = 0u;
+
+static uint8_t fs_inb(uint16_t port) {
+    uint8_t value;
+    __asm__ volatile ("inb %1, %0" : "=a"(value) : "Nd"(port));
+    return value;
+}
+
+static void fs_outb(uint16_t port, uint8_t value) {
+    __asm__ volatile ("outb %0, %1" : : "a"(value), "Nd"(port));
+}
+
+static void fs_io_delay(void) {
+    __asm__ volatile ("outb %%al, $0x80" : : "a"(0));
+}
 
 static void fs_copy_bytes(uint8_t* dst, const uint8_t* src, uint32_t len) {
     uint32_t i;
@@ -91,6 +118,277 @@ static int fs_cached_floppy_read(block_device_t* dev, uint32_t lba, uint32_t cou
         return FS_ERR_NOT_FOUND;
     }
 
+    return FS_OK;
+}
+
+#define FDC_DOR 0x3F2u
+#define FDC_MSR 0x3F4u
+#define FDC_FIFO 0x3F5u
+#define FDC_CCR 0x3F7u
+#define FDC_SECTORS_PER_TRACK 18u
+#define FDC_HEADS 2u
+
+static int fs_fdc_wait_send(void) {
+    uint32_t i;
+
+    for (i = 0u; i < 1000000u; ++i) {
+        uint8_t msr = fs_inb(FDC_MSR);
+        if ((msr & 0x80u) != 0u && (msr & 0x40u) == 0u) {
+            return FS_OK;
+        }
+    }
+
+    return FS_ERR_READ_ONLY;
+}
+
+static int fs_fdc_wait_recv(void) {
+    uint32_t i;
+
+    for (i = 0u; i < 1000000u; ++i) {
+        uint8_t msr = fs_inb(FDC_MSR);
+        if ((msr & 0x80u) != 0u && (msr & 0x40u) != 0u) {
+            return FS_OK;
+        }
+    }
+
+    return FS_ERR_READ_ONLY;
+}
+
+static int fs_fdc_send(uint8_t value) {
+    int rc = fs_fdc_wait_send();
+    if (rc != FS_OK) {
+        return rc;
+    }
+    fs_outb(FDC_FIFO, value);
+    return FS_OK;
+}
+
+static int fs_fdc_recv(uint8_t* value) {
+    int rc;
+
+    if (value == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    rc = fs_fdc_wait_recv();
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    *value = fs_inb(FDC_FIFO);
+    return FS_OK;
+}
+
+static int fs_fdc_sense_interrupt(uint8_t* st0, uint8_t* cyl) {
+    int rc;
+
+    rc = fs_fdc_send(0x08u);
+    if (rc != FS_OK) {
+        return rc;
+    }
+    rc = fs_fdc_recv(st0);
+    if (rc != FS_OK) {
+        return rc;
+    }
+    return fs_fdc_recv(cyl);
+}
+
+static int fs_fdc_reset(void) {
+    uint32_t i;
+    uint8_t st0 = 0u;
+    uint8_t cyl = 0u;
+    int rc;
+
+    fs_outb(FDC_DOR, 0x00u);
+    for (i = 0u; i < 10000u; ++i) {
+        fs_io_delay();
+    }
+    fs_outb(FDC_DOR, 0x1Cu);
+    fs_outb(FDC_CCR, 0x00u);
+    for (i = 0u; i < 10000u; ++i) {
+        fs_io_delay();
+    }
+
+    for (i = 0u; i < 4u; ++i) {
+        (void)fs_fdc_sense_interrupt(&st0, &cyl);
+    }
+
+    rc = fs_fdc_send(0x03u);
+    if (rc != FS_OK) {
+        return rc;
+    }
+    rc = fs_fdc_send(0xDFu);
+    if (rc != FS_OK) {
+        return rc;
+    }
+    return fs_fdc_send(0x02u);
+}
+
+static int fs_fdc_recalibrate(void) {
+    uint32_t i;
+    int rc;
+    uint8_t st0 = 0u;
+    uint8_t cyl = 0u;
+
+    rc = fs_fdc_send(0x07u);
+    if (rc != FS_OK) {
+        return rc;
+    }
+    rc = fs_fdc_send(0x00u);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    for (i = 0u; i < 100000u; ++i) {
+        rc = fs_fdc_sense_interrupt(&st0, &cyl);
+        if (rc == FS_OK && (st0 & 0x20u) != 0u) {
+            return (cyl == 0u) ? FS_OK : FS_ERR_READ_ONLY;
+        }
+    }
+
+    return FS_ERR_READ_ONLY;
+}
+
+static int fs_fdc_seek(uint8_t cylinder, uint8_t head) {
+    uint32_t i;
+    int rc;
+    uint8_t st0 = 0u;
+    uint8_t cyl = 0u;
+
+    rc = fs_fdc_send(0x0Fu);
+    if (rc != FS_OK) {
+        return rc;
+    }
+    rc = fs_fdc_send((uint8_t)((head << 2) | 0u));
+    if (rc != FS_OK) {
+        return rc;
+    }
+    rc = fs_fdc_send(cylinder);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    for (i = 0u; i < 100000u; ++i) {
+        rc = fs_fdc_sense_interrupt(&st0, &cyl);
+        if (rc == FS_OK && (st0 & 0x20u) != 0u) {
+            return (cyl == cylinder) ? FS_OK : FS_ERR_READ_ONLY;
+        }
+    }
+
+    return FS_ERR_READ_ONLY;
+}
+
+static void fs_dma2_setup_write(uint32_t addr, uint16_t count) {
+    fs_outb(0x0Au, 0x06u);
+    fs_outb(0x0Cu, 0xFFu);
+    fs_outb(0x04u, (uint8_t)(addr & 0xFFu));
+    fs_outb(0x04u, (uint8_t)((addr >> 8) & 0xFFu));
+    fs_outb(0x81u, (uint8_t)((addr >> 16) & 0xFFu));
+    fs_outb(0x0Cu, 0xFFu);
+    fs_outb(0x05u, (uint8_t)(count & 0xFFu));
+    fs_outb(0x05u, (uint8_t)((count >> 8) & 0xFFu));
+    fs_outb(0x0Bu, 0x4Au);
+    fs_outb(0x0Au, 0x02u);
+}
+
+static int fs_fdc_write_sector(uint8_t* image, uint32_t lba) {
+    uint32_t track_size = FDC_SECTORS_PER_TRACK * FDC_HEADS;
+    uint8_t cylinder = (uint8_t)(lba / track_size);
+    uint8_t temp = (uint8_t)(lba % track_size);
+    uint8_t head = (uint8_t)(temp / FDC_SECTORS_PER_TRACK);
+    uint8_t sector = (uint8_t)((temp % FDC_SECTORS_PER_TRACK) + 1u);
+    uint32_t addr = (uint32_t)(uintptr_t)(image + lba * 512u);
+    uint8_t result[7];
+    uint32_t i;
+    int rc;
+
+    if (((addr & 0xFFFFu) + 511u) > 0xFFFFu) {
+        return FS_ERR_INVALID;
+    }
+
+    rc = fs_fdc_seek(cylinder, head);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    fs_dma2_setup_write(addr, 511u);
+
+    rc = fs_fdc_send(0x45u);
+    if (rc != FS_OK) {
+        return rc;
+    }
+    rc = fs_fdc_send((uint8_t)((head << 2) | 0u));
+    if (rc != FS_OK) {
+        return rc;
+    }
+    rc = fs_fdc_send(cylinder);
+    if (rc != FS_OK) {
+        return rc;
+    }
+    rc = fs_fdc_send(head);
+    if (rc != FS_OK) {
+        return rc;
+    }
+    rc = fs_fdc_send(sector);
+    if (rc != FS_OK) {
+        return rc;
+    }
+    rc = fs_fdc_send(0x02u);
+    if (rc != FS_OK) {
+        return rc;
+    }
+    rc = fs_fdc_send(FDC_SECTORS_PER_TRACK);
+    if (rc != FS_OK) {
+        return rc;
+    }
+    rc = fs_fdc_send(0x1Bu);
+    if (rc != FS_OK) {
+        return rc;
+    }
+    rc = fs_fdc_send(0xFFu);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    for (i = 0u; i < 7u; ++i) {
+        rc = fs_fdc_recv(&result[i]);
+        if (rc != FS_OK) {
+            return rc;
+        }
+    }
+
+    if ((result[0] & 0xC0u) != 0u || result[1] != 0u || result[2] != 0u) {
+        return FS_ERR_READ_ONLY;
+    }
+
+    return FS_OK;
+}
+
+static int fs_fdc_write_image(uint8_t* image, uint32_t sector_count) {
+    uint32_t lba;
+    int rc;
+
+    if (image == 0 || sector_count == 0u) {
+        return FS_ERR_INVALID;
+    }
+
+    rc = fs_fdc_reset();
+    if (rc != FS_OK) {
+        return rc;
+    }
+    rc = fs_fdc_recalibrate();
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    for (lba = 0u; lba < sector_count; ++lba) {
+        rc = fs_fdc_write_sector(image, lba);
+        if (rc != FS_OK) {
+            return rc;
+        }
+    }
+
+    fs_outb(FDC_DOR, 0x0Cu);
     return FS_OK;
 }
 
@@ -206,17 +504,315 @@ static int fs_probe_block_root(block_device_t* dev) {
         return FS_ERR_INVALID;
     }
 
+    g_media_kind = FS_MEDIA_NONE;
     rc = fat12_core_mount(dev);
     if (rc == FS_OK) {
+        g_media_kind = FS_MEDIA_FAT12;
         return fs_mount_driver(fat12_core_driver());
     }
 
     rc = iso9660_core_mount(dev);
     if (rc == FS_OK) {
+        g_media_kind = FS_MEDIA_ISO9660;
         return fs_mount_driver(iso9660_core_driver());
     }
 
     return FS_ERR_INVALID;
+}
+
+static int fs_path_join(char* out, uint32_t cap, const char* dir, const char* name) {
+    uint32_t pos = 0u;
+    uint32_t i = 0u;
+
+    if (out == 0 || cap == 0u || dir == 0 || name == 0 || name[0] == '\0') {
+        return FS_ERR_INVALID;
+    }
+
+    if (dir[0] != '/') {
+        return FS_ERR_INVALID;
+    }
+
+    while (dir[i] != '\0') {
+        if (pos + 1u >= cap) {
+            return FS_ERR_INVALID;
+        }
+        out[pos++] = dir[i++];
+    }
+
+    if (pos > 1u && out[pos - 1u] == '/') {
+        --pos;
+    }
+
+    if (pos + 1u >= cap) {
+        return FS_ERR_INVALID;
+    }
+    out[pos++] = '/';
+
+    i = 0u;
+    while (name[i] != '\0') {
+        if (pos + 1u >= cap) {
+            return FS_ERR_INVALID;
+        }
+        out[pos++] = name[i++];
+    }
+
+    out[pos] = '\0';
+    return FS_OK;
+}
+
+static void fs_copy_name(char* dst, uint32_t cap, const char* src) {
+    uint32_t i = 0u;
+
+    if (dst == 0 || cap == 0u) {
+        return;
+    }
+
+    if (src == 0) {
+        dst[0] = '\0';
+        return;
+    }
+
+    while (src[i] != '\0' && (i + 1u) < cap) {
+        dst[i] = src[i];
+        ++i;
+    }
+
+    dst[i] = '\0';
+}
+
+static int fs_streq_local(const char* a, const char* b) {
+    uint32_t i = 0u;
+
+    if (a == 0 || b == 0) {
+        return 0;
+    }
+
+    while (a[i] != '\0' && b[i] != '\0') {
+        if (a[i] != b[i]) {
+            return 0;
+        }
+        ++i;
+    }
+
+    return (int)(a[i] == '\0' && b[i] == '\0');
+}
+
+static int fs_normalize_mutation_path(const char* cwd, const char* path, char* out) {
+    char temp[FS_PATH_CAP];
+    uint32_t len = 0u;
+    const char* cursor;
+
+    if (path == 0 || path[0] == '\0' || out == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    if (path[0] == '/') {
+        temp[0] = '\0';
+        cursor = path;
+        while (*cursor == '/') {
+            ++cursor;
+        }
+    } else {
+        fs_copy_name(temp, FS_PATH_CAP, (cwd == 0 || cwd[0] == '\0') ? "/" : cwd);
+        cursor = path;
+    }
+
+    while (temp[len] != '\0') {
+        ++len;
+    }
+
+    while (*cursor != '\0') {
+        char comp[FS_NAME_CAP];
+        uint32_t comp_len = 0u;
+
+        while (*cursor != '\0' && *cursor != '/') {
+            if (comp_len + 1u >= FS_NAME_CAP) {
+                return FS_ERR_INVALID;
+            }
+            comp[comp_len++] = *cursor++;
+        }
+        comp[comp_len] = '\0';
+        while (*cursor == '/') {
+            ++cursor;
+        }
+
+        if (comp_len == 0u || fs_streq_local(comp, ".") != 0) {
+            continue;
+        }
+
+        if (fs_streq_local(comp, "..") != 0) {
+            while (len > 1u && temp[len - 1u] != '/') {
+                --len;
+            }
+            if (len > 1u) {
+                --len;
+            }
+            temp[len] = '\0';
+            continue;
+        }
+
+        if (len == 0u) {
+            if (len + 1u >= FS_PATH_CAP) {
+                return FS_ERR_INVALID;
+            }
+            temp[len++] = '/';
+        } else if (len == 1u && temp[0] == '/') {
+        } else {
+            if (len + 1u >= FS_PATH_CAP) {
+                return FS_ERR_INVALID;
+            }
+            temp[len++] = '/';
+        }
+
+        for (uint32_t i = 0u; i < comp_len; ++i) {
+            if (len + 1u >= FS_PATH_CAP) {
+                return FS_ERR_INVALID;
+            }
+            temp[len++] = comp[i];
+        }
+        temp[len] = '\0';
+    }
+
+    if (temp[0] == '\0') {
+        out[0] = '/';
+        out[1] = '\0';
+    } else {
+        fs_copy_name(out, FS_PATH_CAP, temp);
+    }
+
+    return FS_OK;
+}
+
+static void fs_dirty_dirs_clear(void) {
+    uint32_t i;
+
+    for (i = 0u; i < FS_DIRTY_DIR_CAP; ++i) {
+        g_dirty_dirs[i][0] = '\0';
+    }
+    g_dirty_dir_count = 0u;
+}
+
+static int fs_record_dirty_dir(const char* path) {
+    uint32_t i;
+
+    if (path == 0 || path[0] == '\0') {
+        return FS_ERR_INVALID;
+    }
+
+    for (i = 0u; i < g_dirty_dir_count; ++i) {
+        if (fs_streq_local(g_dirty_dirs[i], path) != 0) {
+            return FS_OK;
+        }
+    }
+
+    if (g_dirty_dir_count >= FS_DIRTY_DIR_CAP) {
+        return FS_ERR_NO_SPACE;
+    }
+
+    fs_copy_name(g_dirty_dirs[g_dirty_dir_count], FS_PATH_CAP, path);
+    ++g_dirty_dir_count;
+    return FS_OK;
+}
+
+static int fs_is_special_dir_entry(const char* name) {
+    if (name == 0) {
+        return 0;
+    }
+
+    if (name[0] == '.' && name[1] == '\0') {
+        return 1;
+    }
+
+    if (name[0] == '.' && name[1] == '.' && name[2] == '\0') {
+        return 1;
+    }
+
+    return 0;
+}
+
+static int fs_import_media_dir(const char* path) {
+    fs_dirent_t entries[FS_IMPORT_ENTRY_CAP];
+    char entry_names[FS_IMPORT_ENTRY_CAP][FS_NAME_CAP];
+    uint8_t entry_types[FS_IMPORT_ENTRY_CAP];
+    uint32_t count = 0u;
+    uint32_t i;
+    int rc;
+
+    if (g_media_driver == 0 || g_media_driver->list_dir == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    rc = g_media_driver->list_dir(path, entries, FS_IMPORT_ENTRY_CAP, &count);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    for (i = 0u; i < count; ++i) {
+        fs_copy_name(entry_names[i], FS_NAME_CAP, entries[i].name);
+        entry_types[i] = entries[i].type;
+    }
+
+    for (i = 0u; i < count; ++i) {
+        char child_path[FS_PATH_CAP];
+
+        if (fs_is_special_dir_entry(entry_names[i]) != 0) {
+            continue;
+        }
+
+        rc = fs_path_join(child_path, FS_PATH_CAP, path, entry_names[i]);
+        if (rc != FS_OK) {
+            return rc;
+        }
+
+        if (entry_types[i] == FS_NODE_DIR) {
+            rc = ramfs_core_import_dir(child_path);
+            if (rc != FS_OK) {
+                return rc;
+            }
+
+            rc = fs_import_media_dir(child_path);
+            if (rc != FS_OK) {
+                return rc;
+            }
+            continue;
+        }
+
+        if (entry_types[i] == FS_NODE_FILE) {
+            rc = ramfs_core_import_file(child_path);
+            if (rc != FS_OK) {
+                return rc;
+            }
+            continue;
+        }
+
+        return FS_ERR_INVALID;
+    }
+
+    return FS_OK;
+}
+
+static int fs_switch_root_to_ramfs(void) {
+    int rc;
+
+    if (g_root_driver == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    g_media_driver = g_root_driver;
+
+    rc = ramfs_core_reset_empty();
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    rc = fs_import_media_dir("/");
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    ramfs_core_clear_dirty();
+    g_root_driver = ramfs_core_driver();
+    return FS_OK;
 }
 
 int fs_core_init(void) {
@@ -224,11 +820,14 @@ int fs_core_init(void) {
     block_device_t* root_device;
 
     g_root_driver = 0;
+    g_media_driver = 0;
+    g_media_kind = FS_MEDIA_NONE;
+    fs_dirty_dirs_clear();
     fs_install_bootmedia_device();
     root_device = block_core_get_root_device();
     rc = fs_probe_block_root(root_device);
     if (rc == FS_OK) {
-        return FS_OK;
+        return fs_switch_root_to_ramfs();
     }
 
     return FS_ERR_NOT_FOUND;
@@ -239,6 +838,64 @@ void fs_core_set_boot_context(uint32_t boot_magic, uint32_t boot_info_ptr) {
     g_boot_info_ptr = boot_info_ptr;
     (void)g_boot_magic;
     (void)g_boot_info_ptr;
+}
+
+uint8_t fs_core_has_pending_changes(void) {
+    return ramfs_core_is_dirty();
+}
+
+static int fs_core_flush_to_boot_media(void) {
+    uint32_t i;
+    uint8_t* image;
+
+    if (g_media_kind == FS_MEDIA_ISO9660) {
+        return FS_ERR_READ_ONLY;
+    }
+
+    if (g_media_kind == FS_MEDIA_FAT12) {
+        if (g_boot_floppy_info == 0 || g_boot_floppy_info->floppy_image_addr == 0u) {
+            return FS_ERR_READ_ONLY;
+        }
+
+        image = (uint8_t*)(uintptr_t)g_boot_floppy_info->floppy_image_addr;
+        for (i = 0u; i < g_dirty_dir_count; ++i) {
+            int rc = fat12_core_create_dir_in_image(image, 2880u * 512u, g_dirty_dirs[i]);
+            if (rc != FS_OK) {
+                return rc;
+            }
+        }
+
+        {
+            int rc = fs_fdc_write_image(image, 2880u);
+            if (rc != FS_OK) {
+                return rc;
+            }
+        }
+
+        fs_dirty_dirs_clear();
+        return FS_OK;
+    }
+
+    return FS_ERR_INVALID;
+}
+
+int fs_core_shutdown(uint8_t write_changes) {
+    int rc;
+
+    if (ramfs_core_is_dirty() == 0u) {
+        return FS_OK;
+    }
+
+    if (write_changes == 0u) {
+        return FS_OK;
+    }
+
+    rc = fs_core_flush_to_boot_media();
+    if (rc == FS_OK) {
+        ramfs_core_clear_dirty();
+    }
+
+    return rc;
 }
 
 const char* fs_core_get_cwd_path(void) {
@@ -258,11 +915,33 @@ int fs_core_change_dir(const char* path) {
 }
 
 int fs_core_make_dir(const char* path) {
+    char full_path[FS_PATH_CAP];
+    const char* cwd;
+    int rc;
+
     if (g_root_driver == 0 || g_root_driver->make_dir == 0) {
         return FS_ERR_READ_ONLY;
     }
 
-    return g_root_driver->make_dir(path);
+    cwd = fs_core_get_cwd_path();
+    rc = fs_normalize_mutation_path(cwd, path, full_path);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    rc = g_root_driver->make_dir(path);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    if (g_media_kind == FS_MEDIA_FAT12) {
+        rc = fs_record_dirty_dir(full_path);
+        if (rc != FS_OK) {
+            return rc;
+        }
+    }
+
+    return FS_OK;
 }
 
 int fs_core_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, uint32_t* out_count) {

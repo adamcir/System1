@@ -29,6 +29,8 @@ typedef struct {
 
 int fs_init(void);
 void fs_set_boot_context(uint32_t boot_magic, uint32_t boot_info_ptr);
+uint8_t fs_has_pending_changes(void);
+int fs_shutdown(uint8_t write_changes);
 const char* fs_get_cwd_path(void);
 int fs_change_dir(const char* path);
 int fs_make_dir(const char* path);

@@ -18,6 +18,9 @@ static fs_node_t g_nodes[FS_MAX_NODES];
 static fs_node_t* g_root = 0;
 static fs_node_t* g_cwd = 0;
 static char g_path_buf[FS_PATH_CAP];
+static uint8_t g_dirty = 0u;
+static const char g_dot_name[] = ".";
+static const char g_dotdot_name[] = "..";
 
 static void fs_memzero(void* ptr, uint32_t size) {
     uint8_t* out = (uint8_t*)ptr;
@@ -294,14 +297,10 @@ static int fs_resolve_parent(const char* path, fs_node_t** out_parent, char* out
     }
 }
 
-int ramfs_core_init(void) {
-    fs_node_t* boot = 0;
-    fs_node_t* dev = 0;
-    fs_node_t* etc = 0;
-    fs_node_t* tmp = 0;
-
+int ramfs_core_reset_empty(void) {
     fs_memzero(g_nodes, (uint32_t)sizeof(g_nodes));
     fs_memzero(g_path_buf, FS_PATH_CAP);
+    g_dirty = 0u;
 
     g_root = fs_alloc_node();
     if (g_root == 0) {
@@ -312,6 +311,18 @@ int ramfs_core_init(void) {
     g_root->name[0] = '\0';
     g_root->parent = 0;
     g_cwd = g_root;
+    return FS_OK;
+}
+
+int ramfs_core_init(void) {
+    fs_node_t* boot = 0;
+    fs_node_t* dev = 0;
+    fs_node_t* etc = 0;
+    fs_node_t* tmp = 0;
+
+    if (ramfs_core_reset_empty() != FS_OK) {
+        return FS_ERR_NO_SPACE;
+    }
 
     if (fs_create_bootstrap_dir(g_root, "boot", &boot) != FS_OK ||
         fs_create_bootstrap_dir(g_root, "dev", &dev) != FS_OK ||
@@ -328,6 +339,49 @@ int ramfs_core_init(void) {
 
     (void)tmp;
     return FS_OK;
+}
+
+static int ramfs_core_import_node(const char* path, uint8_t type) {
+    fs_node_t* parent = 0;
+    fs_node_t* existing = 0;
+    char name[FS_NAME_CAP];
+    int rc;
+
+    if (path == 0 || path[0] != '/') {
+        return FS_ERR_INVALID;
+    }
+
+    if (path[1] == '\0') {
+        return (type == FS_NODE_DIR) ? FS_OK : FS_ERR_INVALID;
+    }
+
+    rc = fs_resolve_parent(path, &parent, name);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    existing = fs_find_child(parent, name);
+    if (existing != 0) {
+        return (existing->type == type) ? FS_OK : FS_ERR_EXISTS;
+    }
+
+    return fs_create_node(parent, name, type, 0);
+}
+
+int ramfs_core_import_dir(const char* path) {
+    return ramfs_core_import_node(path, FS_NODE_DIR);
+}
+
+int ramfs_core_import_file(const char* path) {
+    return ramfs_core_import_node(path, FS_NODE_FILE);
+}
+
+uint8_t ramfs_core_is_dirty(void) {
+    return g_dirty;
+}
+
+void ramfs_core_clear_dirty(void) {
+    g_dirty = 0u;
 }
 
 const char* ramfs_core_get_cwd_path(void) {
@@ -417,12 +471,19 @@ int ramfs_core_make_dir(const char* path) {
         return rc;
     }
 
-    return fs_create_node(parent, name, FS_NODE_DIR, 0);
+    rc = fs_create_node(parent, name, FS_NODE_DIR, 0);
+    if (rc == FS_OK) {
+        g_dirty = 1u;
+    }
+
+    return rc;
 }
 
 int ramfs_core_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, uint32_t* out_count) {
     fs_node_t* dir = 0;
     uint32_t i;
+    uint32_t pos = 0u;
+    uint32_t special_count = 0u;
     int rc;
 
     if (entries == 0 || out_count == 0) {
@@ -438,15 +499,45 @@ int ramfs_core_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, ui
         return FS_ERR_NOT_DIR;
     }
 
-    *out_count = dir->child_count;
-    if (cap < dir->child_count) {
+    if (dir != g_root) {
+        special_count = 2u;
+    }
+
+    *out_count = dir->child_count + special_count;
+    if (cap < *out_count) {
         return FS_ERR_NO_SPACE;
     }
 
+    if (dir != g_root) {
+        entries[pos].name = g_dot_name;
+        entries[pos].type = FS_NODE_DIR;
+        ++pos;
+        entries[pos].name = g_dotdot_name;
+        entries[pos].type = FS_NODE_DIR;
+        ++pos;
+    }
+
     for (i = 0u; i < dir->child_count; ++i) {
-        entries[i].name = dir->children[i]->name;
-        entries[i].type = dir->children[i]->type;
+        entries[pos].name = dir->children[i]->name;
+        entries[pos].type = dir->children[i]->type;
+        ++pos;
     }
 
     return FS_OK;
+}
+
+static int ramfs_core_driver_init(void) {
+    return (g_root == 0) ? FS_ERR_INVALID : FS_OK;
+}
+
+static const vfs_driver_t g_ramfs_driver = {
+    ramfs_core_driver_init,
+    ramfs_core_get_cwd_path,
+    ramfs_core_change_dir,
+    ramfs_core_make_dir,
+    ramfs_core_list_dir
+};
+
+const vfs_driver_t* ramfs_core_driver(void) {
+    return &g_ramfs_driver;
 }
