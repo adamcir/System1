@@ -572,6 +572,19 @@ static void shell_cmd_mkdir(char** argv, uint32_t argc) {
     }
 }
 
+static void shell_cat_putc(char c) {
+    uint32_t i;
+
+    if (c == '\t') {
+        for (i = 0u; i < 4u; ++i) {
+            tty_putc(' ');
+        }
+        return;
+    }
+
+    tty_putc(c);
+}
+
 static void shell_cmd_cat(char** argv, uint32_t argc) {
     static char buffer[SHELL_CAT_BUF_CAP];
     uint32_t size = 0u;
@@ -590,7 +603,7 @@ static void shell_cmd_cat(char** argv, uint32_t argc) {
     }
 
     for (i = 0u; i < size; ++i) {
-        tty_putc(buffer[i]);
+        shell_cat_putc(buffer[i]);
     }
 
     if (size == 0u || buffer[size - 1u] != '\n') {
