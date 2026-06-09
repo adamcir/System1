@@ -36,3 +36,7 @@ int fs_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, uint32_t* 
 int fs_read_file(const char* path, char* buffer, uint32_t cap, uint32_t* out_size) {
     return fs_core_read_file(path, buffer, cap, out_size);
 }
+
+int fs_to_errno(int rc) {
+    return fs_core_to_errno(rc);
+}

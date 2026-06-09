@@ -6,6 +6,7 @@
 #include "klog.h"
 #include "fs.h"
 #include "mm.h"
+#include "posix.h"
 
 #define SHELL_LINE_CAP 256u
 #define SHELL_ARGV_MAX 16u
@@ -475,37 +476,39 @@ static void shell_version(void){
 }
 
 static void shell_print_fs_error(const char* cmd, int rc) {
+    int err = fs_to_errno(rc);
+
     tty_set_color(TTY_RED);
     tty_puts(cmd);
     tty_puts(": ");
     tty_set_color(TTY_WHITE);
 
-    if (rc == FS_ERR_NOT_FOUND) {
+    if (err == POSIX_ENOENT) {
         tty_puts("path not found\n");
         return;
     }
 
-    if (rc == FS_ERR_EXISTS) {
+    if (err == POSIX_EEXIST) {
         tty_puts("already exists\n");
         return;
     }
 
-    if (rc == FS_ERR_NOT_DIR) {
+    if (err == POSIX_ENOTDIR) {
         tty_puts("not a directory\n");
         return;
     }
 
-    if (rc == FS_ERR_INVALID) {
+    if (err == POSIX_EINVAL) {
         tty_puts("invalid path\n");
         return;
     }
 
-    if (rc == FS_ERR_NO_SPACE) {
+    if (err == POSIX_ENOSPC) {
         tty_puts("no space left in filesystem\n");
         return;
     }
 
-    if (rc == FS_ERR_READ_ONLY) {
+    if (err == POSIX_EROFS) {
         tty_puts("read-only filesystem\n");
         return;
     }

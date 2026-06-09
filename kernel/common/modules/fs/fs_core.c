@@ -2,6 +2,7 @@
 #include "block_core.h"
 #include "fat12_core.h"
 #include "iso9660_core.h"
+#include "posix.h"
 #include "ramfs_core.h"
 #include "vfs_core.h"
 
@@ -57,6 +58,38 @@ static uint32_t g_mb2_module_size = 0u;
 static fs_media_kind_t g_media_kind = FS_MEDIA_NONE;
 static char g_dirty_dirs[FS_DIRTY_DIR_CAP][FS_PATH_CAP];
 static uint32_t g_dirty_dir_count = 0u;
+
+int fs_core_to_errno(int rc) {
+    if (rc == FS_OK) {
+        return POSIX_OK;
+    }
+
+    if (rc == FS_ERR_NOT_FOUND) {
+        return POSIX_ENOENT;
+    }
+
+    if (rc == FS_ERR_EXISTS) {
+        return POSIX_EEXIST;
+    }
+
+    if (rc == FS_ERR_NOT_DIR) {
+        return POSIX_ENOTDIR;
+    }
+
+    if (rc == FS_ERR_INVALID) {
+        return POSIX_EINVAL;
+    }
+
+    if (rc == FS_ERR_NO_SPACE) {
+        return POSIX_ENOSPC;
+    }
+
+    if (rc == FS_ERR_READ_ONLY) {
+        return POSIX_EROFS;
+    }
+
+    return POSIX_EIO;
+}
 
 static uint8_t fs_inb(uint16_t port) {
     uint8_t value;
