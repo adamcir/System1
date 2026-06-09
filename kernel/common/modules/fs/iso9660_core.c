@@ -3,6 +3,13 @@
 #define ISO9660_PVD_LBA 16u
 #define ISO9660_SECTOR_SIZE 2048u
 #define ISO9660_NAME_SLOTS 32u
+#define ISO9660_OPEN_FILE_CAP 16u
+
+typedef struct {
+    uint8_t used;
+    uint32_t lba;
+    uint32_t size;
+} iso_open_file_t;
 
 static block_device_t* g_iso_dev = 0;
 static uint32_t g_iso_root_lba = 0u;
@@ -12,6 +19,7 @@ static char g_iso_cwd[FS_PATH_CAP];
 static uint32_t g_iso_cwd_lba = 0u;
 static uint32_t g_iso_cwd_size = 0u;
 static uint8_t g_iso_sector[ISO9660_SECTOR_SIZE];
+static iso_open_file_t g_iso_open_files[ISO9660_OPEN_FILE_CAP];
 
 static uint32_t iso_le32(const uint8_t* p) {
     return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
@@ -501,6 +509,137 @@ static int iso_read_file(const char* path, char* buffer, uint32_t cap, uint32_t*
     return FS_OK;
 }
 
+static int iso_open(const char* path, uint32_t flags, uint32_t* out_node_id) {
+    uint32_t target_lba = 0u;
+    uint32_t target_size = 0u;
+    uint8_t is_dir = 0u;
+    uint32_t i;
+    int rc;
+
+    if (path == 0 || out_node_id == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    if ((flags & (FS_O_WRONLY | FS_O_CREAT | FS_O_TRUNC | FS_O_APPEND)) != 0u) {
+        return FS_ERR_READ_ONLY;
+    }
+
+    rc = iso_resolve_path(path, &target_lba, &target_size, &is_dir);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    if (is_dir != 0u) {
+        return FS_ERR_NOT_DIR;
+    }
+
+    for (i = 0u; i < ISO9660_OPEN_FILE_CAP; ++i) {
+        if (g_iso_open_files[i].used == 0u) {
+            g_iso_open_files[i].used = 1u;
+            g_iso_open_files[i].lba = target_lba;
+            g_iso_open_files[i].size = target_size;
+            *out_node_id = i + 1u;
+            return FS_OK;
+        }
+    }
+
+    return FS_ERR_NO_SPACE;
+}
+
+static int iso_read(uint32_t node_id, uint32_t offset, char* buffer, uint32_t cap, uint32_t* out_size) {
+    iso_open_file_t* file;
+    uint32_t target;
+    uint32_t copied = 0u;
+    uint32_t sector_idx;
+    uint32_t sector_offset;
+    int rc;
+
+    if (node_id == 0u || node_id > ISO9660_OPEN_FILE_CAP || buffer == 0 || out_size == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    file = &g_iso_open_files[node_id - 1u];
+    if (file->used == 0u) {
+        return FS_ERR_INVALID;
+    }
+
+    if (offset >= file->size) {
+        *out_size = 0u;
+        return FS_OK;
+    }
+
+    target = file->size - offset;
+    if (target > cap) {
+        target = cap;
+    }
+
+    sector_idx = offset / ISO9660_SECTOR_SIZE;
+    sector_offset = offset % ISO9660_SECTOR_SIZE;
+    while (copied < target) {
+        uint32_t chunk;
+        uint32_t i;
+
+        rc = iso_read_2048(g_iso_dev, file->lba + sector_idx, g_iso_sector);
+        if (rc != FS_OK) {
+            return rc;
+        }
+
+        chunk = ISO9660_SECTOR_SIZE - sector_offset;
+        if (chunk > target - copied) {
+            chunk = target - copied;
+        }
+
+        for (i = 0u; i < chunk; ++i) {
+            buffer[copied + i] = (char)g_iso_sector[sector_offset + i];
+        }
+
+        copied += chunk;
+        ++sector_idx;
+        sector_offset = 0u;
+    }
+
+    *out_size = copied;
+    return FS_OK;
+}
+
+static int iso_write(uint32_t node_id, uint32_t offset, const char* buffer, uint32_t size, uint32_t* out_written) {
+    (void)node_id;
+    (void)offset;
+    (void)buffer;
+    (void)size;
+
+    if (out_written != 0) {
+        *out_written = 0u;
+    }
+
+    return FS_ERR_READ_ONLY;
+}
+
+static int iso_size(uint32_t node_id, uint32_t* out_size) {
+    iso_open_file_t* file;
+
+    if (node_id == 0u || node_id > ISO9660_OPEN_FILE_CAP || out_size == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    file = &g_iso_open_files[node_id - 1u];
+    if (file->used == 0u) {
+        return FS_ERR_INVALID;
+    }
+
+    *out_size = file->size;
+    return FS_OK;
+}
+
+static int iso_close(uint32_t node_id) {
+    if (node_id == 0u || node_id > ISO9660_OPEN_FILE_CAP) {
+        return FS_ERR_INVALID;
+    }
+
+    g_iso_open_files[node_id - 1u].used = 0u;
+    return FS_OK;
+}
+
 static int iso_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, uint32_t* out_count) {
     uint32_t count = 0u;
     int rc;
@@ -572,7 +711,12 @@ static const vfs_driver_t g_iso_driver = {
     iso_change_dir,
     iso_make_dir,
     iso_list_dir,
-    iso_read_file
+    iso_read_file,
+    iso_open,
+    iso_read,
+    iso_write,
+    iso_size,
+    iso_close
 };
 
 const vfs_driver_t* iso9660_core_driver(void) {

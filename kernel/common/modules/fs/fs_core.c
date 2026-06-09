@@ -17,6 +17,8 @@ static uint32_t g_boot_info_ptr = 0u;
 #define FS_MB2_TAG_TYPE_MODULE 3u
 #define FS_IMPORT_ENTRY_CAP 32u
 #define FS_DIRTY_DIR_CAP 16u
+#define FS_MEDIA_NODE_FLAG 0x80000000u
+#define FS_NODE_ID_MASK 0x7FFFFFFFu
 
 typedef enum {
     FS_MEDIA_NONE = 0,
@@ -1035,4 +1037,116 @@ int fs_core_read_file(const char* path, char* buffer, uint32_t cap, uint32_t* ou
     }
 
     return FS_ERR_INVALID;
+}
+
+int fs_core_open(const char* path, uint32_t flags, uint32_t* out_node_id) {
+    char full_path[FS_PATH_CAP];
+    uint32_t node_id = 0u;
+    int rc;
+
+    if (path == 0 || out_node_id == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    rc = fs_core_normalize_path(fs_core_get_cwd_path(), path, full_path, FS_PATH_CAP);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    if ((flags & (FS_O_WRONLY | FS_O_CREAT | FS_O_TRUNC | FS_O_APPEND)) == 0u &&
+        g_media_driver != 0 && g_media_driver->open != 0) {
+        rc = g_media_driver->open(full_path, flags, &node_id);
+        if (rc == FS_OK) {
+            *out_node_id = node_id | FS_MEDIA_NODE_FLAG;
+            return FS_OK;
+        }
+    }
+
+    if (g_root_driver == 0 || g_root_driver->open == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    rc = g_root_driver->open(full_path, flags, &node_id);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    *out_node_id = node_id;
+    return FS_OK;
+}
+
+int fs_core_read(uint32_t node_id, uint32_t offset, char* buffer, uint32_t cap, uint32_t* out_size) {
+    const vfs_driver_t* driver;
+    uint32_t local_id;
+
+    if ((node_id & FS_MEDIA_NODE_FLAG) != 0u) {
+        driver = g_media_driver;
+        local_id = node_id & FS_NODE_ID_MASK;
+    } else {
+        driver = g_root_driver;
+        local_id = node_id;
+    }
+
+    if (driver == 0 || driver->read == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    return driver->read(local_id, offset, buffer, cap, out_size);
+}
+
+int fs_core_write(uint32_t node_id, uint32_t offset, const char* buffer, uint32_t size, uint32_t* out_written) {
+    const vfs_driver_t* driver;
+    uint32_t local_id;
+
+    if ((node_id & FS_MEDIA_NODE_FLAG) != 0u) {
+        driver = g_media_driver;
+        local_id = node_id & FS_NODE_ID_MASK;
+    } else {
+        driver = g_root_driver;
+        local_id = node_id;
+    }
+
+    if (driver == 0 || driver->write == 0) {
+        return FS_ERR_READ_ONLY;
+    }
+
+    return driver->write(local_id, offset, buffer, size, out_written);
+}
+
+int fs_core_size(uint32_t node_id, uint32_t* out_size) {
+    const vfs_driver_t* driver;
+    uint32_t local_id;
+
+    if ((node_id & FS_MEDIA_NODE_FLAG) != 0u) {
+        driver = g_media_driver;
+        local_id = node_id & FS_NODE_ID_MASK;
+    } else {
+        driver = g_root_driver;
+        local_id = node_id;
+    }
+
+    if (driver == 0 || driver->size == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    return driver->size(local_id, out_size);
+}
+
+int fs_core_close(uint32_t node_id) {
+    const vfs_driver_t* driver;
+    uint32_t local_id;
+
+    if ((node_id & FS_MEDIA_NODE_FLAG) != 0u) {
+        driver = g_media_driver;
+        local_id = node_id & FS_NODE_ID_MASK;
+    } else {
+        driver = g_root_driver;
+        local_id = node_id;
+    }
+
+    if (driver == 0 || driver->close == 0) {
+        return FS_OK;
+    }
+
+    return driver->close(local_id);
 }

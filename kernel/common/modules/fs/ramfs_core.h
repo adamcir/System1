@@ -16,5 +16,10 @@ int ramfs_core_change_dir(const char* path);
 int ramfs_core_make_dir(const char* path);
 int ramfs_core_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, uint32_t* out_count);
 int ramfs_core_read_file(const char* path, char* buffer, uint32_t cap, uint32_t* out_size);
+int ramfs_core_open(const char* path, uint32_t flags, uint32_t* out_node_id);
+int ramfs_core_read(uint32_t node_id, uint32_t offset, char* buffer, uint32_t cap, uint32_t* out_size);
+int ramfs_core_write(uint32_t node_id, uint32_t offset, const char* buffer, uint32_t size, uint32_t* out_written);
+int ramfs_core_size(uint32_t node_id, uint32_t* out_size);
+int ramfs_core_close(uint32_t node_id);
 
 #endif

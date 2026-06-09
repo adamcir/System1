@@ -2,6 +2,7 @@
 
 #define FS_MAX_NODES 64u
 #define FS_MAX_CHILDREN 16u
+#define RAMFS_FILE_CAP 4096u
 
 typedef struct fs_node fs_node_t;
 
@@ -12,6 +13,8 @@ struct fs_node {
     fs_node_t* parent;
     fs_node_t* children[FS_MAX_CHILDREN];
     uint32_t child_count;
+    char data[RAMFS_FILE_CAP];
+    uint32_t size;
 };
 
 static fs_node_t g_nodes[FS_MAX_NODES];
@@ -128,6 +131,37 @@ static fs_node_t* fs_alloc_node(void) {
     }
 
     return 0;
+}
+
+static uint32_t fs_node_id(fs_node_t* node) {
+    uint32_t i;
+
+    if (node == 0) {
+        return 0u;
+    }
+
+    for (i = 0u; i < FS_MAX_NODES; ++i) {
+        if (&g_nodes[i] == node) {
+            return i + 1u;
+        }
+    }
+
+    return 0u;
+}
+
+static fs_node_t* fs_node_from_id(uint32_t node_id) {
+    uint32_t index;
+
+    if (node_id == 0u) {
+        return 0;
+    }
+
+    index = node_id - 1u;
+    if (index >= FS_MAX_NODES || g_nodes[index].used == 0u) {
+        return 0;
+    }
+
+    return &g_nodes[index];
 }
 
 static fs_node_t* fs_find_child(fs_node_t* dir, const char* name) {
@@ -576,6 +610,7 @@ int ramfs_core_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, ui
 
 int ramfs_core_read_file(const char* path, char* buffer, uint32_t cap, uint32_t* out_size) {
     fs_node_t* node = 0;
+    uint32_t i;
     int rc;
 
     if (path == 0 || buffer == 0 || out_size == 0) {
@@ -591,9 +626,141 @@ int ramfs_core_read_file(const char* path, char* buffer, uint32_t cap, uint32_t*
         return FS_ERR_NOT_DIR;
     }
 
-    (void)cap;
-    *out_size = 0u;
-    return FS_ERR_INVALID;
+    *out_size = node->size;
+    if (cap < node->size) {
+        return FS_ERR_NO_SPACE;
+    }
+
+    for (i = 0u; i < node->size; ++i) {
+        buffer[i] = node->data[i];
+    }
+
+    return FS_OK;
+}
+
+int ramfs_core_open(const char* path, uint32_t flags, uint32_t* out_node_id) {
+    fs_node_t* node = 0;
+    int rc;
+
+    if (path == 0 || out_node_id == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    rc = fs_resolve_path(path, &node);
+    if (rc == FS_ERR_NOT_FOUND && (flags & FS_O_CREAT) != 0u) {
+        fs_node_t* parent = 0;
+        char name[FS_NAME_CAP];
+
+        rc = fs_resolve_parent(path, &parent, name);
+        if (rc != FS_OK) {
+            return rc;
+        }
+
+        rc = fs_create_node(parent, name, FS_NODE_FILE, &node);
+        if (rc != FS_OK) {
+            return rc;
+        }
+
+        g_dirty = 1u;
+    } else if (rc != FS_OK) {
+        return rc;
+    }
+
+    if (node->type != FS_NODE_FILE) {
+        return FS_ERR_NOT_DIR;
+    }
+
+    if ((flags & FS_O_TRUNC) != 0u) {
+        if ((flags & FS_O_WRONLY) == 0u) {
+            return FS_ERR_INVALID;
+        }
+        node->size = 0u;
+        g_dirty = 1u;
+    }
+
+    *out_node_id = fs_node_id(node);
+    if (*out_node_id == 0u) {
+        return FS_ERR_INVALID;
+    }
+
+    return FS_OK;
+}
+
+int ramfs_core_read(uint32_t node_id, uint32_t offset, char* buffer, uint32_t cap, uint32_t* out_size) {
+    fs_node_t* node = fs_node_from_id(node_id);
+    uint32_t available;
+    uint32_t count;
+    uint32_t i;
+
+    if (node == 0 || buffer == 0 || out_size == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    if (node->type != FS_NODE_FILE) {
+        return FS_ERR_NOT_DIR;
+    }
+
+    if (offset >= node->size) {
+        *out_size = 0u;
+        return FS_OK;
+    }
+
+    available = node->size - offset;
+    count = (available < cap) ? available : cap;
+    for (i = 0u; i < count; ++i) {
+        buffer[i] = node->data[offset + i];
+    }
+
+    *out_size = count;
+    return FS_OK;
+}
+
+int ramfs_core_write(uint32_t node_id, uint32_t offset, const char* buffer, uint32_t size, uint32_t* out_written) {
+    fs_node_t* node = fs_node_from_id(node_id);
+    uint32_t i;
+
+    if (node == 0 || buffer == 0 || out_written == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    if (node->type != FS_NODE_FILE) {
+        return FS_ERR_NOT_DIR;
+    }
+
+    if (offset > RAMFS_FILE_CAP || size > (RAMFS_FILE_CAP - offset)) {
+        return FS_ERR_NO_SPACE;
+    }
+
+    for (i = 0u; i < size; ++i) {
+        node->data[offset + i] = buffer[i];
+    }
+
+    if (offset + size > node->size) {
+        node->size = offset + size;
+    }
+
+    *out_written = size;
+    g_dirty = 1u;
+    return FS_OK;
+}
+
+int ramfs_core_size(uint32_t node_id, uint32_t* out_size) {
+    fs_node_t* node = fs_node_from_id(node_id);
+
+    if (node == 0 || out_size == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    if (node->type != FS_NODE_FILE) {
+        return FS_ERR_NOT_DIR;
+    }
+
+    *out_size = node->size;
+    return FS_OK;
+}
+
+int ramfs_core_close(uint32_t node_id) {
+    return (fs_node_from_id(node_id) == 0) ? FS_ERR_INVALID : FS_OK;
 }
 
 static int ramfs_core_driver_init(void) {
@@ -606,7 +773,12 @@ static const vfs_driver_t g_ramfs_driver = {
     ramfs_core_change_dir,
     ramfs_core_make_dir,
     ramfs_core_list_dir,
-    ramfs_core_read_file
+    ramfs_core_read_file,
+    ramfs_core_open,
+    ramfs_core_read,
+    ramfs_core_write,
+    ramfs_core_size,
+    ramfs_core_close
 };
 
 const vfs_driver_t* ramfs_core_driver(void) {

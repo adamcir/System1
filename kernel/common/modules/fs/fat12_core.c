@@ -8,6 +8,7 @@
 #define FAT12_NAME_SLOTS 32u
 #define FAT12_CLUSTER_FREE 0x000u
 #define FAT12_CLUSTER_EOC 0xFFFu
+#define FAT12_OPEN_FILE_CAP 16u
 
 typedef struct {
     uint16_t bytes_per_sector;
@@ -20,12 +21,19 @@ typedef struct {
     uint32_t root_dir_sectors;
 } fat12_bpb_t;
 
+typedef struct {
+    uint8_t used;
+    uint32_t cluster;
+    uint32_t size;
+} fat12_open_file_t;
+
 static block_device_t* g_fat12_dev = 0;
 static fat12_bpb_t g_fat12;
 static char g_fat12_names[FAT12_NAME_SLOTS][FS_NAME_CAP];
 static char g_fat12_cwd[FS_PATH_CAP];
 static uint32_t g_fat12_cwd_cluster = 0u;
 static uint8_t g_fat12_sector[512];
+static fat12_open_file_t g_fat12_open_files[FAT12_OPEN_FILE_CAP];
 
 static uint16_t fat12_le16(const uint8_t* p) {
     return (uint16_t)(p[0] | ((uint16_t)p[1] << 8));
@@ -1153,6 +1161,169 @@ static int fat12_read_file(const char* path, char* buffer, uint32_t cap, uint32_
     return FS_OK;
 }
 
+static int fat12_open(const char* path, uint32_t flags, uint32_t* out_node_id) {
+    uint32_t cluster = 0u;
+    uint32_t size = 0u;
+    uint8_t is_dir = 0u;
+    uint32_t i;
+    int rc;
+
+    if (path == 0 || out_node_id == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    if ((flags & (FS_O_WRONLY | FS_O_CREAT | FS_O_TRUNC | FS_O_APPEND)) != 0u) {
+        return FS_ERR_READ_ONLY;
+    }
+
+    rc = fat12_resolve_path_info(path, &cluster, &is_dir, &size);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    if (is_dir != 0u) {
+        return FS_ERR_NOT_DIR;
+    }
+
+    for (i = 0u; i < FAT12_OPEN_FILE_CAP; ++i) {
+        if (g_fat12_open_files[i].used == 0u) {
+            g_fat12_open_files[i].used = 1u;
+            g_fat12_open_files[i].cluster = cluster;
+            g_fat12_open_files[i].size = size;
+            *out_node_id = i + 1u;
+            return FS_OK;
+        }
+    }
+
+    return FS_ERR_NO_SPACE;
+}
+
+static int fat12_read(uint32_t node_id, uint32_t offset, char* buffer, uint32_t cap, uint32_t* out_size) {
+    fat12_open_file_t* file;
+    uint32_t cluster;
+    uint32_t cluster_bytes;
+    uint32_t copied = 0u;
+    uint32_t target;
+    int rc;
+
+    if (node_id == 0u || node_id > FAT12_OPEN_FILE_CAP || buffer == 0 || out_size == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    file = &g_fat12_open_files[node_id - 1u];
+    if (file->used == 0u) {
+        return FS_ERR_INVALID;
+    }
+
+    if (offset >= file->size) {
+        *out_size = 0u;
+        return FS_OK;
+    }
+
+    target = file->size - offset;
+    if (target > cap) {
+        target = cap;
+    }
+
+    if (target == 0u) {
+        *out_size = 0u;
+        return FS_OK;
+    }
+
+    cluster = file->cluster;
+    cluster_bytes = (uint32_t)g_fat12.sectors_per_cluster * 512u;
+    while (cluster_bytes != 0u && offset >= cluster_bytes) {
+        if (cluster < 2u || cluster >= 0xFF8u) {
+            return FS_ERR_INVALID;
+        }
+        cluster = fat12_get_next_cluster(cluster);
+        offset -= cluster_bytes;
+    }
+
+    while (copied < target) {
+        uint32_t base_lba;
+        uint32_t sector_idx;
+
+        if (cluster < 2u || cluster >= 0xFF8u) {
+            return FS_ERR_INVALID;
+        }
+
+        base_lba = fat12_cluster_to_lba(cluster);
+        for (sector_idx = 0u; sector_idx < g_fat12.sectors_per_cluster && copied < target; ++sector_idx) {
+            uint32_t sector_offset = 0u;
+            uint32_t chunk;
+            uint32_t i;
+
+            if (offset >= 512u) {
+                offset -= 512u;
+                continue;
+            }
+
+            sector_offset = offset;
+            offset = 0u;
+            rc = block_core_read(g_fat12_dev, base_lba + sector_idx, 1u, g_fat12_sector);
+            if (rc != FS_OK) {
+                return rc;
+            }
+
+            chunk = 512u - sector_offset;
+            if (chunk > target - copied) {
+                chunk = target - copied;
+            }
+
+            for (i = 0u; i < chunk; ++i) {
+                buffer[copied + i] = (char)g_fat12_sector[sector_offset + i];
+            }
+            copied += chunk;
+        }
+
+        if (copied < target) {
+            cluster = fat12_get_next_cluster(cluster);
+        }
+    }
+
+    *out_size = copied;
+    return FS_OK;
+}
+
+static int fat12_write(uint32_t node_id, uint32_t offset, const char* buffer, uint32_t size, uint32_t* out_written) {
+    (void)node_id;
+    (void)offset;
+    (void)buffer;
+    (void)size;
+
+    if (out_written != 0) {
+        *out_written = 0u;
+    }
+
+    return FS_ERR_READ_ONLY;
+}
+
+static int fat12_size(uint32_t node_id, uint32_t* out_size) {
+    fat12_open_file_t* file;
+
+    if (node_id == 0u || node_id > FAT12_OPEN_FILE_CAP || out_size == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    file = &g_fat12_open_files[node_id - 1u];
+    if (file->used == 0u) {
+        return FS_ERR_INVALID;
+    }
+
+    *out_size = file->size;
+    return FS_OK;
+}
+
+static int fat12_close(uint32_t node_id) {
+    if (node_id == 0u || node_id > FAT12_OPEN_FILE_CAP) {
+        return FS_ERR_INVALID;
+    }
+
+    g_fat12_open_files[node_id - 1u].used = 0u;
+    return FS_OK;
+}
+
 static int fat12_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, uint32_t* out_count) {
     uint32_t count = 0u;
     char lfn_name[FS_NAME_CAP];
@@ -1289,7 +1460,12 @@ static const vfs_driver_t g_fat12_driver = {
     fat12_change_dir,
     fat12_make_dir,
     fat12_list_dir,
-    fat12_read_file
+    fat12_read_file,
+    fat12_open,
+    fat12_read,
+    fat12_write,
+    fat12_size,
+    fat12_close
 };
 
 const vfs_driver_t* fat12_core_driver(void) {
