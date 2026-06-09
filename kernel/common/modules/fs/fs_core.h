@@ -37,5 +37,6 @@ int fs_core_make_dir(const char* path);
 int fs_core_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, uint32_t* out_count);
 int fs_core_read_file(const char* path, char* buffer, uint32_t cap, uint32_t* out_size);
 int fs_core_to_errno(int rc);
+int fs_core_normalize_path(const char* cwd, const char* path, char* out, uint32_t out_cap);
 
 #endif

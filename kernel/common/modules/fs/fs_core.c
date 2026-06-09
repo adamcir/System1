@@ -630,12 +630,12 @@ static int fs_streq_local(const char* a, const char* b) {
     return (int)(a[i] == '\0' && b[i] == '\0');
 }
 
-static int fs_normalize_mutation_path(const char* cwd, const char* path, char* out) {
+int fs_core_normalize_path(const char* cwd, const char* path, char* out, uint32_t out_cap) {
     char temp[FS_PATH_CAP];
     uint32_t len = 0u;
     const char* cursor;
 
-    if (path == 0 || path[0] == '\0' || out == 0) {
+    if (path == 0 || path[0] == '\0' || out == 0 || out_cap < 2u) {
         return FS_ERR_INVALID;
     }
 
@@ -710,7 +710,10 @@ static int fs_normalize_mutation_path(const char* cwd, const char* path, char* o
         out[0] = '/';
         out[1] = '\0';
     } else {
-        fs_copy_name(out, FS_PATH_CAP, temp);
+        if (len + 1u > out_cap) {
+            return FS_ERR_INVALID;
+        }
+        fs_copy_name(out, out_cap, temp);
     }
 
     return FS_OK;
@@ -940,11 +943,19 @@ const char* fs_core_get_cwd_path(void) {
 }
 
 int fs_core_change_dir(const char* path) {
+    char full_path[FS_PATH_CAP];
+    int rc;
+
     if (g_root_driver == 0 || g_root_driver->change_dir == 0) {
         return FS_ERR_INVALID;
     }
 
-    return g_root_driver->change_dir(path);
+    rc = fs_core_normalize_path(fs_core_get_cwd_path(), path, full_path, FS_PATH_CAP);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    return g_root_driver->change_dir(full_path);
 }
 
 int fs_core_make_dir(const char* path) {
@@ -957,12 +968,12 @@ int fs_core_make_dir(const char* path) {
     }
 
     cwd = fs_core_get_cwd_path();
-    rc = fs_normalize_mutation_path(cwd, path, full_path);
+    rc = fs_core_normalize_path(cwd, path, full_path, FS_PATH_CAP);
     if (rc != FS_OK) {
         return rc;
     }
 
-    rc = g_root_driver->make_dir(path);
+    rc = g_root_driver->make_dir(full_path);
     if (rc != FS_OK) {
         return rc;
     }
@@ -978,11 +989,23 @@ int fs_core_make_dir(const char* path) {
 }
 
 int fs_core_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, uint32_t* out_count) {
+    char full_path[FS_PATH_CAP];
+    int rc;
+
     if (g_root_driver == 0 || g_root_driver->list_dir == 0) {
         return FS_ERR_INVALID;
     }
 
-    return g_root_driver->list_dir(path, entries, cap, out_count);
+    if (path == 0 || path[0] == '\0') {
+        path = ".";
+    }
+
+    rc = fs_core_normalize_path(fs_core_get_cwd_path(), path, full_path, FS_PATH_CAP);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    return g_root_driver->list_dir(full_path, entries, cap, out_count);
 }
 
 int fs_core_read_file(const char* path, char* buffer, uint32_t cap, uint32_t* out_size) {
@@ -994,7 +1017,7 @@ int fs_core_read_file(const char* path, char* buffer, uint32_t cap, uint32_t* ou
     }
 
     if (g_media_driver != 0 && g_media_driver->read_file != 0) {
-        rc = fs_normalize_mutation_path(fs_core_get_cwd_path(), path, full_path);
+        rc = fs_core_normalize_path(fs_core_get_cwd_path(), path, full_path, FS_PATH_CAP);
         if (rc != FS_OK) {
             return rc;
         }
@@ -1003,7 +1026,12 @@ int fs_core_read_file(const char* path, char* buffer, uint32_t cap, uint32_t* ou
     }
 
     if (g_root_driver != 0 && g_root_driver->read_file != 0) {
-        return g_root_driver->read_file(path, buffer, cap, out_size);
+        rc = fs_core_normalize_path(fs_core_get_cwd_path(), path, full_path, FS_PATH_CAP);
+        if (rc != FS_OK) {
+            return rc;
+        }
+
+        return g_root_driver->read_file(full_path, buffer, cap, out_size);
     }
 
     return FS_ERR_INVALID;
