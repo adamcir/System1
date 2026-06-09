@@ -128,6 +128,53 @@ static void iso_copy_name(char* out, const uint8_t* name, uint8_t len) {
     out[pos] = '\0';
 }
 
+static int iso_copy_rock_ridge_name(char* out, const uint8_t* record, uint8_t record_len, uint8_t name_len) {
+    uint32_t offset = 33u + (uint32_t)name_len;
+    uint32_t pos = 0u;
+
+    if ((name_len & 1u) == 0u) {
+        ++offset;
+    }
+
+    while (offset + 4u <= (uint32_t)record_len) {
+        const uint8_t* field = record + offset;
+        uint8_t field_len = field[2u];
+        uint32_t i;
+
+        if (field_len < 4u || offset + (uint32_t)field_len > (uint32_t)record_len) {
+            break;
+        }
+
+        if (field[0] == 'N' && field[1] == 'M' && field_len >= 5u) {
+            uint8_t flags = field[4u];
+
+            if ((flags & 0x06u) != 0u) {
+                return 0;
+            }
+
+            for (i = 5u; i < (uint32_t)field_len && (pos + 1u) < FS_NAME_CAP; ++i) {
+                out[pos++] = (char)field[i];
+            }
+            out[pos] = '\0';
+            return (pos > 0u) ? 1 : 0;
+        }
+
+        offset += (uint32_t)field_len;
+    }
+
+    return 0;
+}
+
+static void iso_copy_record_name(char* out, const uint8_t* record, uint8_t record_len) {
+    uint8_t name_len = record[32u];
+
+    if (iso_copy_rock_ridge_name(out, record, record_len, name_len) != 0) {
+        return;
+    }
+
+    iso_copy_name(out, record + 33u, name_len);
+}
+
 int iso9660_core_mount(block_device_t* dev) {
     int rc;
     uint8_t* root_record;
@@ -212,7 +259,7 @@ static int iso_find_entry_in_dir(uint32_t dir_lba, uint32_t dir_size, const char
                     return FS_OK;
                 }
             } else {
-                iso_copy_name(entry_name, record + 33u, name_len);
+                iso_copy_record_name(entry_name, record, len);
                 if (iso_name_eq(entry_name, name) != 0) {
                     if (out_lba) *out_lba = iso_le32(record + 2u);
                     if (out_size) *out_size = iso_le32(record + 10u);
@@ -507,7 +554,7 @@ static int iso_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, ui
                 return FS_ERR_NO_SPACE;
             }
 
-            iso_copy_name(g_iso_names[count], record + 33u, name_len);
+            iso_copy_record_name(g_iso_names[count], record, len);
             entries[count].name = g_iso_names[count];
             entries[count].type = ((flags & 0x02u) != 0u) ? FS_NODE_DIR : FS_NODE_FILE;
             ++count;

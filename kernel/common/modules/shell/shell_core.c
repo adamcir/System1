@@ -3,9 +3,9 @@
 #include "interrupts.h"
 #include "signals.h"
 #include "tty.h"
-#include "vga.h"
 #include "klog.h"
 #include "fs.h"
+#include "mm.h"
 
 #define SHELL_LINE_CAP 256u
 #define SHELL_ARGV_MAX 16u
@@ -15,7 +15,7 @@
 
 static const char* g_shell_commands[] = {
     "help", "clear", "echo", "reboot", "shutdown", "ticks",
-    "version", "pwd", "ls", "cd", "mkdir", "cat"
+    "version", "pwd", "ls", "cd", "mkdir", "cat", "mmstat"
 };
 
 static char g_shell_history[SHELL_HISTORY_CAP][SHELL_LINE_CAP];
@@ -397,19 +397,19 @@ static void shell_put_u64_hex(uint64_t value) {
     static const char hex[] = "0123456789ABCDEF";
     int nibble;
 
-    vga_puts("0x");
+    tty_puts("0x");
     for (nibble = 15; nibble >= 0; --nibble) {
-        vga_putc(hex[(uint8_t)((value >> (nibble * 4)) & 0xFu)]);
+        tty_putc(hex[(uint8_t)((value >> (nibble * 4)) & 0xFu)]);
     }
 }
 
 static void shell_cmd_help(void) {
-    vga_puts("help clear echo reboot shutdown ticks version pwd ls cd mkdir cat\n");
+    tty_puts("help clear echo reboot shutdown ticks version pwd ls cd mkdir cat mmstat\n");
 }
 
 static void shell_cmd_clear(void) {
-    vga_init();
-    vga_set_color(WHITE);
+    tty_clear();
+    tty_set_color(TTY_WHITE);
 }
 
 static void shell_cmd_echo(char** argv, uint32_t argc) {
@@ -417,11 +417,11 @@ static void shell_cmd_echo(char** argv, uint32_t argc) {
 
     for (i = 1u; i < argc; ++i) {
         if (i > 1u) {
-            vga_putc(' ');
+            tty_putc(' ');
         }
-        vga_puts(argv[i]);
+        tty_puts(argv[i]);
     }
-    vga_putc('\n');
+    tty_putc('\n');
 }
 
 static void shell_flush_pending_changes(void) {
@@ -431,7 +431,7 @@ static void shell_flush_pending_changes(void) {
     if (fs_has_pending_changes() != 0u) {
         char answer[8];
 
-        vga_puts("Write changes to boot media? [Y/n] ");
+        tty_puts("Write changes to boot media? [Y/n] ");
         tty_readline(answer, 8u);
         if (answer[0] == '\0' || answer[0] == 'y' || answer[0] == 'Y') {
             write_changes = 1u;
@@ -442,76 +442,80 @@ static void shell_flush_pending_changes(void) {
     if (rc != FS_OK) {
         shell_print_fs_error("shutdown", rc);
     } else if (write_changes != 0u) {
-        vga_puts("Changes written.\n");
+        tty_puts("Changes written.\n");
     }
 }
 
 static void shell_cmd_reboot(void) {
     shell_flush_pending_changes();
-    vga_puts("Rebooting...\n");
+    tty_puts("Rebooting...\n");
     signal_raise(HW_RESET);
 }
 
 static void shell_cmd_shutdown(void) {
     shell_flush_pending_changes();
-    vga_puts("Shutting down...\n");
+    tty_puts("Shutting down...\n");
     signal_raise(HW_PWR_DOWN);
 }
 
 static void shell_cmd_ticks(void) {
     uint64_t ticks = timer_ticks_get();
 
-    vga_puts("ticks ");
+    tty_puts("ticks ");
     shell_put_u64_hex(ticks);
-    vga_putc('\n');
+    tty_putc('\n');
+}
+
+static void shell_cmd_mmstat(void) {
+    mm_print_stats();
 }
 
 static void shell_version(void){
-	vga_puts("System/1 by Adava (AdavaSoftware) (C) 2026\n");
+	tty_puts("System/1 by Adava (AdavaSoftware) (C) 2026\n");
 }
 
 static void shell_print_fs_error(const char* cmd, int rc) {
-    vga_set_color(RED);
-    vga_puts(cmd);
-    vga_puts(": ");
-    vga_set_color(WHITE);
+    tty_set_color(TTY_RED);
+    tty_puts(cmd);
+    tty_puts(": ");
+    tty_set_color(TTY_WHITE);
 
     if (rc == FS_ERR_NOT_FOUND) {
-        vga_puts("path not found\n");
+        tty_puts("path not found\n");
         return;
     }
 
     if (rc == FS_ERR_EXISTS) {
-        vga_puts("already exists\n");
+        tty_puts("already exists\n");
         return;
     }
 
     if (rc == FS_ERR_NOT_DIR) {
-        vga_puts("not a directory\n");
+        tty_puts("not a directory\n");
         return;
     }
 
     if (rc == FS_ERR_INVALID) {
-        vga_puts("invalid path\n");
+        tty_puts("invalid path\n");
         return;
     }
 
     if (rc == FS_ERR_NO_SPACE) {
-        vga_puts("no space left in filesystem\n");
+        tty_puts("no space left in filesystem\n");
         return;
     }
 
     if (rc == FS_ERR_READ_ONLY) {
-        vga_puts("read-only filesystem\n");
+        tty_puts("read-only filesystem\n");
         return;
     }
 
-    vga_puts("unknown fs error\n");
+    tty_puts("unknown fs error\n");
 }
 
 static void shell_cmd_pwd(void) {
-    vga_puts(fs_get_cwd_path());
-    vga_putc('\n');
+    tty_puts(fs_get_cwd_path());
+    tty_putc('\n');
 }
 
 static void shell_cmd_ls(char** argv, uint32_t argc) {
@@ -532,11 +536,11 @@ static void shell_cmd_ls(char** argv, uint32_t argc) {
     }
 
     for (i = 0u; i < count; ++i) {
-        vga_puts(entries[i].name);
+        tty_puts(entries[i].name);
         if (entries[i].type == FS_NODE_DIR) {
-            vga_putc('/');
+            tty_putc('/');
         }
-        vga_putc('\n');
+        tty_putc('\n');
     }
 }
 
@@ -544,7 +548,7 @@ static void shell_cmd_cd(char** argv, uint32_t argc) {
     int rc;
 
     if (argc < 2u) {
-        vga_puts("cd: missing path\n");
+        tty_puts("cd: missing path\n");
         return;
     }
 
@@ -558,7 +562,7 @@ static void shell_cmd_mkdir(char** argv, uint32_t argc) {
     int rc;
 
     if (argc < 2u) {
-        vga_puts("mkdir: missing path\n");
+        tty_puts("mkdir: missing path\n");
         return;
     }
 
@@ -575,7 +579,7 @@ static void shell_cmd_cat(char** argv, uint32_t argc) {
     int rc;
 
     if (argc < 2u) {
-        vga_puts("usage: cat <file>\n");
+        tty_puts("usage: cat <file>\n");
         return;
     }
 
@@ -586,26 +590,26 @@ static void shell_cmd_cat(char** argv, uint32_t argc) {
     }
 
     for (i = 0u; i < size; ++i) {
-        vga_putc(buffer[i]);
+        tty_putc(buffer[i]);
     }
 
     if (size == 0u || buffer[size - 1u] != '\n') {
-        vga_putc('\n');
+        tty_putc('\n');
     }
 }
 
 static void shell_print_prompt(void) {
-    vga_puts(fs_get_cwd_path());
-    vga_puts(" > ");
+    tty_puts(fs_get_cwd_path());
+    tty_puts(" > ");
 }
 
 void shell_core_run(void) {
 	klog_info("shell", "Starting shell...\n");
-	vga_set_color(WHITE);
+	tty_set_color(TTY_WHITE);
     uint16_t row = 0u;
     uint16_t col = 0u;
-    vga_get_cursor(&row, &col);
-    vga_text_begin(row, col);
+    tty_get_cursor(&row, &col);
+    tty_text_begin(row, col);
     char line[SHELL_LINE_CAP];
     char history_line[SHELL_LINE_CAP];
     char* argv[SHELL_ARGV_MAX];
@@ -695,10 +699,15 @@ void shell_core_run(void) {
             continue;
         }
 
-		vga_set_color(RED);
-        vga_puts("unknown command: ");
-        vga_set_color(WHITE);
-        vga_puts(argv[0]);
-        vga_puts("\n");
+        if (shell_streq(argv[0], "mmstat")) {
+            shell_cmd_mmstat();
+            continue;
+        }
+
+		tty_set_color(TTY_RED);
+        tty_puts("unknown command: ");
+        tty_set_color(TTY_WHITE);
+        tty_puts(argv[0]);
+        tty_puts("\n");
     }
 }

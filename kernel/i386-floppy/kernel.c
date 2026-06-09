@@ -3,8 +3,9 @@
 #include "interrupts.h"
 #include "keyboard.h"
 #include "shell.h"
-#include "vga.h"
+#include "tty.h"
 #include "paging.h"
+#include "mm.h"
 #include "fs.h"
 
 #define FLOPPY_MAGIC 0x53314D47u
@@ -25,12 +26,18 @@ typedef struct {
 
 void kmain_floppy_i386(uint32_t magic, uint32_t boot_info_ptr) {
     boot_info_t* info = (boot_info_t*)(uintptr_t)boot_info_ptr;
-    
 
-    vga_init();
+    tty_init();
     if (paging_init(magic, boot_info_ptr) != 0) {
-        panic("paging_init failed");
+        panic("Paging_init failed");
     }
+    klog_info("paging", "Initialized");
+
+    if (mm_init(magic, boot_info_ptr) != 0) {
+        panic("MM_init failed");
+    }
+    klog_info("mm", "Initialized");
+
     interrupts_init();
     keyboard_init();
     irq_register_handler(1, keyboard_irq_handler);
@@ -43,19 +50,21 @@ void kmain_floppy_i386(uint32_t magic, uint32_t boot_info_ptr) {
     }
 
     klog_info("boot", "System/1 boot via floppy loader");
-    klog_info("kernel", "modules: vga, signals, interrupts, keyboard, shell");
+    klog_info("kernel", "Modules: vga, signals, interrupts, keyboard, shell");
     fs_set_boot_context(magic, boot_info_ptr);
     if (fs_init() != FS_OK) {
         panic("Unable to mount FS");
     }
-    vga_set_color(GREEN);
-    vga_puts("drive: ");
-    vga_hex_u32(info->boot_drive);
-    vga_puts("\nkernel: ");
-    vga_hex_u32(info->kernel_load_addr);
-    vga_puts("\nsize: ");
-    vga_hex_u32(info->kernel_size_bytes);
-    vga_puts("\n");
+    tty_set_color(TTY_GREEN);
+    tty_puts("drive: ");
+    tty_hex_u32(info->boot_drive);
+    tty_puts("\nkernel: ");
+    tty_hex_u32(info->kernel_load_addr);
+    tty_puts("\nsize: ");
+    tty_hex_u32(info->kernel_size_bytes);
+    tty_puts("\n");
+    klog_info("mm", "Initial stats");
+    mm_print_stats();
     klog_system_logo();
     shell_run();
     panic("Kernel loop ended!");

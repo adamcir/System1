@@ -2,6 +2,7 @@
 
 #define FAT12_ATTR_VOLUME_ID 0x08u
 #define FAT12_ATTR_DIRECTORY 0x10u
+#define FAT12_ATTR_LONG_NAME 0x0Fu
 #define FAT12_ENTRY_FREE 0x00u
 #define FAT12_ENTRY_DELETED 0xE5u
 #define FAT12_NAME_SLOTS 32u
@@ -154,6 +155,92 @@ static void fat12_copy_83_name(char* out, const uint8_t* entry) {
     }
 
     out[pos] = '\0';
+}
+
+static void fat12_lfn_clear(char* name, uint8_t* valid) {
+    if (name != 0) {
+        name[0] = '\0';
+    }
+    if (valid != 0) {
+        *valid = 0u;
+    }
+}
+
+static void fat12_lfn_copy_char(char* out, uint32_t pos, uint16_t value) {
+    if (out == 0 || pos + 1u >= FS_NAME_CAP) {
+        return;
+    }
+
+    if (value == 0x0000u) {
+        out[pos] = '\0';
+        return;
+    }
+
+    if (value == 0xFFFFu) {
+        return;
+    }
+
+    if (value < 0x80u) {
+        out[pos] = (char)value;
+        if (out[pos + 1u] == '\0') {
+            return;
+        }
+        return;
+    }
+
+    out[pos] = '?';
+}
+
+static void fat12_lfn_read_entry(char* name, uint8_t* valid, const uint8_t* entry) {
+    static const uint8_t offsets[13] = {
+        1u, 3u, 5u, 7u, 9u,
+        14u, 16u, 18u, 20u, 22u, 24u,
+        28u, 30u
+    };
+    uint8_t seq;
+    uint32_t base;
+    uint32_t i;
+
+    if (name == 0 || valid == 0 || entry == 0) {
+        return;
+    }
+
+    seq = (uint8_t)(entry[0] & 0x1Fu);
+    if (seq == 0u) {
+        fat12_lfn_clear(name, valid);
+        return;
+    }
+
+    if ((entry[0] & 0x40u) != 0u) {
+        for (i = 0u; i < FS_NAME_CAP; ++i) {
+            name[i] = '\0';
+        }
+        *valid = 1u;
+    } else if (*valid == 0u) {
+        return;
+    }
+
+    base = ((uint32_t)seq - 1u) * 13u;
+    if (base >= FS_NAME_CAP) {
+        return;
+    }
+
+    for (i = 0u; i < 13u && base + i + 1u < FS_NAME_CAP; ++i) {
+        uint16_t ch = fat12_le16(entry + offsets[i]);
+        fat12_lfn_copy_char(name, base + i, ch);
+        if (ch == 0x0000u) {
+            break;
+        }
+    }
+}
+
+static void fat12_copy_display_name(char* out, const uint8_t* entry, const char* lfn, uint8_t lfn_valid) {
+    if (lfn_valid != 0u && lfn != 0 && lfn[0] != '\0') {
+        fat12_copy_string(out, FS_NAME_CAP, lfn);
+        return;
+    }
+
+    fat12_copy_83_name(out, entry);
 }
 
 static int fat12_parse_bpb(const uint8_t* sector, fat12_bpb_t* out) {
@@ -722,7 +809,11 @@ static uint32_t fat12_get_next_cluster(uint32_t cluster) {
 static int fat12_find_entry_in_dir(uint32_t dir_cluster, const char* name, uint32_t* out_cluster, uint8_t* out_attr, uint32_t* out_size) {
     uint32_t current_cluster = dir_cluster;
     char entry_name[FS_NAME_CAP];
+    char lfn_name[FS_NAME_CAP];
+    uint8_t lfn_valid = 0u;
     int rc;
+
+    lfn_name[0] = '\0';
 
     if (dir_cluster == 0u) {
         uint32_t sector_index;
@@ -743,11 +834,23 @@ static int fat12_find_entry_in_dir(uint32_t dir_cluster, const char* name, uint3
                     return FS_ERR_NOT_FOUND;
                 }
 
-                if (first == FAT12_ENTRY_DELETED || (attr & FAT12_ATTR_VOLUME_ID) != 0u) {
+                if (first == FAT12_ENTRY_DELETED) {
+                    fat12_lfn_clear(lfn_name, &lfn_valid);
                     continue;
                 }
 
-                fat12_copy_83_name(entry_name, entry);
+                if (attr == FAT12_ATTR_LONG_NAME) {
+                    fat12_lfn_read_entry(lfn_name, &lfn_valid, entry);
+                    continue;
+                }
+
+                if ((attr & FAT12_ATTR_VOLUME_ID) != 0u) {
+                    fat12_lfn_clear(lfn_name, &lfn_valid);
+                    continue;
+                }
+
+                fat12_copy_display_name(entry_name, entry, lfn_name, lfn_valid);
+                fat12_lfn_clear(lfn_name, &lfn_valid);
                 if (fat12_name_eq(entry_name, name) != 0) {
                     uint16_t start_clust = fat12_le16(entry + 26u);
                     if (out_cluster) *out_cluster = start_clust;
@@ -779,11 +882,23 @@ static int fat12_find_entry_in_dir(uint32_t dir_cluster, const char* name, uint3
                         return FS_ERR_NOT_FOUND;
                     }
 
-                    if (first == FAT12_ENTRY_DELETED || (attr & FAT12_ATTR_VOLUME_ID) != 0u) {
+                    if (first == FAT12_ENTRY_DELETED) {
+                        fat12_lfn_clear(lfn_name, &lfn_valid);
                         continue;
                     }
 
-                    fat12_copy_83_name(entry_name, entry);
+                    if (attr == FAT12_ATTR_LONG_NAME) {
+                        fat12_lfn_read_entry(lfn_name, &lfn_valid, entry);
+                        continue;
+                    }
+
+                    if ((attr & FAT12_ATTR_VOLUME_ID) != 0u) {
+                        fat12_lfn_clear(lfn_name, &lfn_valid);
+                        continue;
+                    }
+
+                    fat12_copy_display_name(entry_name, entry, lfn_name, lfn_valid);
+                    fat12_lfn_clear(lfn_name, &lfn_valid);
                     if (fat12_name_eq(entry_name, name) != 0) {
                         uint16_t start_clust = fat12_le16(entry + 26u);
                         if (out_cluster) *out_cluster = start_clust;
@@ -1040,6 +1155,8 @@ static int fat12_read_file(const char* path, char* buffer, uint32_t cap, uint32_
 
 static int fat12_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, uint32_t* out_count) {
     uint32_t count = 0u;
+    char lfn_name[FS_NAME_CAP];
+    uint8_t lfn_valid = 0u;
     int rc;
 
     if (entries == 0 || out_count == 0) {
@@ -1059,6 +1176,7 @@ static int fat12_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, 
     }
 
     fat12_clear_names();
+    lfn_name[0] = '\0';
 
     if (target_cluster == 0u) {
         uint32_t sector_index;
@@ -1080,7 +1198,18 @@ static int fat12_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, 
                     return FS_OK;
                 }
 
-                if (first == FAT12_ENTRY_DELETED || (attr & FAT12_ATTR_VOLUME_ID) != 0u) {
+                if (first == FAT12_ENTRY_DELETED) {
+                    fat12_lfn_clear(lfn_name, &lfn_valid);
+                    continue;
+                }
+
+                if (attr == FAT12_ATTR_LONG_NAME) {
+                    fat12_lfn_read_entry(lfn_name, &lfn_valid, entry);
+                    continue;
+                }
+
+                if ((attr & FAT12_ATTR_VOLUME_ID) != 0u) {
+                    fat12_lfn_clear(lfn_name, &lfn_valid);
                     continue;
                 }
 
@@ -1089,7 +1218,8 @@ static int fat12_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, 
                     return FS_ERR_NO_SPACE;
                 }
 
-                fat12_copy_83_name(g_fat12_names[count], entry);
+                fat12_copy_display_name(g_fat12_names[count], entry, lfn_name, lfn_valid);
+                fat12_lfn_clear(lfn_name, &lfn_valid);
                 entries[count].name = g_fat12_names[count];
                 entries[count].type = ((attr & FAT12_ATTR_DIRECTORY) != 0u) ? FS_NODE_DIR : FS_NODE_FILE;
                 ++count;
@@ -1118,7 +1248,18 @@ static int fat12_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, 
                         return FS_OK;
                     }
 
-                    if (first == FAT12_ENTRY_DELETED || (attr & FAT12_ATTR_VOLUME_ID) != 0u) {
+                    if (first == FAT12_ENTRY_DELETED) {
+                        fat12_lfn_clear(lfn_name, &lfn_valid);
+                        continue;
+                    }
+
+                    if (attr == FAT12_ATTR_LONG_NAME) {
+                        fat12_lfn_read_entry(lfn_name, &lfn_valid, entry);
+                        continue;
+                    }
+
+                    if ((attr & FAT12_ATTR_VOLUME_ID) != 0u) {
+                        fat12_lfn_clear(lfn_name, &lfn_valid);
                         continue;
                     }
 
@@ -1127,7 +1268,8 @@ static int fat12_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, 
                         return FS_ERR_NO_SPACE;
                     }
 
-                    fat12_copy_83_name(g_fat12_names[count], entry);
+                    fat12_copy_display_name(g_fat12_names[count], entry, lfn_name, lfn_valid);
+                    fat12_lfn_clear(lfn_name, &lfn_valid);
                     entries[count].name = g_fat12_names[count];
                     entries[count].type = ((attr & FAT12_ATTR_DIRECTORY) != 0u) ? FS_NODE_DIR : FS_NODE_FILE;
                     ++count;

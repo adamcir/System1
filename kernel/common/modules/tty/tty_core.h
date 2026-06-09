@@ -1,5 +1,5 @@
-#ifndef SYSTEM1_X64_TTY_H
-#define SYSTEM1_X64_TTY_H
+#ifndef SYSTEM1_COMMON_TTY_CORE_H
+#define SYSTEM1_COMMON_TTY_CORE_H
 
 #include "types.h"
 
@@ -37,15 +37,15 @@ typedef enum {
 
 #endif
 
-void tty_init(void);
-void tty_clear(void);
-void tty_set_color(tty_color_t color);
-void tty_putc(char c);
-void tty_puts(const char* s);
-void tty_hex_u32(uint32_t value);
-void tty_get_cursor(uint16_t* out_row, uint16_t* out_col);
-void tty_text_begin(uint16_t row, uint16_t col);
-int tty_readline(char* buf, uint32_t cap);
-int tty_readline_ex(char* buf, uint32_t cap, const tty_readline_hooks_t* hooks);
+void tty_core_init(void);
+void tty_core_clear(void);
+void tty_core_set_color(tty_color_t color);
+void tty_core_putc(char c);
+void tty_core_puts(const char* s);
+void tty_core_hex_u32(uint32_t value);
+void tty_core_get_cursor(uint16_t* out_row, uint16_t* out_col);
+void tty_core_text_begin(uint16_t row, uint16_t col);
+int tty_core_readline(char* buf, uint32_t cap);
+int tty_core_readline_ex(char* buf, uint32_t cap, const tty_readline_hooks_t* hooks);
 
 #endif

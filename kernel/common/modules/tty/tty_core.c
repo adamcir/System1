@@ -1,8 +1,40 @@
-#include "tty-core.h"
+#include "tty_core.h"
 #include "types.h"
 #include "keyboard.h"
 #include "signals.h"
 #include "vga.h"
+
+void tty_core_init(void) {
+    vga_init();
+}
+
+void tty_core_clear(void) {
+    vga_init();
+}
+
+void tty_core_set_color(tty_color_t new_color) {
+    vga_set_color((vga_color_t)new_color);
+}
+
+void tty_core_putc(char c) {
+    vga_putc(c);
+}
+
+void tty_core_puts(const char* s) {
+    vga_puts(s);
+}
+
+void tty_core_hex_u32(uint32_t value) {
+    vga_hex_u32(value);
+}
+
+void tty_core_get_cursor(uint16_t* out_row, uint16_t* out_col) {
+    vga_get_cursor(out_row, out_col);
+}
+
+void tty_core_text_begin(uint16_t row, uint16_t col) {
+    vga_text_begin(row, col);
+}
 
 static int tty_insert_char(char* buf, uint32_t cap, uint32_t* len, uint32_t* cursor, uint8_t insert_mode, char c) {
     uint32_t i;

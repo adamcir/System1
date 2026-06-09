@@ -340,3 +340,21 @@ Next milestone plan (2026-03-04):
   - implementation plan persisted at `docs/plans/2026-03-12-paging-v1-implementation.md`
   - project state aligned in `PLAN.MD` + `CONTEXT.TXT` after Paging V1 merge work
   - next mandatory step remains interactive QEMU runtime sign-off for all 3 targets.
+- MM V1 work started on 2026-06-09:
+  - implementation plan persisted at `docs/plans/2026-06-09-simple-paging-memory-manager-implementation.md`
+  - new shared module: `kernel/common/modules/mm` (`mm.c`, `mm_core.c`, `mm_core.h`)
+  - new arch headers:
+    - `kernel/i386/modules/mm/mm.h`
+    - `kernel/x86_64/modules/mm/mm.h`
+    - `kernel/i386-floppy/modules/mm/mm.h`
+  - API:
+    - `mm_init(uint32_t boot_magic, uint32_t boot_info_ptr)`
+    - `kmalloc(uint32_t size)` / `kfree(void* ptr)`
+    - `mm_alloc_page()` / `mm_free_page(void* page)`
+    - `mm_get_stats(mm_stats_t* out)` / `mm_print_stats()`
+  - behavior:
+    - PMM bitmap over pages inside current 64 MiB identity map
+    - Multiboot2 mmap usable regions for ISO targets
+    - conservative `[1 MiB, 64 MiB)` fallback for floppy/generic boot
+    - first-fit PMM-backed kernel heap
+    - boot stats plus shell `mmstat`

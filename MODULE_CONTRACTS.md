@@ -9,6 +9,7 @@ This document defines the expected runtime contract for shared modules:
 - `keyboard`
 - `signals`
 - `paging`
+- `mm`
 
 ## `vga` Contract
 Public editing API:
@@ -97,3 +98,30 @@ Limitations (V1):
 - Identity mapping only; no higher-half mapping.
 - No userspace split.
 - No demand paging / copy-on-write.
+
+## `mm` Contract
+Public API:
+- `mm_init(uint32_t boot_magic, uint32_t boot_info_ptr)`
+- `kmalloc(uint32_t size)`
+- `kfree(void* ptr)`
+- `mm_alloc_page()`
+- `mm_free_page(void* page)`
+- `mm_get_stats(mm_stats_t* out)`
+- `mm_print_stats()`
+
+Behavior (V1):
+- Runs after `paging_init(...)` and uses the existing 64 MiB identity map.
+- Tracks physical 4 KiB pages with a bitmap.
+- Uses Multiboot2 memory map data on GRUB boot paths.
+- Uses fallback usable range `[1 MiB, 64 MiB)` on floppy/generic boot paths.
+- Reserves low memory, kernel image, boot info, and Multiboot2 module regions.
+- `kmalloc`/`kfree` use a first-fit kernel heap backed by PMM page allocations.
+- `kfree(0)` is a no-op.
+- `mmstat` shell command and boot logs expose hex page/heap stats.
+
+Limitations (V1):
+- Identity mapping only; allocated pages are returned as identity-mapped pointers.
+- No dynamic virtual map/unmap API.
+- No userspace allocator.
+- No demand paging.
+- Existing static pools such as RAMFS are not migrated by this module.

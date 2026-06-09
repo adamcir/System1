@@ -1,6 +1,6 @@
 #include "paging_core.h"
 #include "klog.h"
-#include "vga.h"
+#include "tty.h"
 
 #define MB2_BOOTLOADER_MAGIC 0x36D76289u
 #define FLOPPY_MAGIC 0x53314D47u
@@ -214,9 +214,9 @@ uintptr_t paging_core_identity_limit(void) {
 void paging_core_handle_page_fault(void) {
     uintptr_t fault_addr = read_cr2_addr();
 
-    vga_set_color(RED);
-    vga_puts("[PAGE FAULT] addr=");
-    vga_hex_u32((uint32_t)fault_addr);
-    vga_putc('\n');
+    tty_set_color(TTY_RED);
+    tty_puts("[PAGE FAULT] addr=");
+    tty_hex_u32((uint32_t)fault_addr);
+    tty_putc('\n');
     panic("Unhandled page fault");
 }
