@@ -7,6 +7,7 @@
 #include "paging.h"
 #include "mm.h"
 #include "fs.h"
+#include "syscall.h"
 
 void kmain_x86_64(uint32_t magic, uint32_t info) {
     tty_init();
@@ -31,6 +32,7 @@ void kmain_x86_64(uint32_t magic, uint32_t info) {
     if (fs_init() != FS_OK) {
         panic("Unable to mount FS");
     }
+    syscall_init();
     klog_info("mm", "Initial stats");
     mm_print_stats();
     klog_system_logo();
