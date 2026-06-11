@@ -14,6 +14,7 @@ The first implementation should still be conservative: one runnable process can 
 - No dynamic linker.
 - No general-purpose virtual memory policy beyond what `execve` needs.
 - No requirement to load programs from ISO media as writable files.
+- No direct ELF execution requirement. ELF can remain an intermediate toolchain format, but the kernel loader should consume System/1 `.prg` files.
 
 ## Process Table
 
@@ -78,15 +79,63 @@ The first implementation can use identity or simple fixed virtual mappings if th
 
 Syscall pointer arguments must eventually be validated against the current process user range before dereference. Until user mode exists, dispatcher validation can remain a TODO, but the syscall boundary should not grow APIs that assume trusted kernel pointers forever.
 
-## ELF Loader Requirements
+## SPRG Program Format
 
-Add a future `elf` or `loader` module that can load static ELF executables from VFS files. Initial requirements:
+System/1 programs use the `.prg` extension and start with the four byte magic:
 
-- Validate ELF magic, class, endianness, machine, and executable type.
+```text
+SPRG
+```
+
+`SPRG` is a small ELF-like executable format, not a raw flat binary. It keeps the useful `PT_LOAD` segment idea while removing sections, relocations, interpreters, dynamic linking, and symbol tables from the kernel loader.
+
+The first version should use little-endian 32-bit fields:
+
+```c
+typedef struct {
+    char magic[4];        /* "SPRG" */
+    uint32_t version;     /* 1 */
+    uint32_t arch;        /* 1 = i386, 2 = x86_64 */
+    uint32_t entry;       /* virtual entry point */
+    uint32_t phoff;       /* program header table offset */
+    uint32_t phnum;       /* program header count */
+    uint32_t flags;       /* reserved, must be 0 for v1 */
+} sprg_header_t;
+
+typedef struct {
+    uint32_t type;        /* 1 = LOAD */
+    uint32_t offset;      /* file offset */
+    uint32_t vaddr;       /* target virtual address */
+    uint32_t filesz;      /* bytes copied from file */
+    uint32_t memsz;       /* bytes mapped/zeroed */
+    uint32_t flags;       /* bit 0 R, bit 1 W, bit 2 X */
+    uint32_t align;       /* expected page alignment */
+    uint32_t reserved;    /* must be 0 for v1 */
+} sprg_phdr_t;
+```
+
+The kernel should reject a program unless:
+
+- the path ends in `.prg`
+- the first four bytes are exactly `SPRG`
+- `version == 1`
+- `arch` matches the boot target
+- all program headers fit inside the file
+- every program header is type `LOAD`
+- `memsz >= filesz`
+- segment ranges do not overlap
+
+ELF can still be used as a compiler/linker intermediate. A linker script or later converter should produce the final `.prg` layout with an `SPRG` header at offset zero.
+
+## SPRG Loader Requirements
+
+Add a future `sprg` or `loader` module that can load static System/1 `.prg` executables from VFS files. Initial requirements:
+
+- Validate `.prg` extension, `SPRG` magic, version, architecture, and header bounds.
 - Support only the architecture being booted.
-- Load `PT_LOAD` segments.
+- Load `SPRG_LOAD` segments.
 - Respect segment permissions at least as metadata; strict page permissions can follow paging support.
-- Zero BSS where `p_memsz > p_filesz`.
+- Zero BSS where `memsz > filesz`.
 - Reject overlapping, malformed, or out-of-range segments.
 - Return entry point, initial user stack pointer, and address-space metadata.
 
@@ -109,6 +158,7 @@ int posix_execve(const char* path, char* const argv[], char* const envp[]);
 Initial behavior:
 
 - Resolve `path` relative to current process cwd.
+- Reject paths that do not end in `.prg`.
 - Open and validate the executable.
 - Build a new address space.
 - Copy argument and environment strings onto the new user stack.
@@ -149,7 +199,7 @@ Until then, support process creation through `execve` from a kernel shell comman
 2. Move fd table into process state while preserving existing shell behavior.
 3. Move cwd into process state and adapt FS path normalization wrappers.
 4. Add syscall pointer-validation hooks, initially permissive for kernel callers.
-5. Add ELF loader for static executables.
+5. Add SPRG loader for static `.prg` executables.
 6. Add `execve` syscall and kernel-side smoke command.
 7. Add user-mode transition for one architecture.
 8. Repeat for remaining boot targets.
@@ -168,4 +218,3 @@ After user mode:
 - Run a program with argv and verify it prints arguments.
 - Run a program that opens, reads, writes, stats, and unlinks files through syscall wrappers.
 - Verify failed `execve` leaves the caller alive.
-
