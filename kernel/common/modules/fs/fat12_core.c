@@ -1324,6 +1324,44 @@ static int fat12_close(uint32_t node_id) {
     return FS_OK;
 }
 
+static int fat12_stat(const char* path, fs_stat_t* out_stat) {
+    uint32_t cluster = 0u;
+    uint32_t size = 0u;
+    uint8_t is_dir = 0u;
+    int rc;
+
+    if (path == 0 || out_stat == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    rc = fat12_resolve_path_info(path, &cluster, &is_dir, &size);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    (void)cluster;
+    out_stat->mode = (is_dir != 0u) ? FS_MODE_DIR : FS_MODE_FILE;
+    out_stat->size = (is_dir != 0u) ? 0u : size;
+    return FS_OK;
+}
+
+static int fat12_fstat(uint32_t node_id, fs_stat_t* out_stat) {
+    fat12_open_file_t* file;
+
+    if (node_id == 0u || node_id > FAT12_OPEN_FILE_CAP || out_stat == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    file = &g_fat12_open_files[node_id - 1u];
+    if (file->used == 0u) {
+        return FS_ERR_INVALID;
+    }
+
+    out_stat->mode = FS_MODE_FILE;
+    out_stat->size = file->size;
+    return FS_OK;
+}
+
 static int fat12_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, uint32_t* out_count) {
     uint32_t count = 0u;
     char lfn_name[FS_NAME_CAP];
@@ -1465,7 +1503,9 @@ static const vfs_driver_t g_fat12_driver = {
     fat12_read,
     fat12_write,
     fat12_size,
-    fat12_close
+    fat12_close,
+    fat12_stat,
+    fat12_fstat
 };
 
 const vfs_driver_t* fat12_core_driver(void) {

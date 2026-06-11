@@ -763,6 +763,36 @@ int ramfs_core_close(uint32_t node_id) {
     return (fs_node_from_id(node_id) == 0) ? FS_ERR_INVALID : FS_OK;
 }
 
+static int ramfs_fill_stat(fs_node_t* node, fs_stat_t* out_stat) {
+    if (node == 0 || out_stat == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    out_stat->mode = (node->type == FS_NODE_DIR) ? FS_MODE_DIR : FS_MODE_FILE;
+    out_stat->size = (node->type == FS_NODE_FILE) ? node->size : 0u;
+    return FS_OK;
+}
+
+static int ramfs_core_stat(const char* path, fs_stat_t* out_stat) {
+    fs_node_t* node = 0;
+    int rc;
+
+    if (path == 0 || out_stat == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    rc = fs_resolve_path(path, &node);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    return ramfs_fill_stat(node, out_stat);
+}
+
+static int ramfs_core_fstat(uint32_t node_id, fs_stat_t* out_stat) {
+    return ramfs_fill_stat(fs_node_from_id(node_id), out_stat);
+}
+
 static int ramfs_core_driver_init(void) {
     return (g_root == 0) ? FS_ERR_INVALID : FS_OK;
 }
@@ -778,7 +808,9 @@ static const vfs_driver_t g_ramfs_driver = {
     ramfs_core_read,
     ramfs_core_write,
     ramfs_core_size,
-    ramfs_core_close
+    ramfs_core_close,
+    ramfs_core_stat,
+    ramfs_core_fstat
 };
 
 const vfs_driver_t* ramfs_core_driver(void) {

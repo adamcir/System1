@@ -12,6 +12,9 @@
 #define FS_NODE_DIR 1u
 #define FS_NODE_FILE 2u
 
+#define FS_MODE_DIR  0040000u
+#define FS_MODE_FILE 0100000u
+
 #define FS_OK 0
 #define FS_ERR_NOT_FOUND -1
 #define FS_ERR_EXISTS -2
@@ -36,6 +39,11 @@ typedef struct {
     uint8_t type;
 } fs_dirent_t;
 
+typedef struct {
+    uint32_t mode;
+    uint32_t size;
+} fs_stat_t;
+
 #endif
 
 int fs_core_init(void);
@@ -54,5 +62,7 @@ int fs_core_read(uint32_t node_id, uint32_t offset, char* buffer, uint32_t cap, 
 int fs_core_write(uint32_t node_id, uint32_t offset, const char* buffer, uint32_t size, uint32_t* out_written);
 int fs_core_size(uint32_t node_id, uint32_t* out_size);
 int fs_core_close(uint32_t node_id);
+int fs_core_stat(const char* path, fs_stat_t* out_stat);
+int fs_core_fstat(uint32_t node_id, fs_stat_t* out_stat);
 
 #endif

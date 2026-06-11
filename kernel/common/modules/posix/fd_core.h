@@ -1,6 +1,7 @@
 #ifndef SYSTEM1_COMMON_FD_CORE_H
 #define SYSTEM1_COMMON_FD_CORE_H
 
+#include "fs_core.h"
 #include "types.h"
 
 #define POSIX_FD_CAP 32u
@@ -14,5 +15,6 @@ int fd_core_close(int fd);
 int fd_core_read(int fd, void* buffer, uint32_t count);
 int fd_core_write(int fd, const void* buffer, uint32_t count);
 int fd_core_lseek(int fd, int offset, uint32_t whence);
+int fd_core_fstat(int fd, fs_stat_t* out_stat);
 
 #endif

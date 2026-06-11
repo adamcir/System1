@@ -640,6 +640,44 @@ static int iso_close(uint32_t node_id) {
     return FS_OK;
 }
 
+static int iso_stat(const char* path, fs_stat_t* out_stat) {
+    uint32_t target_lba = 0u;
+    uint32_t target_size = 0u;
+    uint8_t is_dir = 0u;
+    int rc;
+
+    if (path == 0 || out_stat == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    rc = iso_resolve_path(path, &target_lba, &target_size, &is_dir);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    (void)target_lba;
+    out_stat->mode = (is_dir != 0u) ? FS_MODE_DIR : FS_MODE_FILE;
+    out_stat->size = (is_dir != 0u) ? 0u : target_size;
+    return FS_OK;
+}
+
+static int iso_fstat(uint32_t node_id, fs_stat_t* out_stat) {
+    iso_open_file_t* file;
+
+    if (node_id == 0u || node_id > ISO9660_OPEN_FILE_CAP || out_stat == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    file = &g_iso_open_files[node_id - 1u];
+    if (file->used == 0u) {
+        return FS_ERR_INVALID;
+    }
+
+    out_stat->mode = FS_MODE_FILE;
+    out_stat->size = file->size;
+    return FS_OK;
+}
+
 static int iso_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, uint32_t* out_count) {
     uint32_t count = 0u;
     int rc;
@@ -716,7 +754,9 @@ static const vfs_driver_t g_iso_driver = {
     iso_read,
     iso_write,
     iso_size,
-    iso_close
+    iso_close,
+    iso_stat,
+    iso_fstat
 };
 
 const vfs_driver_t* iso9660_core_driver(void) {

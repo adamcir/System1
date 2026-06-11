@@ -15,6 +15,8 @@ typedef struct {
     int (*write)(uint32_t node_id, uint32_t offset, const char* buffer, uint32_t size, uint32_t* out_written);
     int (*size)(uint32_t node_id, uint32_t* out_size);
     int (*close)(uint32_t node_id);
+    int (*stat)(const char* path, fs_stat_t* out_stat);
+    int (*fstat)(uint32_t node_id, fs_stat_t* out_stat);
 } vfs_driver_t;
 
 #endif

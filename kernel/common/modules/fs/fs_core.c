@@ -1150,3 +1150,49 @@ int fs_core_close(uint32_t node_id) {
 
     return driver->close(local_id);
 }
+
+int fs_core_stat(const char* path, fs_stat_t* out_stat) {
+    char full_path[FS_PATH_CAP];
+    int rc;
+
+    if (path == 0 || out_stat == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    rc = fs_core_normalize_path(fs_core_get_cwd_path(), path, full_path, FS_PATH_CAP);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    if (g_media_driver != 0 && g_media_driver->stat != 0) {
+        rc = g_media_driver->stat(full_path, out_stat);
+        if (rc == FS_OK) {
+            return FS_OK;
+        }
+    }
+
+    if (g_root_driver == 0 || g_root_driver->stat == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    return g_root_driver->stat(full_path, out_stat);
+}
+
+int fs_core_fstat(uint32_t node_id, fs_stat_t* out_stat) {
+    const vfs_driver_t* driver;
+    uint32_t local_id;
+
+    if ((node_id & FS_MEDIA_NODE_FLAG) != 0u) {
+        driver = g_media_driver;
+        local_id = node_id & FS_NODE_ID_MASK;
+    } else {
+        driver = g_root_driver;
+        local_id = node_id;
+    }
+
+    if (driver == 0 || driver->fstat == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    return driver->fstat(local_id, out_stat);
+}

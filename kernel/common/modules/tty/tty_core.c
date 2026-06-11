@@ -4,6 +4,8 @@
 #include "signals.h"
 #include "vga.h"
 
+#define TTY_TAB_WIDTH 8u
+
 void tty_core_init(void) {
     vga_init();
 }
@@ -17,6 +19,24 @@ void tty_core_set_color(tty_color_t new_color) {
 }
 
 void tty_core_putc(char c) {
+    uint16_t row = 0u;
+    uint16_t col = 0u;
+    uint16_t spaces;
+    uint16_t i;
+
+    if (c == '\t') {
+        vga_get_cursor(&row, &col);
+        spaces = (uint16_t)(TTY_TAB_WIDTH - ((uint32_t)col % TTY_TAB_WIDTH));
+        if (spaces == 0u) {
+            spaces = TTY_TAB_WIDTH;
+        }
+
+        for (i = 0u; i < spaces; ++i) {
+            vga_putc(' ');
+        }
+        return;
+    }
+
     vga_putc(c);
 }
 

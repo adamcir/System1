@@ -244,3 +244,20 @@ int fd_core_lseek(int fd, int offset, uint32_t whence) {
     entry->offset = (uint32_t)next;
     return next;
 }
+
+int fd_core_fstat(int fd, fs_stat_t* out_stat) {
+    int rc;
+
+    fd_core_ensure_init();
+
+    if (fd_valid(fd) == 0 || out_stat == 0 || g_fds[fd].kind != FD_KIND_VFS) {
+        return -POSIX_EBADF;
+    }
+
+    rc = fs_core_fstat(g_fds[fd].node_id, out_stat);
+    if (rc != FS_OK) {
+        return fd_to_errno(rc);
+    }
+
+    return 0;
+}

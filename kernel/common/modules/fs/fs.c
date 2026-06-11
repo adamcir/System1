@@ -40,3 +40,7 @@ int fs_read_file(const char* path, char* buffer, uint32_t cap, uint32_t* out_siz
 int fs_to_errno(int rc) {
     return fs_core_to_errno(rc);
 }
+
+int fs_stat(const char* path, fs_stat_t* out_stat) {
+    return fs_core_stat(path, out_stat);
+}

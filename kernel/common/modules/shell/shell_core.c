@@ -16,7 +16,7 @@
 
 static const char* g_shell_commands[] = {
     "help", "clear", "echo", "reboot", "shutdown", "ticks",
-    "version", "pwd", "ls", "cd", "mkdir", "cat", "mmstat"
+    "version", "pwd", "ls", "cd", "mkdir", "cat", "stat", "mmstat"
 };
 
 static char g_shell_history[SHELL_HISTORY_CAP][SHELL_LINE_CAP];
@@ -26,6 +26,7 @@ static int g_shell_history_nav = -1;
 static char g_shell_history_draft[SHELL_LINE_CAP];
 
 static void shell_print_fs_error(const char* cmd, int rc);
+static void shell_print_posix_path_error(const char* cmd, const char* path, int rc);
 
 static int shell_streq(const char* a, const char* b) {
     while (*a && *b) {
@@ -404,8 +405,27 @@ static void shell_put_u64_hex(uint64_t value) {
     }
 }
 
+static void shell_put_u32_dec(uint32_t value) {
+    char digits[10];
+    uint32_t count = 0u;
+
+    if (value == 0u) {
+        tty_putc('0');
+        return;
+    }
+
+    while (value != 0u && count < 10u) {
+        digits[count++] = (char)('0' + (value % 10u));
+        value /= 10u;
+    }
+
+    while (count > 0u) {
+        tty_putc(digits[--count]);
+    }
+}
+
 static void shell_cmd_help(void) {
-    tty_puts("help clear echo reboot shutdown ticks version pwd ls cd mkdir cat mmstat\n");
+    tty_puts("help clear echo reboot shutdown ticks version pwd ls cd mkdir cat stat mmstat\n");
 }
 
 static void shell_cmd_clear(void) {
@@ -516,6 +536,44 @@ static void shell_print_fs_error(const char* cmd, int rc) {
     tty_puts("unknown fs error\n");
 }
 
+static void shell_print_posix_path_error(const char* cmd, const char* path, int rc) {
+    int err = (rc < 0) ? -rc : rc;
+
+    tty_set_color(TTY_RED);
+    tty_puts(cmd);
+    tty_puts(": ");
+    tty_set_color(TTY_WHITE);
+    tty_puts(path);
+    tty_puts(": ");
+
+    if (err == POSIX_ENOENT) {
+        tty_puts("No such file or directory\n");
+        return;
+    }
+
+    if (err == POSIX_ENOTDIR || err == POSIX_EISDIR) {
+        tty_puts("Is a directory\n");
+        return;
+    }
+
+    if (err == POSIX_EBADF) {
+        tty_puts("Bad file descriptor\n");
+        return;
+    }
+
+    if (err == POSIX_EINVAL) {
+        tty_puts("Invalid argument\n");
+        return;
+    }
+
+    if (err == POSIX_EIO) {
+        tty_puts("Input/output error\n");
+        return;
+    }
+
+    tty_puts("Error\n");
+}
+
 static void shell_cmd_pwd(void) {
     tty_puts(fs_get_cwd_path());
     tty_putc('\n');
@@ -575,43 +633,69 @@ static void shell_cmd_mkdir(char** argv, uint32_t argc) {
     }
 }
 
-static void shell_cat_putc(char c) {
-    uint32_t i;
-
-    if (c == '\t') {
-        for (i = 0u; i < 4u; ++i) {
-            tty_putc(' ');
-        }
-        return;
-    }
-
-    tty_putc(c);
-}
-
 static void shell_cmd_cat(char** argv, uint32_t argc) {
     static char buffer[SHELL_CAT_BUF_CAP];
-    uint32_t size = 0u;
-    uint32_t i;
-    int rc;
+    uint32_t argi;
 
     if (argc < 2u) {
         tty_puts("usage: cat <file>\n");
         return;
     }
 
-    rc = fs_read_file(argv[1], buffer, SHELL_CAT_BUF_CAP, &size);
-    if (rc != FS_OK) {
-        shell_print_fs_error("cat", rc);
+    for (argi = 1u; argi < argc; ++argi) {
+        int fd;
+        int close_rc;
+
+        fd = posix_open(argv[argi], FS_O_RDONLY);
+        if (fd < 0) {
+            shell_print_posix_path_error("cat", argv[argi], fd);
+            continue;
+        }
+
+        for (;;) {
+            int size = posix_read(fd, buffer, SHELL_CAT_BUF_CAP);
+            if (size < 0) {
+                shell_print_posix_path_error("cat", argv[argi], size);
+                break;
+            }
+
+            if (size == 0) {
+                break;
+            }
+
+            if (posix_write(POSIX_STDOUT_FILENO, buffer, (uint32_t)size) < 0) {
+                shell_print_posix_path_error("cat", argv[argi], -POSIX_EBADF);
+                break;
+            }
+        }
+
+        close_rc = posix_close(fd);
+        if (close_rc < 0) {
+            shell_print_posix_path_error("cat", argv[argi], close_rc);
+        }
+    }
+}
+
+static void shell_cmd_stat(char** argv, uint32_t argc) {
+    fs_stat_t st;
+    int rc;
+
+    if (argc < 2u) {
+        tty_puts("usage: stat <path>\n");
         return;
     }
 
-    for (i = 0u; i < size; ++i) {
-        shell_cat_putc(buffer[i]);
+    rc = posix_stat(argv[1], &st);
+    if (rc < 0) {
+        shell_print_posix_path_error("stat", argv[1], rc);
+        return;
     }
 
-    if (size == 0u || buffer[size - 1u] != '\n') {
-        tty_putc('\n');
-    }
+    tty_puts("mode ");
+    tty_hex_u32(st.mode);
+    tty_puts(" size ");
+    shell_put_u32_dec(st.size);
+    tty_putc('\n');
 }
 
 static void shell_print_prompt(void) {
@@ -712,6 +796,11 @@ void shell_core_run(void) {
 
         if (shell_streq(argv[0], "cat")) {
             shell_cmd_cat(argv, argc);
+            continue;
+        }
+
+        if (shell_streq(argv[0], "stat")) {
+            shell_cmd_stat(argv, argc);
             continue;
         }
 
