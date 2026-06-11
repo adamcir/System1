@@ -42,14 +42,17 @@ static int shell_streq(const char* a, const char* b) {
 
 static uint32_t shell_tokenize(char* line, char** argv, uint32_t argv_cap) {
     uint32_t argc = 0u;
-    char* p = line;
+    char* read = line;
+    char* write = line;
 
-    while (*p != '\0') {
-        while (*p == ' ' || *p == '\t') {
-            ++p;
+    while (*read != '\0') {
+        char quote_char = '\0';
+
+        while (*read == ' ' || *read == '\t') {
+            ++read;
         }
 
-        if (*p == '\0') {
+        if (*read == '\0') {
             break;
         }
 
@@ -57,18 +60,37 @@ static uint32_t shell_tokenize(char* line, char** argv, uint32_t argv_cap) {
             break;
         }
 
-        argv[argc++] = p;
+        argv[argc++] = write;
 
-        while (*p != '\0' && *p != ' ' && *p != '\t') {
-            ++p;
+        while (*read != '\0') {
+            if (quote_char == '\0' && (*read == ' ' || *read == '\t')) {
+                break;
+            }
+
+            if (quote_char == '\0' && (*read == '\'' || *read == '"')) {
+                quote_char = *read++;
+                continue;
+            }
+
+            if (quote_char != '\0' && *read == quote_char) {
+                quote_char = '\0';
+                ++read;
+                continue;
+            }
+
+            if (quote_char == '"' && *read == '\\' &&
+                (read[1] == '"' || read[1] == '\\')) {
+                ++read;
+            }
+
+            *write++ = *read++;
         }
 
-        if (*p == '\0') {
-            break;
-        }
+        *write++ = '\0';
 
-        *p = '\0';
-        ++p;
+        while (*read == ' ' || *read == '\t') {
+            ++read;
+        }
     }
 
     return argc;
@@ -436,14 +458,29 @@ static void shell_cmd_clear(void) {
 
 static void shell_cmd_echo(char** argv, uint32_t argc) {
     uint32_t i;
+    uint32_t first = 1u;
+    uint8_t newline = 1u;
 
-    for (i = 1u; i < argc; ++i) {
-        if (i > 1u) {
+    if (argc > 1u && shell_streq(argv[1], "--")) {
+        first = 2u;
+    } else if (argc > 1u && shell_streq(argv[1], "-n")) {
+        newline = 0u;
+        first = 2u;
+        if (argc > 2u && shell_streq(argv[2], "--")) {
+            first = 3u;
+        }
+    }
+
+    for (i = first; i < argc; ++i) {
+        if (i > first) {
             tty_putc(' ');
         }
         tty_puts(argv[i]);
     }
-    tty_putc('\n');
+
+    if (newline != 0u) {
+        tty_putc('\n');
+    }
 }
 
 static void shell_flush_pending_changes(void) {
