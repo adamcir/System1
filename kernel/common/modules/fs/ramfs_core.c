@@ -793,6 +793,47 @@ static int ramfs_core_fstat(uint32_t node_id, fs_stat_t* out_stat) {
     return ramfs_fill_stat(fs_node_from_id(node_id), out_stat);
 }
 
+int ramfs_core_unlink(const char* path) {
+    fs_node_t* node = 0;
+    fs_node_t* parent;
+    uint32_t i;
+    int rc;
+
+    if (path == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    rc = fs_resolve_path(path, &node);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    if (node == g_root || node->type == FS_NODE_DIR) {
+        return FS_ERR_IS_DIR;
+    }
+
+    parent = node->parent;
+    if (parent == 0 || parent->type != FS_NODE_DIR) {
+        return FS_ERR_INVALID;
+    }
+
+    for (i = 0u; i < parent->child_count; ++i) {
+        if (parent->children[i] == node) {
+            uint32_t j;
+            for (j = i + 1u; j < parent->child_count; ++j) {
+                parent->children[j - 1u] = parent->children[j];
+            }
+            parent->children[parent->child_count - 1u] = 0;
+            parent->child_count--;
+            fs_memzero(node, sizeof(*node));
+            g_dirty = 1u;
+            return FS_OK;
+        }
+    }
+
+    return FS_ERR_INVALID;
+}
+
 static int ramfs_core_driver_init(void) {
     return (g_root == 0) ? FS_ERR_INVALID : FS_OK;
 }
@@ -810,7 +851,8 @@ static const vfs_driver_t g_ramfs_driver = {
     ramfs_core_size,
     ramfs_core_close,
     ramfs_core_stat,
-    ramfs_core_fstat
+    ramfs_core_fstat,
+    ramfs_core_unlink
 };
 
 const vfs_driver_t* ramfs_core_driver(void) {

@@ -44,3 +44,7 @@ int fs_to_errno(int rc) {
 int fs_stat(const char* path, fs_stat_t* out_stat) {
     return fs_core_stat(path, out_stat);
 }
+
+int fs_unlink(const char* path) {
+    return fs_core_unlink(path);
+}

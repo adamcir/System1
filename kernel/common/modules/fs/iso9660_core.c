@@ -678,6 +678,11 @@ static int iso_fstat(uint32_t node_id, fs_stat_t* out_stat) {
     return FS_OK;
 }
 
+static int iso_unlink(const char* path) {
+    (void)path;
+    return FS_ERR_READ_ONLY;
+}
+
 static int iso_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, uint32_t* out_count) {
     uint32_t count = 0u;
     int rc;
@@ -756,7 +761,8 @@ static const vfs_driver_t g_iso_driver = {
     iso_size,
     iso_close,
     iso_stat,
-    iso_fstat
+    iso_fstat,
+    iso_unlink
 };
 
 const vfs_driver_t* iso9660_core_driver(void) {

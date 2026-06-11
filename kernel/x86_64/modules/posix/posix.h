@@ -17,5 +17,6 @@ int posix_write(int fd, const void* buffer, uint32_t count);
 int posix_lseek(int fd, int offset, uint32_t whence);
 int posix_stat(const char* path, fs_stat_t* out_stat);
 int posix_fstat(int fd, fs_stat_t* out_stat);
+int posix_unlink(const char* path);
 
 #endif

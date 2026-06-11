@@ -90,6 +90,10 @@ int fs_core_to_errno(int rc) {
         return POSIX_EROFS;
     }
 
+    if (rc == FS_ERR_IS_DIR) {
+        return POSIX_EISDIR;
+    }
+
     return POSIX_EIO;
 }
 
@@ -1195,4 +1199,24 @@ int fs_core_fstat(uint32_t node_id, fs_stat_t* out_stat) {
     }
 
     return driver->fstat(local_id, out_stat);
+}
+
+int fs_core_unlink(const char* path) {
+    char full_path[FS_PATH_CAP];
+    int rc;
+
+    if (path == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    rc = fs_core_normalize_path(fs_core_get_cwd_path(), path, full_path, FS_PATH_CAP);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    if (g_root_driver == 0 || g_root_driver->unlink == 0) {
+        return FS_ERR_READ_ONLY;
+    }
+
+    return g_root_driver->unlink(full_path);
 }

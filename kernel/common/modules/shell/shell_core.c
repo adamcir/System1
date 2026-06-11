@@ -16,7 +16,8 @@
 
 static const char* g_shell_commands[] = {
     "help", "clear", "echo", "reboot", "shutdown", "ticks",
-    "version", "pwd", "ls", "cd", "mkdir", "cat", "stat", "mmstat"
+    "version", "pwd", "ls", "cd", "mkdir", "cat", "stat",
+    "touch", "write", "rm", "mmstat"
 };
 
 static char g_shell_history[SHELL_HISTORY_CAP][SHELL_LINE_CAP];
@@ -425,7 +426,7 @@ static void shell_put_u32_dec(uint32_t value) {
 }
 
 static void shell_cmd_help(void) {
-    tty_puts("help clear echo reboot shutdown ticks version pwd ls cd mkdir cat stat mmstat\n");
+    tty_puts("help clear echo reboot shutdown ticks version pwd ls cd mkdir cat stat touch write rm mmstat\n");
 }
 
 static void shell_cmd_clear(void) {
@@ -698,6 +699,88 @@ static void shell_cmd_stat(char** argv, uint32_t argc) {
     tty_putc('\n');
 }
 
+static void shell_cmd_touch(char** argv, uint32_t argc) {
+    int fd;
+    int rc;
+
+    if (argc < 2u) {
+        tty_puts("usage: touch <file>\n");
+        return;
+    }
+
+    fd = posix_open(argv[1], FS_O_CREAT | FS_O_RDWR);
+    if (fd < 0) {
+        shell_print_posix_path_error("touch", argv[1], fd);
+        return;
+    }
+
+    rc = posix_close(fd);
+    if (rc < 0) {
+        shell_print_posix_path_error("touch", argv[1], rc);
+    }
+}
+
+static void shell_cmd_write(char** argv, uint32_t argc) {
+    uint32_t i;
+    int fd;
+    int rc;
+
+    if (argc < 3u) {
+        tty_puts("usage: write <file> <text...>\n");
+        return;
+    }
+
+    fd = posix_open(argv[1], FS_O_CREAT | FS_O_TRUNC | FS_O_WRONLY);
+    if (fd < 0) {
+        shell_print_posix_path_error("write", argv[1], fd);
+        return;
+    }
+
+    for (i = 2u; i < argc; ++i) {
+        if (i > 2u) {
+            rc = posix_write(fd, " ", 1u);
+            if (rc < 0) {
+                shell_print_posix_path_error("write", argv[1], rc);
+                (void)posix_close(fd);
+                return;
+            }
+        }
+
+        rc = posix_write(fd, argv[i], shell_strlen(argv[i]));
+        if (rc < 0) {
+            shell_print_posix_path_error("write", argv[1], rc);
+            (void)posix_close(fd);
+            return;
+        }
+    }
+
+    rc = posix_write(fd, "\n", 1u);
+    if (rc < 0) {
+        shell_print_posix_path_error("write", argv[1], rc);
+        (void)posix_close(fd);
+        return;
+    }
+
+    rc = posix_close(fd);
+    if (rc < 0) {
+        shell_print_posix_path_error("write", argv[1], rc);
+    }
+}
+
+static void shell_cmd_rm(char** argv, uint32_t argc) {
+    int rc;
+
+    if (argc < 2u) {
+        tty_puts("usage: rm <file>\n");
+        return;
+    }
+
+    rc = posix_unlink(argv[1]);
+    if (rc < 0) {
+        shell_print_posix_path_error("rm", argv[1], rc);
+    }
+}
+
 static void shell_print_prompt(void) {
     tty_puts(fs_get_cwd_path());
     tty_puts(" > ");
@@ -801,6 +884,21 @@ void shell_core_run(void) {
 
         if (shell_streq(argv[0], "stat")) {
             shell_cmd_stat(argv, argc);
+            continue;
+        }
+
+        if (shell_streq(argv[0], "touch")) {
+            shell_cmd_touch(argv, argc);
+            continue;
+        }
+
+        if (shell_streq(argv[0], "write")) {
+            shell_cmd_write(argv, argc);
+            continue;
+        }
+
+        if (shell_streq(argv[0], "rm")) {
+            shell_cmd_rm(argv, argc);
             continue;
         }
 

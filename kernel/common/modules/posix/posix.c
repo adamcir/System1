@@ -53,3 +53,12 @@ int posix_stat(const char* path, fs_stat_t* out_stat) {
 int posix_fstat(int fd, fs_stat_t* out_stat) {
     return fd_core_fstat(fd, out_stat);
 }
+
+int posix_unlink(const char* path) {
+    int rc = fs_core_unlink(path);
+    if (rc != FS_OK) {
+        return posix_fs_to_errno(rc);
+    }
+
+    return 0;
+}

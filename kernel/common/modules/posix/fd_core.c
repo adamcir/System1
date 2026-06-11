@@ -156,6 +156,10 @@ int fd_core_read(int fd, void* buffer, uint32_t count) {
         return -POSIX_EBADF;
     }
 
+    if ((entry->flags & FS_O_RDWR) == FS_O_WRONLY) {
+        return -POSIX_EBADF;
+    }
+
     rc = fs_core_read(entry->node_id, entry->offset, (char*)buffer, count, &size);
     if (rc != FS_OK) {
         return fd_to_errno(rc);
@@ -187,6 +191,10 @@ int fd_core_write(int fd, const void* buffer, uint32_t count) {
     }
 
     if (entry->kind != FD_KIND_VFS) {
+        return -POSIX_EBADF;
+    }
+
+    if ((entry->flags & FS_O_RDWR) == FS_O_RDONLY) {
         return -POSIX_EBADF;
     }
 

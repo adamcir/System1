@@ -22,6 +22,7 @@
 #define FS_ERR_INVALID -4
 #define FS_ERR_NO_SPACE -5
 #define FS_ERR_READ_ONLY -6
+#define FS_ERR_IS_DIR -7
 
 #define FS_O_RDONLY 0x0001u
 #define FS_O_WRONLY 0x0002u
@@ -64,5 +65,6 @@ int fs_core_size(uint32_t node_id, uint32_t* out_size);
 int fs_core_close(uint32_t node_id);
 int fs_core_stat(const char* path, fs_stat_t* out_stat);
 int fs_core_fstat(uint32_t node_id, fs_stat_t* out_stat);
+int fs_core_unlink(const char* path);
 
 #endif

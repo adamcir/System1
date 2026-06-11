@@ -21,5 +21,6 @@ int ramfs_core_read(uint32_t node_id, uint32_t offset, char* buffer, uint32_t ca
 int ramfs_core_write(uint32_t node_id, uint32_t offset, const char* buffer, uint32_t size, uint32_t* out_written);
 int ramfs_core_size(uint32_t node_id, uint32_t* out_size);
 int ramfs_core_close(uint32_t node_id);
+int ramfs_core_unlink(const char* path);
 
 #endif

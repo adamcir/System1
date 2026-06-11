@@ -1362,6 +1362,11 @@ static int fat12_fstat(uint32_t node_id, fs_stat_t* out_stat) {
     return FS_OK;
 }
 
+static int fat12_unlink(const char* path) {
+    (void)path;
+    return FS_ERR_READ_ONLY;
+}
+
 static int fat12_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, uint32_t* out_count) {
     uint32_t count = 0u;
     char lfn_name[FS_NAME_CAP];
@@ -1505,7 +1510,8 @@ static const vfs_driver_t g_fat12_driver = {
     fat12_size,
     fat12_close,
     fat12_stat,
-    fat12_fstat
+    fat12_fstat,
+    fat12_unlink
 };
 
 const vfs_driver_t* fat12_core_driver(void) {
