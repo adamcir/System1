@@ -5,6 +5,7 @@
 #include "tty.h"
 #include "klog.h"
 #include "fs.h"
+#include "fs_core.h"
 #include "mm.h"
 #include "posix.h"
 
@@ -25,9 +26,11 @@ static uint32_t g_shell_history_count;
 static uint32_t g_shell_history_head;
 static int g_shell_history_nav = -1;
 static char g_shell_history_draft[SHELL_LINE_CAP];
+static char g_shell_prev_dir[FS_PATH_CAP] = "/";
 
 static void shell_print_fs_error(const char* cmd, int rc);
 static void shell_print_posix_path_error(const char* cmd, const char* path, int rc);
+static void shell_print_usage(const char* cmd, const char* usage);
 
 static int shell_streq(const char* a, const char* b) {
     while (*a && *b) {
@@ -38,6 +41,14 @@ static int shell_streq(const char* a, const char* b) {
         ++b;
     }
     return (int)(*a == '\0' && *b == '\0');
+}
+
+static int shell_is_option(const char* arg) {
+    return (int)(arg != 0 && arg[0] == '-' && arg[1] != '\0');
+}
+
+static int shell_is_directory_mode(uint32_t mode) {
+    return (int)((mode & FS_MODE_DIR) == FS_MODE_DIR);
 }
 
 static int shell_is_space(char c) {
@@ -508,14 +519,33 @@ static void shell_cmd_echo(char** argv, uint32_t argc) {
     uint32_t first = 1u;
     uint8_t newline = 1u;
 
-    if (argc > 1u && shell_streq(argv[1], "--")) {
-        first = 2u;
-    } else if (argc > 1u && shell_streq(argv[1], "-n")) {
-        newline = 0u;
-        first = 2u;
-        if (argc > 2u && shell_streq(argv[2], "--")) {
-            first = 3u;
+    while (first < argc) {
+        const char* arg = argv[first];
+        uint32_t j = 1u;
+
+        if (shell_streq(arg, "--")) {
+            ++first;
+            break;
         }
+
+        if (arg[0] != '-') {
+            break;
+        }
+
+        if (arg[1] == '\0') {
+            break;
+        }
+
+        while (arg[j] == 'n') {
+            ++j;
+        }
+
+        if (arg[j] != '\0') {
+            break;
+        }
+
+        newline = 0u;
+        ++first;
     }
 
     for (i = first; i < argc; ++i) {
@@ -621,6 +651,15 @@ static void shell_print_fs_error(const char* cmd, int rc) {
     tty_puts("unknown fs error\n");
 }
 
+static void shell_print_usage(const char* cmd, const char* usage) {
+    tty_set_color(TTY_RED);
+    tty_puts(cmd);
+    tty_puts(": ");
+    tty_set_color(TTY_WHITE);
+    tty_puts(usage);
+    tty_putc('\n');
+}
+
 static void shell_print_posix_path_error(const char* cmd, const char* path, int rc) {
     int err = (rc < 0) ? -rc : rc;
 
@@ -659,75 +698,278 @@ static void shell_print_posix_path_error(const char* cmd, const char* path, int 
     tty_puts("Error\n");
 }
 
-static void shell_cmd_pwd(void) {
+static void shell_cmd_pwd(char** argv, uint32_t argc) {
+    uint32_t i;
+
+    for (i = 1u; i < argc; ++i) {
+        if (shell_streq(argv[i], "--")) {
+            if ((i + 1u) < argc) {
+                shell_print_usage("pwd", "too many operands");
+                return;
+            }
+            break;
+        }
+
+        if (shell_streq(argv[i], "-L") || shell_streq(argv[i], "-P")) {
+            continue;
+        }
+
+        shell_print_usage("pwd", "usage: pwd [-L|-P]");
+        return;
+    }
+
     tty_puts(fs_get_cwd_path());
     tty_putc('\n');
 }
 
-static void shell_cmd_ls(char** argv, uint32_t argc) {
-    fs_dirent_t entries[16];
+static void shell_ls_print_entry(const char* name, uint8_t is_dir) {
+    tty_puts(name);
+    if (is_dir != 0u) {
+        tty_putc('/');
+    }
+    tty_putc('\n');
+}
+
+static void shell_ls_print_dir(const char* path, uint8_t show_all) {
+    fs_dirent_t entries[SHELL_LIST_CAP];
     uint32_t count = 0u;
     uint32_t i;
-    const char* path = "";
-    int rc;
+    int rc = fs_list_dir(path, entries, SHELL_LIST_CAP, &count);
 
-    if (argc > 1u) {
-        path = argv[1];
-    }
-
-    rc = fs_list_dir(path, entries, 16u, &count);
     if (rc != FS_OK) {
         shell_print_fs_error("ls", rc);
         return;
     }
 
+    if (show_all != 0u) {
+        shell_ls_print_entry(".", 1u);
+        shell_ls_print_entry("..", 1u);
+    }
+
     for (i = 0u; i < count; ++i) {
-        tty_puts(entries[i].name);
-        if (entries[i].type == FS_NODE_DIR) {
-            tty_putc('/');
+        if (show_all == 0u && entries[i].name[0] == '.') {
+            continue;
         }
-        tty_putc('\n');
+        shell_ls_print_entry(entries[i].name, (uint8_t)(entries[i].type == FS_NODE_DIR));
+    }
+}
+
+static void shell_cmd_ls(char** argv, uint32_t argc) {
+    uint8_t show_all = 0u;
+    uint32_t first = 1u;
+    uint32_t path_count;
+    uint32_t i;
+
+    while (first < argc) {
+        const char* arg = argv[first];
+        uint32_t j;
+
+        if (shell_streq(arg, "--")) {
+            ++first;
+            break;
+        }
+
+        if (shell_is_option(arg) == 0) {
+            break;
+        }
+
+        for (j = 1u; arg[j] != '\0'; ++j) {
+            if (arg[j] == 'a' || arg[j] == '1') {
+                if (arg[j] == 'a') {
+                    show_all = 1u;
+                }
+                continue;
+            }
+
+            shell_print_usage("ls", "usage: ls [-a] [-1] [file ...]");
+            return;
+        }
+
+        ++first;
+    }
+
+    path_count = argc - first;
+    if (path_count == 0u) {
+        shell_ls_print_dir("", show_all);
+        return;
+    }
+
+    for (i = first; i < argc; ++i) {
+        fs_stat_t st;
+        int rc = posix_stat(argv[i], &st);
+
+        if (path_count > 1u) {
+            if (i > first) {
+                tty_putc('\n');
+            }
+            tty_puts(argv[i]);
+            tty_puts(":\n");
+        }
+
+        if (rc < 0) {
+            shell_print_posix_path_error("ls", argv[i], rc);
+            continue;
+        }
+
+        if (shell_is_directory_mode(st.mode) != 0) {
+            shell_ls_print_dir(argv[i], show_all);
+        } else {
+            shell_ls_print_entry(argv[i], 0u);
+        }
     }
 }
 
 static void shell_cmd_cd(char** argv, uint32_t argc) {
+    const char* path = "/";
+    char old_cwd[FS_PATH_CAP];
+    uint8_t print_new_cwd = 0u;
+    uint32_t first = 1u;
     int rc;
 
-    if (argc < 2u) {
-        tty_puts("cd: missing path\n");
+    shell_copy_string(old_cwd, FS_PATH_CAP, fs_get_cwd_path());
+
+    while (first < argc) {
+        if (shell_streq(argv[first], "--")) {
+            ++first;
+            break;
+        }
+
+        if (shell_streq(argv[first], "-L") || shell_streq(argv[first], "-P")) {
+            ++first;
+            continue;
+        }
+
+        break;
+    }
+
+    if (first < argc) {
+        path = argv[first++];
+    }
+
+    if (first < argc) {
+        shell_print_usage("cd", "usage: cd [-L|-P] [dir]");
         return;
     }
 
-    rc = fs_change_dir(argv[1]);
+    if (shell_streq(path, "-")) {
+        path = g_shell_prev_dir;
+        print_new_cwd = 1u;
+    }
+
+    rc = fs_change_dir(path);
     if (rc != FS_OK) {
         shell_print_fs_error("cd", rc);
+        return;
+    }
+
+    shell_copy_string(g_shell_prev_dir, FS_PATH_CAP, old_cwd);
+    if (print_new_cwd != 0u) {
+        tty_puts(fs_get_cwd_path());
+        tty_putc('\n');
     }
 }
 
-static void shell_cmd_mkdir(char** argv, uint32_t argc) {
+static int shell_normalize_path(const char* path, char* out, uint32_t cap) {
+    return fs_core_normalize_path(fs_get_cwd_path(), path, out, cap);
+}
+
+static int shell_mkdir_parents(const char* path) {
+    char normalized[FS_PATH_CAP];
+    uint32_t i;
     int rc;
 
-    if (argc < 2u) {
-        tty_puts("mkdir: missing path\n");
+    rc = shell_normalize_path(path, normalized, FS_PATH_CAP);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    for (i = 1u; normalized[i] != '\0'; ++i) {
+        if (normalized[i] != '/') {
+            continue;
+        }
+
+        normalized[i] = '\0';
+        rc = fs_make_dir(normalized);
+        if (rc != FS_OK && fs_to_errno(rc) != POSIX_EEXIST) {
+            normalized[i] = '/';
+            return rc;
+        }
+        normalized[i] = '/';
+    }
+
+    rc = fs_make_dir(normalized);
+    if (rc != FS_OK && fs_to_errno(rc) != POSIX_EEXIST) {
+        return rc;
+    }
+
+    return FS_OK;
+}
+
+static void shell_cmd_mkdir(char** argv, uint32_t argc) {
+    uint8_t create_parents = 0u;
+    uint32_t first = 1u;
+    uint32_t i;
+
+    while (first < argc) {
+        const char* arg = argv[first];
+
+        if (shell_streq(arg, "--")) {
+            ++first;
+            break;
+        }
+
+        if (shell_streq(arg, "-p")) {
+            create_parents = 1u;
+            ++first;
+            continue;
+        }
+
+        break;
+    }
+
+    if (first >= argc) {
+        shell_print_usage("mkdir", "usage: mkdir [-p] dir ...");
         return;
     }
 
-    rc = fs_make_dir(argv[1]);
-    if (rc != FS_OK) {
-        shell_print_fs_error("mkdir", rc);
+    for (i = first; i < argc; ++i) {
+        int rc = (create_parents != 0u) ? shell_mkdir_parents(argv[i]) : fs_make_dir(argv[i]);
+        if (rc != FS_OK) {
+            shell_print_fs_error("mkdir", rc);
+        }
     }
 }
 
 static void shell_cmd_cat(char** argv, uint32_t argc) {
     static char buffer[SHELL_CAT_BUF_CAP];
+    uint32_t first = 1u;
     uint32_t argi;
 
-    if (argc < 2u) {
-        tty_puts("usage: cat <file>\n");
+    while (first < argc) {
+        if (shell_streq(argv[first], "--")) {
+            ++first;
+            break;
+        }
+
+        if (shell_streq(argv[first], "-u")) {
+            ++first;
+            continue;
+        }
+
+        if (shell_is_option(argv[first]) != 0) {
+            shell_print_usage("cat", "usage: cat [-u] [file ...]");
+            return;
+        }
+
+        break;
+    }
+
+    if (first >= argc) {
+        shell_print_usage("cat", "usage: cat [-u] [file ...]");
         return;
     }
 
-    for (argi = 1u; argi < argc; ++argi) {
+    for (argi = first; argi < argc; ++argi) {
         int fd;
         int close_rc;
 
@@ -762,69 +1004,110 @@ static void shell_cmd_cat(char** argv, uint32_t argc) {
 }
 
 static void shell_cmd_stat(char** argv, uint32_t argc) {
-    fs_stat_t st;
-    int rc;
+    uint32_t first = 1u;
+    uint32_t i;
 
-    if (argc < 2u) {
-        tty_puts("usage: stat <path>\n");
+    if (first < argc && shell_streq(argv[first], "--")) {
+        ++first;
+    }
+
+    if (first >= argc) {
+        shell_print_usage("stat", "usage: stat path ...");
         return;
     }
 
-    rc = posix_stat(argv[1], &st);
-    if (rc < 0) {
-        shell_print_posix_path_error("stat", argv[1], rc);
-        return;
-    }
+    for (i = first; i < argc; ++i) {
+        fs_stat_t st;
+        int rc = posix_stat(argv[i], &st);
 
-    tty_puts("mode ");
-    tty_hex_u32(st.mode);
-    tty_puts(" size ");
-    shell_put_u32_dec(st.size);
-    tty_putc('\n');
+        if (rc < 0) {
+            shell_print_posix_path_error("stat", argv[i], rc);
+            continue;
+        }
+
+        tty_puts(argv[i]);
+        tty_puts(": mode ");
+        tty_hex_u32(st.mode);
+        tty_puts(" size ");
+        shell_put_u32_dec(st.size);
+        tty_putc('\n');
+    }
 }
 
 static void shell_cmd_touch(char** argv, uint32_t argc) {
-    int fd;
-    int rc;
+    uint32_t first = 1u;
+    uint32_t i;
 
-    if (argc < 2u) {
-        tty_puts("usage: touch <file>\n");
+    if (first < argc && shell_streq(argv[first], "--")) {
+        ++first;
+    }
+
+    if (first >= argc) {
+        shell_print_usage("touch", "usage: touch file ...");
         return;
     }
 
-    fd = posix_open(argv[1], FS_O_CREAT | FS_O_RDWR);
-    if (fd < 0) {
-        shell_print_posix_path_error("touch", argv[1], fd);
-        return;
-    }
+    for (i = first; i < argc; ++i) {
+        int fd = posix_open(argv[i], FS_O_CREAT | FS_O_RDWR);
+        int rc;
 
-    rc = posix_close(fd);
-    if (rc < 0) {
-        shell_print_posix_path_error("touch", argv[1], rc);
+        if (fd < 0) {
+            shell_print_posix_path_error("touch", argv[i], fd);
+            continue;
+        }
+
+        rc = posix_close(fd);
+        if (rc < 0) {
+            shell_print_posix_path_error("touch", argv[i], rc);
+        }
     }
 }
 
 static void shell_cmd_write(char** argv, uint32_t argc) {
     uint32_t i;
+    uint32_t first = 1u;
+    uint8_t append = 0u;
+    uint8_t newline = 1u;
     int fd;
     int rc;
 
-    if (argc < 3u) {
-        tty_puts("usage: write <file> <text...>\n");
+    while (first < argc) {
+        if (shell_streq(argv[first], "--")) {
+            ++first;
+            break;
+        }
+
+        if (shell_streq(argv[first], "-a")) {
+            append = 1u;
+            ++first;
+            continue;
+        }
+
+        if (shell_streq(argv[first], "-n")) {
+            newline = 0u;
+            ++first;
+            continue;
+        }
+
+        break;
+    }
+
+    if ((first + 1u) >= argc) {
+        shell_print_usage("write", "usage: write [-a] [-n] file text...");
         return;
     }
 
-    fd = posix_open(argv[1], FS_O_CREAT | FS_O_TRUNC | FS_O_WRONLY);
+    fd = posix_open(argv[first], FS_O_CREAT | (append != 0u ? FS_O_APPEND : FS_O_TRUNC) | FS_O_WRONLY);
     if (fd < 0) {
-        shell_print_posix_path_error("write", argv[1], fd);
+        shell_print_posix_path_error("write", argv[first], fd);
         return;
     }
 
-    for (i = 2u; i < argc; ++i) {
-        if (i > 2u) {
+    for (i = first + 1u; i < argc; ++i) {
+        if (i > (first + 1u)) {
             rc = posix_write(fd, " ", 1u);
             if (rc < 0) {
-                shell_print_posix_path_error("write", argv[1], rc);
+                shell_print_posix_path_error("write", argv[first], rc);
                 (void)posix_close(fd);
                 return;
             }
@@ -832,36 +1115,60 @@ static void shell_cmd_write(char** argv, uint32_t argc) {
 
         rc = posix_write(fd, argv[i], shell_strlen(argv[i]));
         if (rc < 0) {
-            shell_print_posix_path_error("write", argv[1], rc);
+            shell_print_posix_path_error("write", argv[first], rc);
             (void)posix_close(fd);
             return;
         }
     }
 
-    rc = posix_write(fd, "\n", 1u);
-    if (rc < 0) {
-        shell_print_posix_path_error("write", argv[1], rc);
-        (void)posix_close(fd);
-        return;
+    if (newline != 0u) {
+        rc = posix_write(fd, "\n", 1u);
+        if (rc < 0) {
+            shell_print_posix_path_error("write", argv[first], rc);
+            (void)posix_close(fd);
+            return;
+        }
     }
 
     rc = posix_close(fd);
     if (rc < 0) {
-        shell_print_posix_path_error("write", argv[1], rc);
+        shell_print_posix_path_error("write", argv[first], rc);
     }
 }
 
 static void shell_cmd_rm(char** argv, uint32_t argc) {
-    int rc;
+    uint8_t force = 0u;
+    uint32_t first = 1u;
+    uint32_t i;
 
-    if (argc < 2u) {
-        tty_puts("usage: rm <file>\n");
+    while (first < argc) {
+        if (shell_streq(argv[first], "--")) {
+            ++first;
+            break;
+        }
+
+        if (shell_streq(argv[first], "-f")) {
+            force = 1u;
+            ++first;
+            continue;
+        }
+
+        break;
+    }
+
+    if (first >= argc) {
+        shell_print_usage("rm", "usage: rm [-f] file ...");
         return;
     }
 
-    rc = posix_unlink(argv[1]);
-    if (rc < 0) {
-        shell_print_posix_path_error("rm", argv[1], rc);
+    for (i = first; i < argc; ++i) {
+        int rc = posix_unlink(argv[i]);
+        if (rc < 0) {
+            if (force != 0u && -rc == POSIX_ENOENT) {
+                continue;
+            }
+            shell_print_posix_path_error("rm", argv[i], rc);
+        }
     }
 }
 
@@ -953,7 +1260,7 @@ void shell_core_run(void) {
 		}
 
         if (shell_streq(argv[0], "pwd")) {
-            shell_cmd_pwd();
+            shell_cmd_pwd(argv, argc);
             continue;
         }
 
