@@ -2,7 +2,9 @@
 
 #define FS_MAX_NODES 64u
 #define FS_MAX_CHILDREN 16u
-#define RAMFS_FILE_CAP 4096u
+#define RAMFS_DATA_SLOT_CAP 4u
+#define RAMFS_DATA_SLOT_SIZE 4096u
+#define RAMFS_NO_DATA_SLOT 0xFFFFFFFFu
 
 typedef struct fs_node fs_node_t;
 
@@ -13,11 +15,17 @@ struct fs_node {
     fs_node_t* parent;
     fs_node_t* children[FS_MAX_CHILDREN];
     uint32_t child_count;
-    char data[RAMFS_FILE_CAP];
+    uint32_t data_slot;
     uint32_t size;
 };
 
+typedef struct {
+    uint8_t used;
+    char data[RAMFS_DATA_SLOT_SIZE];
+} ramfs_data_slot_t;
+
 static fs_node_t g_nodes[FS_MAX_NODES];
+static ramfs_data_slot_t g_data_slots[RAMFS_DATA_SLOT_CAP];
 static fs_node_t* g_root = 0;
 static fs_node_t* g_cwd = 0;
 static char g_path_buf[FS_PATH_CAP];
@@ -126,11 +134,66 @@ static fs_node_t* fs_alloc_node(void) {
         if (g_nodes[i].used == 0u) {
             fs_memzero(&g_nodes[i], (uint32_t)sizeof(g_nodes[i]));
             g_nodes[i].used = 1u;
+            g_nodes[i].data_slot = RAMFS_NO_DATA_SLOT;
             return &g_nodes[i];
         }
     }
 
     return 0;
+}
+
+static void ramfs_clear_data_slots(void) {
+    fs_memzero(g_data_slots, (uint32_t)sizeof(g_data_slots));
+}
+
+static uint32_t ramfs_alloc_data_slot(void) {
+    uint32_t i;
+
+    for (i = 0u; i < RAMFS_DATA_SLOT_CAP; ++i) {
+        if (g_data_slots[i].used == 0u) {
+            fs_memzero(g_data_slots[i].data, RAMFS_DATA_SLOT_SIZE);
+            g_data_slots[i].used = 1u;
+            return i;
+        }
+    }
+
+    return RAMFS_NO_DATA_SLOT;
+}
+
+static void ramfs_free_data_slot(uint32_t slot) {
+    if (slot >= RAMFS_DATA_SLOT_CAP) {
+        return;
+    }
+
+    fs_memzero(&g_data_slots[slot], (uint32_t)sizeof(g_data_slots[slot]));
+}
+
+static char* ramfs_node_data(fs_node_t* node) {
+    if (node == 0 || node->data_slot >= RAMFS_DATA_SLOT_CAP || g_data_slots[node->data_slot].used == 0u) {
+        return 0;
+    }
+
+    return g_data_slots[node->data_slot].data;
+}
+
+static int ramfs_ensure_data_slot(fs_node_t* node) {
+    uint32_t slot;
+
+    if (node == 0 || node->type != FS_NODE_FILE) {
+        return FS_ERR_INVALID;
+    }
+
+    if (ramfs_node_data(node) != 0) {
+        return FS_OK;
+    }
+
+    slot = ramfs_alloc_data_slot();
+    if (slot == RAMFS_NO_DATA_SLOT) {
+        return FS_ERR_NO_SPACE;
+    }
+
+    node->data_slot = slot;
+    return FS_OK;
 }
 
 static uint32_t fs_node_id(fs_node_t* node) {
@@ -381,6 +444,7 @@ static int fs_resolve_parent(const char* path, fs_node_t** out_parent, char* out
 
 int ramfs_core_reset_empty(void) {
     fs_memzero(g_nodes, (uint32_t)sizeof(g_nodes));
+    ramfs_clear_data_slots();
     fs_memzero(g_path_buf, FS_PATH_CAP);
     g_dirty = 0u;
 
@@ -464,6 +528,41 @@ uint8_t ramfs_core_is_dirty(void) {
 
 void ramfs_core_clear_dirty(void) {
     g_dirty = 0u;
+}
+
+void ramfs_core_get_stats(ramfs_stats_t* out_stats) {
+    uint32_t i;
+
+    if (out_stats == 0) {
+        return;
+    }
+
+    fs_memzero(out_stats, (uint32_t)sizeof(*out_stats));
+    out_stats->node_cap = FS_MAX_NODES;
+    out_stats->data_slot_cap = RAMFS_DATA_SLOT_CAP;
+    out_stats->data_slot_bytes = RAMFS_DATA_SLOT_SIZE;
+
+    for (i = 0u; i < FS_MAX_NODES; ++i) {
+        if (g_nodes[i].used == 0u) {
+            continue;
+        }
+
+        ++out_stats->node_used;
+        if (g_nodes[i].type == FS_NODE_DIR) {
+            ++out_stats->dir_nodes;
+        } else if (g_nodes[i].type == FS_NODE_FILE) {
+            ++out_stats->file_nodes;
+            out_stats->used_file_bytes += g_nodes[i].size;
+        }
+    }
+
+    for (i = 0u; i < RAMFS_DATA_SLOT_CAP; ++i) {
+        if (g_data_slots[i].used != 0u) {
+            ++out_stats->data_slot_used;
+        }
+    }
+
+    out_stats->reserved_file_bytes = out_stats->data_slot_used * RAMFS_DATA_SLOT_SIZE;
 }
 
 const char* ramfs_core_get_cwd_path(void) {
@@ -610,6 +709,7 @@ int ramfs_core_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, ui
 
 int ramfs_core_read_file(const char* path, char* buffer, uint32_t cap, uint32_t* out_size) {
     fs_node_t* node = 0;
+    char* data;
     uint32_t i;
     int rc;
 
@@ -631,8 +731,13 @@ int ramfs_core_read_file(const char* path, char* buffer, uint32_t cap, uint32_t*
         return FS_ERR_NO_SPACE;
     }
 
+    data = ramfs_node_data(node);
+    if (node->size > 0u && data == 0) {
+        return FS_ERR_INVALID;
+    }
+
     for (i = 0u; i < node->size; ++i) {
-        buffer[i] = node->data[i];
+        buffer[i] = data[i];
     }
 
     return FS_OK;
@@ -674,6 +779,10 @@ int ramfs_core_open(const char* path, uint32_t flags, uint32_t* out_node_id) {
         if ((flags & FS_O_WRONLY) == 0u) {
             return FS_ERR_INVALID;
         }
+        if (node->data_slot != RAMFS_NO_DATA_SLOT) {
+            ramfs_free_data_slot(node->data_slot);
+            node->data_slot = RAMFS_NO_DATA_SLOT;
+        }
         node->size = 0u;
         g_dirty = 1u;
     }
@@ -688,6 +797,7 @@ int ramfs_core_open(const char* path, uint32_t flags, uint32_t* out_node_id) {
 
 int ramfs_core_read(uint32_t node_id, uint32_t offset, char* buffer, uint32_t cap, uint32_t* out_size) {
     fs_node_t* node = fs_node_from_id(node_id);
+    char* data;
     uint32_t available;
     uint32_t count;
     uint32_t i;
@@ -707,8 +817,13 @@ int ramfs_core_read(uint32_t node_id, uint32_t offset, char* buffer, uint32_t ca
 
     available = node->size - offset;
     count = (available < cap) ? available : cap;
+    data = ramfs_node_data(node);
+    if (data == 0) {
+        return FS_ERR_INVALID;
+    }
+
     for (i = 0u; i < count; ++i) {
-        buffer[i] = node->data[offset + i];
+        buffer[i] = data[offset + i];
     }
 
     *out_size = count;
@@ -717,9 +832,11 @@ int ramfs_core_read(uint32_t node_id, uint32_t offset, char* buffer, uint32_t ca
 
 int ramfs_core_write(uint32_t node_id, uint32_t offset, const char* buffer, uint32_t size, uint32_t* out_written) {
     fs_node_t* node = fs_node_from_id(node_id);
+    char* data;
     uint32_t i;
+    int rc;
 
-    if (node == 0 || buffer == 0 || out_written == 0) {
+    if (node == 0 || out_written == 0 || (size > 0u && buffer == 0)) {
         return FS_ERR_INVALID;
     }
 
@@ -727,12 +844,27 @@ int ramfs_core_write(uint32_t node_id, uint32_t offset, const char* buffer, uint
         return FS_ERR_NOT_DIR;
     }
 
-    if (offset > RAMFS_FILE_CAP || size > (RAMFS_FILE_CAP - offset)) {
+    if (offset > RAMFS_DATA_SLOT_SIZE || size > (RAMFS_DATA_SLOT_SIZE - offset)) {
         return FS_ERR_NO_SPACE;
     }
 
+    if (size == 0u) {
+        *out_written = 0u;
+        return FS_OK;
+    }
+
+    rc = ramfs_ensure_data_slot(node);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    data = ramfs_node_data(node);
+    if (data == 0) {
+        return FS_ERR_INVALID;
+    }
+
     for (i = 0u; i < size; ++i) {
-        node->data[offset + i] = buffer[i];
+        data[offset + i] = buffer[i];
     }
 
     if (offset + size > node->size) {
@@ -825,6 +957,9 @@ int ramfs_core_unlink(const char* path) {
             }
             parent->children[parent->child_count - 1u] = 0;
             parent->child_count--;
+            if (node->data_slot != RAMFS_NO_DATA_SLOT) {
+                ramfs_free_data_slot(node->data_slot);
+            }
             fs_memzero(node, sizeof(*node));
             g_dirty = 1u;
             return FS_OK;

@@ -48,3 +48,7 @@ int fs_stat(const char* path, fs_stat_t* out_stat) {
 int fs_unlink(const char* path) {
     return fs_core_unlink(path);
 }
+
+void fs_get_stats(fs_core_stats_t* out_stats) {
+    fs_core_get_stats(out_stats);
+}

@@ -3,8 +3,8 @@ I386_LD      ?= $(shell command -v i686-elf-ld 2>/dev/null || command -v i686-li
 I386_OBJCOPY ?= $(shell command -v i686-elf-objcopy 2>/dev/null || command -v i686-linux-gnu-objcopy 2>/dev/null || command -v objcopy 2>/dev/null)
 X64_CC       ?= $(shell command -v x86_64-elf-gcc 2>/dev/null || command -v x86_64-linux-gnu-gcc 2>/dev/null || command -v gcc 2>/dev/null)
 X64_LD       ?= $(shell command -v x86_64-elf-ld 2>/dev/null || command -v x86_64-linux-gnu-ld 2>/dev/null || command -v ld 2>/dev/null)
-QEMU32       ?= qemu-system-i386
-QEMU64       ?= qemu-system-x86_64
+QEMU32       ?= qemu-system-i386 -m 1M
+QEMU64       ?= qemu-system-x86_64 -m 1M
 
 BUILD_DIR := build
 BUILD_OBJ := $(BUILD_DIR)/obj

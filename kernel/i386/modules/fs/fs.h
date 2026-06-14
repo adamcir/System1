@@ -45,6 +45,28 @@ typedef struct {
     uint32_t size;
 } fs_stat_t;
 
+typedef struct {
+    uint32_t node_cap;
+    uint32_t node_used;
+    uint32_t dir_nodes;
+    uint32_t file_nodes;
+    uint32_t reserved_file_bytes;
+    uint32_t used_file_bytes;
+    uint32_t data_slot_cap;
+    uint32_t data_slot_used;
+    uint32_t data_slot_bytes;
+} ramfs_stats_t;
+
+typedef struct {
+    ramfs_stats_t ramfs;
+    uint32_t dirty_dir_count;
+    uint32_t dirty_file_count;
+    uint32_t boot_media_kind;
+    uint32_t boot_media_buffer_bytes;
+    uint32_t block_cache_bytes;
+    uint32_t largest_fs_scratch_bytes;
+} fs_core_stats_t;
+
 #endif
 
 int fs_init(void);
@@ -59,5 +81,6 @@ int fs_read_file(const char* path, char* buffer, uint32_t cap, uint32_t* out_siz
 int fs_to_errno(int rc);
 int fs_stat(const char* path, fs_stat_t* out_stat);
 int fs_unlink(const char* path);
+void fs_get_stats(fs_core_stats_t* out_stats);
 
 #endif

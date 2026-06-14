@@ -57,6 +57,7 @@ typedef struct {
 
 static block_device_t g_boot_floppy_device;
 static fs_floppy_boot_info_t* g_boot_floppy_info = 0;
+static uint8_t g_fdc_ready = 0u;
 static block_device_t g_mb2_module_device;
 static uint32_t g_mb2_module_start = 0u;
 static uint32_t g_mb2_module_size = 0u;
@@ -125,6 +126,9 @@ static void fs_copy_bytes(uint8_t* dst, const uint8_t* src, uint32_t len) {
     }
 }
 
+static int fs_fdc_read_sector_buffer(void* sector_buffer, uint32_t lba);
+static int fs_fdc_write_sector_buffer(const void* sector_buffer, uint32_t lba);
+
 static int fs_cached_floppy_read(block_device_t* dev, uint32_t lba, uint32_t count, void* buffer) {
     uint32_t i;
     uint8_t* out = (uint8_t*)buffer;
@@ -160,12 +164,53 @@ static int fs_cached_floppy_read(block_device_t* dev, uint32_t lba, uint32_t cou
             continue;
         }
 
-        return FS_ERR_NOT_FOUND;
+        {
+            int rc = fs_fdc_read_sector_buffer(dst, current_lba);
+            if (rc != FS_OK) {
+                return rc;
+            }
+        }
     }
 
     return FS_OK;
 }
 
+static int fs_cached_floppy_write(block_device_t* dev, uint32_t lba, uint32_t count, const void* buffer) {
+    uint32_t i;
+    const uint8_t* in = (const uint8_t*)buffer;
+    fs_floppy_boot_info_t* info = (fs_floppy_boot_info_t*)dev->ctx;
+
+    if (info == 0 || buffer == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    for (i = 0u; i < count; ++i) {
+        uint32_t current_lba = lba + i;
+        const uint8_t* src = in + (i * 512u);
+        int rc;
+
+        if (info->floppy_image_addr != 0u) {
+            fs_copy_bytes((uint8_t*)((uintptr_t)info->floppy_image_addr + current_lba * 512u), src, 512u);
+        }
+
+        if (current_lba == 0u && info->boot_sector_addr != 0u) {
+            fs_copy_bytes((uint8_t*)(uintptr_t)info->boot_sector_addr, src, 512u);
+        } else if (current_lba >= info->fat_lba && current_lba < (info->fat_lba + info->fat_sectors)) {
+            uint32_t offset = (current_lba - info->fat_lba) * 512u;
+            fs_copy_bytes((uint8_t*)((uintptr_t)info->fat_addr + offset), src, 512u);
+        } else if (current_lba >= info->root_lba && current_lba < (info->root_lba + info->root_sectors)) {
+            uint32_t offset = (current_lba - info->root_lba) * 512u;
+            fs_copy_bytes((uint8_t*)((uintptr_t)info->root_dir_addr + offset), src, 512u);
+        }
+
+        rc = fs_fdc_write_sector_buffer(src, current_lba);
+        if (rc != FS_OK) {
+            return rc;
+        }
+    }
+
+    return FS_OK;
+}
 #define FDC_DOR 0x3F2u
 #define FDC_MSR 0x3F4u
 #define FDC_FIFO 0x3F5u
@@ -294,6 +339,26 @@ static int fs_fdc_recalibrate(void) {
     return FS_ERR_READ_ONLY;
 }
 
+static int fs_fdc_prepare(void) {
+    int rc;
+
+    if (g_fdc_ready != 0u) {
+        return FS_OK;
+    }
+
+    rc = fs_fdc_reset();
+    if (rc != FS_OK) {
+        return rc;
+    }
+    rc = fs_fdc_recalibrate();
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    g_fdc_ready = 1u;
+    return FS_OK;
+}
+
 static int fs_fdc_seek(uint8_t cylinder, uint8_t head) {
     uint32_t i;
     int rc;
@@ -336,16 +401,38 @@ static void fs_dma2_setup_write(uint32_t addr, uint16_t count) {
     fs_outb(0x0Au, 0x02u);
 }
 
-static int fs_fdc_write_sector(uint8_t* image, uint32_t lba) {
+static void fs_dma2_setup_read(uint32_t addr, uint16_t count) {
+    fs_outb(0x0Au, 0x06u);
+    fs_outb(0x0Cu, 0xFFu);
+    fs_outb(0x04u, (uint8_t)(addr & 0xFFu));
+    fs_outb(0x04u, (uint8_t)((addr >> 8) & 0xFFu));
+    fs_outb(0x81u, (uint8_t)((addr >> 16) & 0xFFu));
+    fs_outb(0x0Cu, 0xFFu);
+    fs_outb(0x05u, (uint8_t)(count & 0xFFu));
+    fs_outb(0x05u, (uint8_t)((count >> 8) & 0xFFu));
+    fs_outb(0x0Bu, 0x46u);
+    fs_outb(0x0Au, 0x02u);
+}
+
+static int fs_fdc_transfer_sector(void* sector_buffer, uint32_t lba, uint8_t write) {
     uint32_t track_size = FDC_SECTORS_PER_TRACK * FDC_HEADS;
     uint8_t cylinder = (uint8_t)(lba / track_size);
     uint8_t temp = (uint8_t)(lba % track_size);
     uint8_t head = (uint8_t)(temp / FDC_SECTORS_PER_TRACK);
     uint8_t sector = (uint8_t)((temp % FDC_SECTORS_PER_TRACK) + 1u);
-    uint32_t addr = (uint32_t)(uintptr_t)(image + lba * 512u);
+    uint32_t addr = (uint32_t)(uintptr_t)sector_buffer;
     uint8_t result[7];
     uint32_t i;
     int rc;
+
+    if (sector_buffer == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    rc = fs_fdc_prepare();
+    if (rc != FS_OK) {
+        return rc;
+    }
 
     if (((addr & 0xFFFFu) + 511u) > 0xFFFFu) {
         return FS_ERR_INVALID;
@@ -356,9 +443,13 @@ static int fs_fdc_write_sector(uint8_t* image, uint32_t lba) {
         return rc;
     }
 
-    fs_dma2_setup_write(addr, 511u);
+    if (write != 0u) {
+        fs_dma2_setup_write(addr, 511u);
+    } else {
+        fs_dma2_setup_read(addr, 511u);
+    }
 
-    rc = fs_fdc_send(0x45u);
+    rc = fs_fdc_send((write != 0u) ? 0x45u : 0x46u);
     if (rc != FS_OK) {
         return rc;
     }
@@ -409,32 +500,12 @@ static int fs_fdc_write_sector(uint8_t* image, uint32_t lba) {
     return FS_OK;
 }
 
-static int fs_fdc_write_image(uint8_t* image, uint32_t sector_count) {
-    uint32_t lba;
-    int rc;
+static int fs_fdc_read_sector_buffer(void* sector_buffer, uint32_t lba) {
+    return fs_fdc_transfer_sector(sector_buffer, lba, 0u);
+}
 
-    if (image == 0 || sector_count == 0u) {
-        return FS_ERR_INVALID;
-    }
-
-    rc = fs_fdc_reset();
-    if (rc != FS_OK) {
-        return rc;
-    }
-    rc = fs_fdc_recalibrate();
-    if (rc != FS_OK) {
-        return rc;
-    }
-
-    for (lba = 0u; lba < sector_count; ++lba) {
-        rc = fs_fdc_write_sector(image, lba);
-        if (rc != FS_OK) {
-            return rc;
-        }
-    }
-
-    fs_outb(FDC_DOR, 0x0Cu);
-    return FS_OK;
+static int fs_fdc_write_sector_buffer(const void* sector_buffer, uint32_t lba) {
+    return fs_fdc_transfer_sector((void*)sector_buffer, lba, 1u);
 }
 
 static int fs_memory_module_read(block_device_t* dev, uint32_t lba, uint32_t count, void* buffer) {
@@ -485,6 +556,7 @@ static int fs_install_mb2_module_device(void) {
                 g_mb2_module_device.sector_count = g_mb2_module_size / 512u;
                 g_mb2_module_device.ctx = 0;
                 g_mb2_module_device.read = fs_memory_module_read;
+                g_mb2_module_device.write = 0;
                 block_core_set_root_device(&g_mb2_module_device);
                 return FS_OK;
             }
@@ -511,18 +583,12 @@ static void fs_install_bootmedia_device(void) {
     }
 
     g_boot_floppy_info = (fs_floppy_boot_info_t*)(uintptr_t)g_boot_info_ptr;
-    if (g_boot_floppy_info->boot_sector_addr == 0u ||
-        g_boot_floppy_info->fat_addr == 0u ||
-        g_boot_floppy_info->root_dir_addr == 0u ||
-        g_boot_floppy_info->fat_sectors == 0u ||
-        g_boot_floppy_info->root_sectors == 0u) {
-        return;
-    }
-
+    g_fdc_ready = 0u;
     g_boot_floppy_device.sector_size = 512u;
     g_boot_floppy_device.sector_count = 2880u;
     g_boot_floppy_device.ctx = g_boot_floppy_info;
     g_boot_floppy_device.read = fs_cached_floppy_read;
+    g_boot_floppy_device.write = fs_cached_floppy_write;
     block_core_set_root_device(&g_boot_floppy_device);
 }
 
@@ -942,20 +1008,20 @@ uint8_t fs_core_has_pending_changes(void) {
 
 static int fs_core_flush_to_boot_media(void) {
     uint32_t i;
-    uint8_t* image;
+    block_device_t* dev;
 
     if (g_media_kind == FS_MEDIA_ISO9660) {
         return FS_ERR_READ_ONLY;
     }
 
     if (g_media_kind == FS_MEDIA_FAT12) {
-        if (g_boot_floppy_info == 0 || g_boot_floppy_info->floppy_image_addr == 0u) {
+        dev = block_core_get_root_device();
+        if (dev == 0 || dev->write == 0) {
             return FS_ERR_READ_ONLY;
         }
 
-        image = (uint8_t*)(uintptr_t)g_boot_floppy_info->floppy_image_addr;
         for (i = 0u; i < g_dirty_dir_count; ++i) {
-            int rc = fat12_core_create_dir_in_image(image, 2880u * 512u, g_dirty_dirs[i]);
+            int rc = fat12_core_create_dir_on_device(dev, g_dirty_dirs[i]);
             if (rc != FS_OK) {
                 return rc;
             }
@@ -968,14 +1034,7 @@ static int fs_core_flush_to_boot_media(void) {
                 return rc;
             }
 
-            rc = fat12_core_write_file_in_image(image, 2880u * 512u, g_dirty_files[i], g_writeback_file, size);
-            if (rc != FS_OK) {
-                return rc;
-            }
-        }
-
-        {
-            int rc = fs_fdc_write_image(image, 2880u);
+            rc = fat12_core_write_file_on_device(dev, g_dirty_files[i], g_writeback_file, size);
             if (rc != FS_OK) {
                 return rc;
             }
@@ -1307,4 +1366,34 @@ int fs_core_unlink(const char* path) {
     }
 
     return g_root_driver->unlink(full_path);
+}
+
+void fs_core_get_stats(fs_core_stats_t* out_stats) {
+    uint32_t largest_scratch = FS_WRITEBACK_FILE_CAP;
+
+    if (out_stats == 0) {
+        return;
+    }
+
+    ramfs_core_get_stats(&out_stats->ramfs);
+    out_stats->dirty_dir_count = g_dirty_dir_count;
+    out_stats->dirty_file_count = g_dirty_file_count;
+    out_stats->boot_media_kind = (uint32_t)g_media_kind;
+    out_stats->boot_media_buffer_bytes = 0u;
+    out_stats->block_cache_bytes = 0u;
+
+    if (g_boot_floppy_info != 0 && g_boot_floppy_info->floppy_image_addr != 0u) {
+        out_stats->boot_media_buffer_bytes = 2880u * 512u;
+    }
+    if (g_media_kind == FS_MEDIA_FAT12) {
+        out_stats->block_cache_bytes = fat12_core_buffer_bytes();
+    }
+
+    if (sizeof(g_dirty_dirs) > largest_scratch) {
+        largest_scratch = (uint32_t)sizeof(g_dirty_dirs);
+    }
+    if (sizeof(g_dirty_files) > largest_scratch) {
+        largest_scratch = (uint32_t)sizeof(g_dirty_files);
+    }
+    out_stats->largest_fs_scratch_bytes = largest_scratch;
 }

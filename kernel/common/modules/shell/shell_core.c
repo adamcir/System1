@@ -18,7 +18,7 @@
 static const char* g_shell_commands[] = {
     "help", "clear", "echo", "reboot", "shutdown", "ticks",
     "version", "pwd", "ls", "cd", "mkdir", "cat", "stat",
-    "touch", "write", "rm", "exec", "mmstat"
+    "touch", "write", "rm", "exec", "fsstat", "mmstat"
 };
 
 static char g_shell_history[SHELL_HISTORY_CAP][SHELL_LINE_CAP];
@@ -506,7 +506,7 @@ static void shell_put_u32_dec(uint32_t value) {
 }
 
 static void shell_cmd_help(void) {
-    tty_puts("help clear echo reboot shutdown ticks version pwd ls cd mkdir cat stat touch write rm exec mmstat\n");
+    tty_puts("help clear echo reboot shutdown ticks version pwd ls cd mkdir cat stat touch write rm exec fsstat mmstat\n");
 }
 
 static void shell_cmd_clear(void) {
@@ -608,6 +608,51 @@ static void shell_cmd_ticks(void) {
 
 static void shell_cmd_mmstat(void) {
     mm_print_stats();
+}
+
+static void shell_cmd_fsstat(void) {
+    fs_core_stats_t stats;
+
+    fs_get_stats(&stats);
+    tty_puts("fs media ");
+    shell_put_u32_dec(stats.boot_media_kind);
+    tty_puts(" dirty_dirs ");
+    shell_put_u32_dec(stats.dirty_dir_count);
+    tty_puts(" dirty_files ");
+    shell_put_u32_dec(stats.dirty_file_count);
+    tty_putc('\n');
+
+    tty_puts("ramfs nodes ");
+    shell_put_u32_dec(stats.ramfs.node_used);
+    tty_putc('/');
+    shell_put_u32_dec(stats.ramfs.node_cap);
+    tty_puts(" dirs ");
+    shell_put_u32_dec(stats.ramfs.dir_nodes);
+    tty_puts(" files ");
+    shell_put_u32_dec(stats.ramfs.file_nodes);
+    tty_putc('\n');
+
+    tty_puts("ramfs file bytes used ");
+    shell_put_u32_dec(stats.ramfs.used_file_bytes);
+    tty_puts(" reserved ");
+    shell_put_u32_dec(stats.ramfs.reserved_file_bytes);
+    tty_putc('\n');
+
+    tty_puts("ramfs data slots ");
+    shell_put_u32_dec(stats.ramfs.data_slot_used);
+    tty_putc('/');
+    shell_put_u32_dec(stats.ramfs.data_slot_cap);
+    tty_puts(" bytes ");
+    shell_put_u32_dec(stats.ramfs.data_slot_bytes);
+    tty_putc('\n');
+
+    tty_puts("fs buffers boot ");
+    shell_put_u32_dec(stats.boot_media_buffer_bytes);
+    tty_puts(" cache ");
+    shell_put_u32_dec(stats.block_cache_bytes);
+    tty_puts(" largest ");
+    shell_put_u32_dec(stats.largest_fs_scratch_bytes);
+    tty_putc('\n');
 }
 
 static void shell_version(void){
@@ -1339,6 +1384,11 @@ void shell_core_run(void) {
 
         if (shell_streq(argv[0], "exec")) {
             shell_cmd_exec(argv, argc);
+            continue;
+        }
+
+        if (shell_streq(argv[0], "fsstat")) {
+            shell_cmd_fsstat();
             continue;
         }
 
