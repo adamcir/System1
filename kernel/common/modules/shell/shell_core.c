@@ -40,15 +40,28 @@ static int shell_streq(const char* a, const char* b) {
     return (int)(*a == '\0' && *b == '\0');
 }
 
-static uint32_t shell_tokenize(char* line, char** argv, uint32_t argv_cap) {
+static int shell_is_space(char c) {
+    return (int)(c == ' ' || c == '\t');
+}
+
+static int shell_tokenize(char* line, char** argv, uint32_t argv_cap, uint32_t* out_argc) {
     uint32_t argc = 0u;
     char* read = line;
     char* write = line;
+    char* token_end;
+
+    if (out_argc == 0) {
+        return -1;
+    }
+
+    *out_argc = 0u;
 
     while (*read != '\0') {
-        char quote_char = '\0';
+        uint8_t in_single = 0u;
+        uint8_t in_double = 0u;
+        uint8_t token_started = 0u;
 
-        while (*read == ' ' || *read == '\t') {
+        while (shell_is_space(*read) != 0) {
             ++read;
         }
 
@@ -57,43 +70,81 @@ static uint32_t shell_tokenize(char* line, char** argv, uint32_t argv_cap) {
         }
 
         if (argc >= argv_cap) {
-            break;
+            return -2;
         }
 
         argv[argc++] = write;
 
         while (*read != '\0') {
-            if (quote_char == '\0' && (*read == ' ' || *read == '\t')) {
+            if (in_single == 0u && in_double == 0u && shell_is_space(*read) != 0) {
                 break;
             }
 
-            if (quote_char == '\0' && (*read == '\'' || *read == '"')) {
-                quote_char = *read++;
-                continue;
-            }
-
-            if (quote_char != '\0' && *read == quote_char) {
-                quote_char = '\0';
+            if (in_double == 0u && *read == '\'') {
+                in_single = (uint8_t)(in_single ? 0u : 1u);
+                token_started = 1u;
                 ++read;
                 continue;
             }
 
-            if (quote_char == '"' && *read == '\\' &&
-                (read[1] == '"' || read[1] == '\\')) {
+            if (in_single == 0u && *read == '"') {
+                in_double = (uint8_t)(in_double ? 0u : 1u);
+                token_started = 1u;
                 ++read;
+                continue;
+            }
+
+            if (in_single == 0u && *read == '\\') {
+                char escaped = read[1];
+
+                if (escaped == '\0') {
+                    return -1;
+                }
+
+                if (escaped == '\n') {
+                    read += 2;
+                    continue;
+                }
+
+                if (in_double != 0u &&
+                    escaped != '"' &&
+                    escaped != '\\' &&
+                    escaped != '$' &&
+                    escaped != '`') {
+                    *write++ = *read++;
+                    token_started = 1u;
+                    continue;
+                }
+
+                ++read;
+                *write++ = *read++;
+                token_started = 1u;
+                continue;
             }
 
             *write++ = *read++;
+            token_started = 1u;
+        }
+
+        if (in_single != 0u || in_double != 0u || token_started == 0u) {
+            return -1;
+        }
+
+        token_end = read;
+
+        while (shell_is_space(*read) != 0) {
+            ++read;
         }
 
         *write++ = '\0';
 
-        while (*read == ' ' || *read == '\t') {
-            ++read;
+        if (read > token_end && read < write) {
+            read = write;
         }
     }
 
-    return argc;
+    *out_argc = argc;
+    return 0;
 }
 
 static uint32_t shell_strlen(const char* s) {
@@ -229,10 +280,6 @@ static int shell_history_hook(int direction, char* buf, uint32_t cap, uint32_t* 
     g_shell_history_nav--;
     shell_replace_line(buf, cap, out_len, out_cursor, g_shell_history[shell_history_slot((uint32_t)g_shell_history_nav)]);
     return 1;
-}
-
-static int shell_is_space(char c) {
-    return (int)(c == ' ' || c == '\t');
 }
 
 static int shell_replace_token(char* buf, uint32_t cap, uint32_t* len, uint32_t* cursor, uint32_t token_start, uint32_t token_end, const char* replacement) {
@@ -835,6 +882,7 @@ void shell_core_run(void) {
     char* argv[SHELL_ARGV_MAX];
     uint32_t argc;
     uint32_t i;
+    int tokenize_rc;
     tty_readline_hooks_t hooks;
 
     hooks.tab_hook = shell_tab_hook;
@@ -851,7 +899,17 @@ void shell_core_run(void) {
                 break;
             }
         }
-        argc = shell_tokenize(line, argv, SHELL_ARGV_MAX);
+        tokenize_rc = shell_tokenize(line, argv, SHELL_ARGV_MAX, &argc);
+
+        if (tokenize_rc == -1) {
+            tty_puts("syntax error: unterminated quote or escape\n");
+            continue;
+        }
+
+        if (tokenize_rc == -2) {
+            tty_puts("too many arguments\n");
+            continue;
+        }
 
         if (argc == 0u) {
             continue;

@@ -65,6 +65,7 @@ fi
 "$OBJCOPY_BIN" -O binary "$KERNEL_ELF" "$KERNEL_RAW"
 
 cp -a "$ROOTFS_SRC_DIR" "$ROOTFS_BUILD_DIR"
+find "$ROOTFS_BUILD_DIR" -type f -name '.gitkeep' -delete
 if [[ -d "$ROOTFS_BUILD_DIR/boot" ]]; then
   cp "$KERNEL_RAW" "$ROOTFS_BUILD_DIR/boot/KERNEL.BIN"
   cp "$STAGE1" "$ROOTFS_BUILD_DIR/boot/STAGE1.BIN"

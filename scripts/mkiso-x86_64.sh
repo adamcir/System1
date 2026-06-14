@@ -20,6 +20,7 @@ if [[ ! -d "$ROOTFS_SRC_DIR" ]]; then
 fi
 
 cp -a "$ROOTFS_SRC_DIR" "$ROOTFS_BUILD_DIR"
+find "$ROOTFS_BUILD_DIR" -type f -name '.gitkeep' -delete
 
 if [[ ! -d "$ROOTFS_BUILD_DIR/boot/grub" ]]; then
   echo "Root filesystem source must contain /boot/grub: $ROOTFS_SRC_DIR"
