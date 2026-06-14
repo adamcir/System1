@@ -192,44 +192,13 @@ kernel_found:
 done_loading:
     call floppy_motor_off
 
-    ; Enter Unreal Mode to load the entire floppy disk to 0x00200000 (2 MB)
-    call enter_unreal
-
-    ; Loop through LBA 0 to 2879
-    xor cx, cx              ; CX = current_lba = 0
-.load_floppy_loop:
-    push cx
-    mov ax, cx
-    mov bx, boot_sector
-    call read_lba_sector
-    pop cx
-    jnc .copy_sector
-    jmp disk_fail
-
-.copy_sector:
-    ; Copy 512 bytes (128 dwords) from boot_sector to GS:[0x00200000 + CX * 512]
-    push cx
-    
-    ; EDI = 0x00200000 + CX * 512
-    xor edi, edi
-    mov di, cx
-    shl edi, 9
-    add edi, 0x00200000
-
-    mov ecx, 128
-    mov esi, boot_sector
-.copy_dword:
-    mov eax, [esi]
-    mov [gs:edi], eax
-    add esi, 4
-    add edi, 4
-    dec ecx
-    jnz .copy_dword
-
-    pop cx
-    inc cx
-    cmp cx, 2880
-    jne .load_floppy_loop
+    ; RAM cost reduction: do NOT stage the full 1.44 MB image at 0x00200000.
+    ; Doing so required >2 MB of RAM and broke the 1 MB low-memory target
+    ; (mount then read garbage from unbacked memory -> "Unable to mount FS").
+    ; The boot sector (LBA 0), FAT #1 and the root directory are already
+    ; resident in low memory (boot_sector / fat_buffer / root_buffer) so the
+    ; kernel can mount; every other sector is read on demand through the
+    ; floppy controller, signalled by floppy_image_addr = 0 below.
 
     ; Fill boot_info at BOOT_INFO_SEG:0
     mov ax, BOOT_INFO_SEG
@@ -271,8 +240,9 @@ done_loading:
     mov ax, [root_dir_sectors]
     stosd
 
-    ; Member 11: floppy_image_addr
-    mov eax, 0x00200000
+    ; Member 11: floppy_image_addr = 0 -> no full image in RAM; the kernel
+    ; reads sectors on demand via the FDC (1 MB low-memory profile).
+    xor eax, eax
     stosd
 
     call enter_protected_mode
@@ -372,31 +342,6 @@ read_lba_sector_esbx:
     pop cx
     pop bx
     pop ax
-    ret
-
-enter_unreal:
-    push ds
-    push es
-    cli
-    lgdt [gdt_ptr]
-
-    ; Switch to protected mode
-    mov eax, cr0
-    or eax, 1
-    mov cr0, eax
-
-    ; Load flat 4GB selector into GS
-    mov ax, 0x10
-    mov gs, ax
-
-    ; Switch back to real mode
-    mov eax, cr0
-    and eax, 0xFFFFFFFE
-    mov cr0, eax
-
-    pop es
-    pop ds
-    sti
     ret
 
 enter_protected_mode:
