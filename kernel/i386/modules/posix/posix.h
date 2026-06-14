@@ -18,5 +18,6 @@ int posix_lseek(int fd, int offset, uint32_t whence);
 int posix_stat(const char* path, fs_stat_t* out_stat);
 int posix_fstat(int fd, fs_stat_t* out_stat);
 int posix_unlink(const char* path);
+int posix_execve(const char* path, char* const argv[], char* const envp[]);
 
 #endif

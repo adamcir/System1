@@ -4,6 +4,7 @@
 #define POSIX_EPERM   1
 #define POSIX_ENOENT  2
 #define POSIX_EIO     5
+#define POSIX_ENOEXEC 8
 #define POSIX_EBADF   9
 #define POSIX_EACCES  13
 #define POSIX_EEXIST  17
@@ -12,6 +13,7 @@
 #define POSIX_EINVAL  22
 #define POSIX_ENOSPC  28
 #define POSIX_EROFS   30
+#define POSIX_ENOSYS  38
 
 #define POSIX_OK 0
 

@@ -377,6 +377,56 @@ static int fat12_make_83_dir_name(const char* name, uint8_t out[11]) {
     return FS_OK;
 }
 
+static int fat12_make_83_file_name(const char* name, uint8_t out[11]) {
+    uint32_t i;
+    uint32_t pos = 0u;
+    uint32_t base_len = 0u;
+    uint32_t ext_len = 0u;
+    uint8_t in_ext = 0u;
+
+    if (name == 0 || name[0] == '\0' || name[0] == '.') {
+        return FS_ERR_INVALID;
+    }
+
+    for (i = 0u; i < 11u; ++i) {
+        out[i] = ' ';
+    }
+
+    while (name[pos] != '\0') {
+        char c = name[pos++];
+
+        if (c == '/') {
+            return FS_ERR_INVALID;
+        }
+
+        if (c == '.') {
+            if (in_ext != 0u || base_len == 0u || name[pos] == '\0') {
+                return FS_ERR_INVALID;
+            }
+            in_ext = 1u;
+            continue;
+        }
+
+        if (c >= 'a' && c <= 'z') {
+            c = (char)(c - ('a' - 'A'));
+        }
+
+        if (in_ext == 0u) {
+            if (base_len >= 8u) {
+                return FS_ERR_INVALID;
+            }
+            out[base_len++] = (uint8_t)c;
+        } else {
+            if (ext_len >= 3u) {
+                return FS_ERR_INVALID;
+            }
+            out[8u + ext_len++] = (uint8_t)c;
+        }
+    }
+
+    return (base_len == 0u) ? FS_ERR_INVALID : FS_OK;
+}
+
 static int fat12_split_create_path(const char* path, char* parent, char* name) {
     uint32_t len = 0u;
     uint32_t slash = 0u;
@@ -661,6 +711,14 @@ static uint32_t fat12_image_alloc_cluster(uint8_t* image, uint32_t image_size, c
     return 0u;
 }
 
+static void fat12_image_free_cluster_chain(uint8_t* image, const fat12_bpb_t* bpb, uint32_t cluster) {
+    while (cluster >= 2u && cluster < 0xFF8u) {
+        uint32_t next = fat12_image_get_fat_entry(image, bpb, cluster);
+        fat12_image_set_fat_entry(image, bpb, cluster, FAT12_CLUSTER_FREE);
+        cluster = next;
+    }
+}
+
 static void fat12_image_write_dir_entry(uint8_t* entry, const uint8_t name83[11], uint8_t attr, uint16_t cluster, uint32_t size) {
     uint32_t i;
 
@@ -676,6 +734,94 @@ static void fat12_image_write_dir_entry(uint8_t* entry, const uint8_t name83[11]
     entry[29] = (uint8_t)((size >> 8) & 0xFFu);
     entry[30] = (uint8_t)((size >> 16) & 0xFFu);
     entry[31] = (uint8_t)((size >> 24) & 0xFFu);
+}
+
+static uint8_t* fat12_image_find_entry_ptr(uint8_t* image, uint32_t image_size, const fat12_bpb_t* bpb,
+                                           uint32_t dir_cluster, const uint8_t name83[11]) {
+    uint32_t current_cluster = dir_cluster;
+
+    if (dir_cluster == 0u) {
+        uint32_t sector_index;
+        uint32_t entry_index;
+
+        for (sector_index = 0u; sector_index < bpb->root_dir_sectors; ++sector_index) {
+            uint8_t* sector = fat12_image_sector(image, image_size, bpb->root_dir_lba + sector_index);
+            if (sector == 0) {
+                return 0;
+            }
+
+            for (entry_index = 0u; entry_index < 16u; ++entry_index) {
+                uint8_t* entry = sector + entry_index * 32u;
+                uint32_t i;
+                uint8_t attr = entry[11];
+                uint8_t same = 1u;
+
+                if (entry[0] == FAT12_ENTRY_FREE) {
+                    return 0;
+                }
+
+                if (entry[0] == FAT12_ENTRY_DELETED || (attr & FAT12_ATTR_VOLUME_ID) != 0u) {
+                    continue;
+                }
+
+                for (i = 0u; i < 11u; ++i) {
+                    if (entry[i] != name83[i]) {
+                        same = 0u;
+                        break;
+                    }
+                }
+
+                if (same != 0u) {
+                    return entry;
+                }
+            }
+        }
+
+        return 0;
+    }
+
+    while (current_cluster < 0xFF8u) {
+        uint32_t sector_idx;
+        uint32_t base_lba = fat12_image_cluster_to_lba(bpb, current_cluster);
+
+        for (sector_idx = 0u; sector_idx < bpb->sectors_per_cluster; ++sector_idx) {
+            uint8_t* sector = fat12_image_sector(image, image_size, base_lba + sector_idx);
+            uint32_t entry_index;
+            if (sector == 0) {
+                return 0;
+            }
+
+            for (entry_index = 0u; entry_index < 16u; ++entry_index) {
+                uint8_t* entry = sector + entry_index * 32u;
+                uint32_t i;
+                uint8_t attr = entry[11];
+                uint8_t same = 1u;
+
+                if (entry[0] == FAT12_ENTRY_FREE) {
+                    return 0;
+                }
+
+                if (entry[0] == FAT12_ENTRY_DELETED || (attr & FAT12_ATTR_VOLUME_ID) != 0u) {
+                    continue;
+                }
+
+                for (i = 0u; i < 11u; ++i) {
+                    if (entry[i] != name83[i]) {
+                        same = 0u;
+                        break;
+                    }
+                }
+
+                if (same != 0u) {
+                    return entry;
+                }
+            }
+        }
+
+        current_cluster = fat12_image_get_fat_entry(image, bpb, current_cluster);
+    }
+
+    return 0;
 }
 
 int fat12_core_create_dir_in_image(uint8_t* image, uint32_t image_size, const char* path) {
@@ -743,6 +889,104 @@ int fat12_core_create_dir_in_image(uint8_t* image, uint32_t image_size, const ch
     fat12_image_write_dir_entry(new_dir, dot83, FAT12_ATTR_DIRECTORY, (uint16_t)new_cluster, 0u);
     fat12_image_write_dir_entry(new_dir + 32u, dotdot83, FAT12_ATTR_DIRECTORY, (uint16_t)parent_cluster, 0u);
 
+    return FS_OK;
+}
+
+int fat12_core_write_file_in_image(uint8_t* image, uint32_t image_size, const char* path, const char* data, uint32_t size) {
+    fat12_bpb_t bpb;
+    char parent_path[FS_PATH_CAP];
+    char leaf_name[FS_NAME_CAP];
+    uint8_t leaf83[11];
+    uint32_t parent_cluster = 0u;
+    uint32_t first_cluster = 0u;
+    uint32_t prev_cluster = 0u;
+    uint32_t written = 0u;
+    uint8_t* entry;
+    uint8_t attr = 0u;
+    int rc;
+
+    if (image == 0 || image_size < 512u || (data == 0 && size != 0u)) {
+        return FS_ERR_INVALID;
+    }
+
+    rc = fat12_parse_bpb(image, &bpb);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    rc = fat12_split_create_path(path, parent_path, leaf_name);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    rc = fat12_make_83_file_name(leaf_name, leaf83);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    rc = fat12_image_resolve_dir(image, image_size, &bpb, parent_path, &parent_cluster);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    rc = fat12_image_find_in_dir(image, image_size, &bpb, parent_cluster, leaf83, &first_cluster, &attr);
+    if (rc == FS_OK && (attr & FAT12_ATTR_DIRECTORY) != 0u) {
+        return FS_ERR_EXISTS;
+    }
+    if (rc != FS_OK && rc != FS_ERR_NOT_FOUND) {
+        return rc;
+    }
+
+    entry = fat12_image_find_entry_ptr(image, image_size, &bpb, parent_cluster, leaf83);
+    if (entry != 0 && first_cluster != 0u) {
+        fat12_image_free_cluster_chain(image, &bpb, first_cluster);
+    }
+
+    first_cluster = 0u;
+    while (written < size) {
+        uint32_t cluster = fat12_image_alloc_cluster(image, image_size, &bpb);
+        uint32_t lba;
+        uint32_t sector_idx;
+
+        if (cluster == 0u) {
+            if (first_cluster != 0u) {
+                fat12_image_free_cluster_chain(image, &bpb, first_cluster);
+            }
+            return FS_ERR_NO_SPACE;
+        }
+
+        if (first_cluster == 0u) {
+            first_cluster = cluster;
+        }
+        if (prev_cluster != 0u) {
+            fat12_image_set_fat_entry(image, &bpb, prev_cluster, (uint16_t)cluster);
+        }
+        prev_cluster = cluster;
+
+        lba = fat12_image_cluster_to_lba(&bpb, cluster);
+        for (sector_idx = 0u; sector_idx < bpb.sectors_per_cluster && written < size; ++sector_idx) {
+            uint8_t* sector = fat12_image_sector(image, image_size, lba + sector_idx);
+            uint32_t byte_idx;
+            if (sector == 0) {
+                return FS_ERR_INVALID;
+            }
+            for (byte_idx = 0u; byte_idx < 512u && written < size; ++byte_idx) {
+                sector[byte_idx] = (uint8_t)data[written++];
+            }
+        }
+    }
+
+    if (entry == 0) {
+        entry = fat12_image_find_free_entry(image, image_size, &bpb, parent_cluster);
+        if (entry == 0) {
+            if (first_cluster != 0u) {
+                fat12_image_free_cluster_chain(image, &bpb, first_cluster);
+            }
+            return FS_ERR_NO_SPACE;
+        }
+    }
+
+    fat12_image_write_dir_entry(entry, leaf83, 0u, (uint16_t)first_cluster, size);
     return FS_OK;
 }
 

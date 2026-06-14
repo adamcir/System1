@@ -13,6 +13,7 @@
 #define SYS_CHDIR  11u
 #define SYS_MKDIR  12u
 #define SYS_UNLINK 13u
+#define SYS_EXECVE 59u
 
 #define SEEK_SET 0u
 #define SEEK_CUR 1u
@@ -31,6 +32,7 @@ int lseek(int fd, int offset, unsigned whence);
 int chdir(const char* path);
 int mkdir(const char* path);
 int unlink(const char* path);
+int execve(const char* path, char* const argv[], char* const envp[]);
 char* getcwd(char* buf, unsigned size);
 
 #endif

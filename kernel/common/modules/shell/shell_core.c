@@ -18,7 +18,7 @@
 static const char* g_shell_commands[] = {
     "help", "clear", "echo", "reboot", "shutdown", "ticks",
     "version", "pwd", "ls", "cd", "mkdir", "cat", "stat",
-    "touch", "write", "rm", "mmstat"
+    "touch", "write", "rm", "exec", "mmstat"
 };
 
 static char g_shell_history[SHELL_HISTORY_CAP][SHELL_LINE_CAP];
@@ -506,7 +506,7 @@ static void shell_put_u32_dec(uint32_t value) {
 }
 
 static void shell_cmd_help(void) {
-    tty_puts("help clear echo reboot shutdown ticks version pwd ls cd mkdir cat stat touch write rm mmstat\n");
+    tty_puts("help clear echo reboot shutdown ticks version pwd ls cd mkdir cat stat touch write rm exec mmstat\n");
 }
 
 static void shell_cmd_clear(void) {
@@ -569,28 +569,32 @@ static void shell_flush_pending_changes(void) {
 
         tty_puts("Write changes to boot media? [Y/n] ");
         tty_readline(answer, 8u);
-        if (answer[0] == '\0' || answer[0] == 'y' || answer[0] == 'Y') {
+        if (answer[0] == '\0' || answer[0] == ' ' || answer[0] == 'y' || answer[0] == 'Y') {
             write_changes = 1u;
         }
+    }
+
+    if (write_changes != 0u) {
+        tty_puts("Writing...\n");
     }
 
     rc = fs_shutdown(write_changes);
     if (rc != FS_OK) {
         shell_print_fs_error("shutdown", rc);
     } else if (write_changes != 0u) {
-        tty_puts("Changes written.\n");
+        tty_puts("Write completed successfully.\n");
     }
 }
 
 static void shell_cmd_reboot(void) {
-    shell_flush_pending_changes();
     tty_puts("Rebooting...\n");
+    shell_flush_pending_changes();
     signal_raise(HW_RESET);
 }
 
 static void shell_cmd_shutdown(void) {
-    shell_flush_pending_changes();
     tty_puts("Shutting down...\n");
+    shell_flush_pending_changes();
     signal_raise(HW_PWR_DOWN);
 }
 
@@ -682,6 +686,16 @@ static void shell_print_posix_path_error(const char* cmd, const char* path, int 
 
     if (err == POSIX_EBADF) {
         tty_puts("Bad file descriptor\n");
+        return;
+    }
+
+    if (err == POSIX_ENOEXEC) {
+        tty_puts("Exec format error\n");
+        return;
+    }
+
+    if (err == POSIX_ENOSYS) {
+        tty_puts("Function not implemented\n");
         return;
     }
 
@@ -1172,6 +1186,25 @@ static void shell_cmd_rm(char** argv, uint32_t argc) {
     }
 }
 
+static void shell_cmd_exec(char** argv, uint32_t argc) {
+    uint32_t first = 1u;
+    int rc;
+
+    if (first < argc && shell_streq(argv[first], "--")) {
+        ++first;
+    }
+
+    if ((first + 1u) != argc) {
+        shell_print_usage("exec", "usage: exec file.prg");
+        return;
+    }
+
+    rc = posix_execve(argv[first], 0, 0);
+    if (rc < 0) {
+        shell_print_posix_path_error("exec", argv[first], rc);
+    }
+}
+
 static void shell_print_prompt(void) {
     tty_puts(fs_get_cwd_path());
     tty_puts(" > ");
@@ -1301,6 +1334,11 @@ void shell_core_run(void) {
 
         if (shell_streq(argv[0], "rm")) {
             shell_cmd_rm(argv, argc);
+            continue;
+        }
+
+        if (shell_streq(argv[0], "exec")) {
+            shell_cmd_exec(argv, argc);
             continue;
         }
 

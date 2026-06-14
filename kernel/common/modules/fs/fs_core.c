@@ -18,6 +18,8 @@ static uint32_t g_boot_info_ptr = 0u;
 #define FS_MB2_TAG_TYPE_MODULE 3u
 #define FS_IMPORT_ENTRY_CAP 32u
 #define FS_DIRTY_DIR_CAP 16u
+#define FS_DIRTY_FILE_CAP 16u
+#define FS_WRITEBACK_FILE_CAP 4096u
 #define FS_MEDIA_NODE_FLAG 0x80000000u
 #define FS_NODE_ID_MASK 0x7FFFFFFFu
 
@@ -60,7 +62,10 @@ static uint32_t g_mb2_module_start = 0u;
 static uint32_t g_mb2_module_size = 0u;
 static fs_media_kind_t g_media_kind = FS_MEDIA_NONE;
 static char g_dirty_dirs[FS_DIRTY_DIR_CAP][FS_PATH_CAP];
+static char g_dirty_files[FS_DIRTY_FILE_CAP][FS_PATH_CAP];
 static uint32_t g_dirty_dir_count = 0u;
+static uint32_t g_dirty_file_count = 0u;
+static char g_writeback_file[FS_WRITEBACK_FILE_CAP];
 
 int fs_core_to_errno(int rc) {
     if (rc == FS_OK) {
@@ -735,6 +740,15 @@ static void fs_dirty_dirs_clear(void) {
     g_dirty_dir_count = 0u;
 }
 
+static void fs_dirty_files_clear(void) {
+    uint32_t i;
+
+    for (i = 0u; i < FS_DIRTY_FILE_CAP; ++i) {
+        g_dirty_files[i][0] = '\0';
+    }
+    g_dirty_file_count = 0u;
+}
+
 static int fs_record_dirty_dir(const char* path) {
     uint32_t i;
 
@@ -754,6 +768,28 @@ static int fs_record_dirty_dir(const char* path) {
 
     fs_copy_name(g_dirty_dirs[g_dirty_dir_count], FS_PATH_CAP, path);
     ++g_dirty_dir_count;
+    return FS_OK;
+}
+
+static int fs_record_dirty_file(const char* path) {
+    uint32_t i;
+
+    if (path == 0 || path[0] == '\0') {
+        return FS_ERR_INVALID;
+    }
+
+    for (i = 0u; i < g_dirty_file_count; ++i) {
+        if (fs_streq_local(g_dirty_files[i], path) != 0) {
+            return FS_OK;
+        }
+    }
+
+    if (g_dirty_file_count >= FS_DIRTY_FILE_CAP) {
+        return FS_ERR_NO_SPACE;
+    }
+
+    fs_copy_name(g_dirty_files[g_dirty_file_count], FS_PATH_CAP, path);
+    ++g_dirty_file_count;
     return FS_OK;
 }
 
@@ -866,6 +902,7 @@ int fs_core_init(void) {
     g_media_driver = 0;
     g_media_kind = FS_MEDIA_NONE;
     fs_dirty_dirs_clear();
+    fs_dirty_files_clear();
     fs_install_bootmedia_device();
     root_device = block_core_get_root_device();
     rc = fs_probe_block_root(root_device);
@@ -908,6 +945,19 @@ static int fs_core_flush_to_boot_media(void) {
             }
         }
 
+        for (i = 0u; i < g_dirty_file_count; ++i) {
+            uint32_t size = 0u;
+            int rc = ramfs_core_read_file(g_dirty_files[i], g_writeback_file, FS_WRITEBACK_FILE_CAP, &size);
+            if (rc != FS_OK) {
+                return rc;
+            }
+
+            rc = fat12_core_write_file_in_image(image, 2880u * 512u, g_dirty_files[i], g_writeback_file, size);
+            if (rc != FS_OK) {
+                return rc;
+            }
+        }
+
         {
             int rc = fs_fdc_write_image(image, 2880u);
             if (rc != FS_OK) {
@@ -916,6 +966,7 @@ static int fs_core_flush_to_boot_media(void) {
         }
 
         fs_dirty_dirs_clear();
+        fs_dirty_files_clear();
         return FS_OK;
     }
 
@@ -1086,6 +1137,18 @@ int fs_core_open(const char* path, uint32_t flags, uint32_t* out_node_id) {
     rc = g_root_driver->open(full_path, flags, &node_id);
     if (rc != FS_OK) {
         return rc;
+    }
+
+    if (g_media_kind == FS_MEDIA_FAT12 &&
+        ((flags & FS_O_CREAT) != 0u ||
+         (flags & FS_O_TRUNC) != 0u ||
+         (flags & FS_O_APPEND) != 0u ||
+         (flags & FS_O_RDWR) == FS_O_WRONLY ||
+         (flags & FS_O_RDWR) == FS_O_RDWR)) {
+        rc = fs_record_dirty_file(full_path);
+        if (rc != FS_OK) {
+            return rc;
+        }
     }
 
     *out_node_id = node_id;

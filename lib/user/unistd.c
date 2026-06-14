@@ -34,6 +34,14 @@ int unlink(const char* path) {
     return system1_syscall(SYS_UNLINK, (uint32_t)(uintptr_t)path, 0u, 0u, 0u);
 }
 
+int execve(const char* path, char* const argv[], char* const envp[]) {
+    return system1_syscall(SYS_EXECVE,
+        (uint32_t)(uintptr_t)path,
+        (uint32_t)(uintptr_t)argv,
+        (uint32_t)(uintptr_t)envp,
+        0u);
+}
+
 int stat(const char* path, struct stat* out_stat) {
     return system1_syscall(SYS_STAT, (uint32_t)(uintptr_t)path, (uint32_t)(uintptr_t)out_stat, 0u, 0u);
 }

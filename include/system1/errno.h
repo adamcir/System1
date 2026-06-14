@@ -4,6 +4,7 @@
 #define EPERM   1
 #define ENOENT  2
 #define EIO     5
+#define ENOEXEC 8
 #define EBADF   9
 #define EACCES  13
 #define EEXIST  17

@@ -26,11 +26,15 @@ typedef struct {
     uintptr_t entry_ip;
     uintptr_t user_sp;
     uintptr_t kernel_stack;
+    uint32_t image_arch;
+    uint32_t image_segment_count;
+    uint32_t image_file_size;
     char name[PROCESS_NAME_CAP];
 } process_t;
 
 void process_core_init(void);
 process_t* process_core_current(void);
 void process_core_set_cwd(process_t* process, const char* cwd);
+void process_core_record_exec_image(process_t* process, const char* path, uint32_t arch, uint32_t entry, uint32_t segment_count, uint32_t file_size);
 
 #endif

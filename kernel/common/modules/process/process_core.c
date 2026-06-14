@@ -29,6 +29,9 @@ static void process_clear(process_t* process) {
     process->entry_ip = 0u;
     process->user_sp = 0u;
     process->kernel_stack = 0u;
+    process->image_arch = 0u;
+    process->image_segment_count = 0u;
+    process->image_file_size = 0u;
     process->name[0] = '\0';
 }
 
@@ -66,4 +69,16 @@ void process_core_set_cwd(process_t* process, const char* cwd) {
     }
 
     process_copy_string(process->cwd, FS_PATH_CAP, cwd);
+}
+
+void process_core_record_exec_image(process_t* process, const char* path, uint32_t arch, uint32_t entry, uint32_t segment_count, uint32_t file_size) {
+    if (process == 0) {
+        return;
+    }
+
+    process->image_arch = arch;
+    process->entry_ip = (uintptr_t)entry;
+    process->image_segment_count = segment_count;
+    process->image_file_size = file_size;
+    process_copy_string(process->name, PROCESS_NAME_CAP, path);
 }
