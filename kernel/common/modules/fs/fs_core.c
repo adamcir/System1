@@ -793,6 +793,22 @@ static int fs_record_dirty_file(const char* path) {
     return FS_OK;
 }
 
+static uint8_t fs_is_dirty_file(const char* path) {
+    uint32_t i;
+
+    if (path == 0) {
+        return 0u;
+    }
+
+    for (i = 0u; i < g_dirty_file_count; ++i) {
+        if (fs_streq_local(g_dirty_files[i], path) != 0) {
+            return 1u;
+        }
+    }
+
+    return 0u;
+}
+
 static int fs_is_special_dir_entry(const char* name) {
     if (name == 0) {
         return 0;
@@ -1086,21 +1102,16 @@ int fs_core_read_file(const char* path, char* buffer, uint32_t cap, uint32_t* ou
         return FS_ERR_INVALID;
     }
 
-    if (g_media_driver != 0 && g_media_driver->read_file != 0) {
-        rc = fs_core_normalize_path(fs_core_get_cwd_path(), path, full_path, FS_PATH_CAP);
-        if (rc != FS_OK) {
-            return rc;
-        }
+    rc = fs_core_normalize_path(fs_core_get_cwd_path(), path, full_path, FS_PATH_CAP);
+    if (rc != FS_OK) {
+        return rc;
+    }
 
+    if (fs_is_dirty_file(full_path) == 0u && g_media_driver != 0 && g_media_driver->read_file != 0) {
         return g_media_driver->read_file(full_path, buffer, cap, out_size);
     }
 
     if (g_root_driver != 0 && g_root_driver->read_file != 0) {
-        rc = fs_core_normalize_path(fs_core_get_cwd_path(), path, full_path, FS_PATH_CAP);
-        if (rc != FS_OK) {
-            return rc;
-        }
-
         return g_root_driver->read_file(full_path, buffer, cap, out_size);
     }
 
@@ -1121,7 +1132,8 @@ int fs_core_open(const char* path, uint32_t flags, uint32_t* out_node_id) {
         return rc;
     }
 
-    if ((flags & (FS_O_WRONLY | FS_O_CREAT | FS_O_TRUNC | FS_O_APPEND)) == 0u &&
+    if (fs_is_dirty_file(full_path) == 0u &&
+        (flags & (FS_O_WRONLY | FS_O_CREAT | FS_O_TRUNC | FS_O_APPEND)) == 0u &&
         g_media_driver != 0 && g_media_driver->open != 0) {
         rc = g_media_driver->open(full_path, flags, &node_id);
         if (rc == FS_OK) {
@@ -1244,7 +1256,7 @@ int fs_core_stat(const char* path, fs_stat_t* out_stat) {
         return rc;
     }
 
-    if (g_media_driver != 0 && g_media_driver->stat != 0) {
+    if (fs_is_dirty_file(full_path) == 0u && g_media_driver != 0 && g_media_driver->stat != 0) {
         rc = g_media_driver->stat(full_path, out_stat);
         if (rc == FS_OK) {
             return FS_OK;
