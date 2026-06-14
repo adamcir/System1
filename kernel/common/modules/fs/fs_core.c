@@ -3,6 +3,7 @@
 #include "fat12_core.h"
 #include "iso9660_core.h"
 #include "posix.h"
+#include "process_core.h"
 #include "ramfs_core.h"
 #include "vfs_core.h"
 
@@ -941,6 +942,12 @@ int fs_core_shutdown(uint8_t write_changes) {
 }
 
 const char* fs_core_get_cwd_path(void) {
+    process_t* current = process_core_current();
+
+    if (current != 0 && current->cwd[0] != '\0') {
+        return current->cwd;
+    }
+
     if (g_root_driver == 0 || g_root_driver->get_cwd_path == 0) {
         return "/";
     }
@@ -961,7 +968,13 @@ int fs_core_change_dir(const char* path) {
         return rc;
     }
 
-    return g_root_driver->change_dir(full_path);
+    rc = g_root_driver->change_dir(full_path);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    process_core_set_cwd(process_core_current(), full_path);
+    return FS_OK;
 }
 
 int fs_core_make_dir(const char* path) {

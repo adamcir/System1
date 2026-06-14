@@ -1,25 +1,8 @@
 #include "fd_core.h"
 #include "fs_core.h"
 #include "posix.h"
+#include "process_core.h"
 #include "tty.h"
-
-typedef enum {
-    FD_KIND_UNUSED = 0,
-    FD_KIND_TTY_IN = 1,
-    FD_KIND_TTY_OUT = 2,
-    FD_KIND_VFS = 3
-} fd_kind_t;
-
-typedef struct {
-    uint8_t used;
-    fd_kind_t kind;
-    uint32_t node_id;
-    uint32_t offset;
-    uint32_t flags;
-} fd_entry_t;
-
-static fd_entry_t g_fds[POSIX_FD_CAP];
-static uint8_t g_fd_initialized = 0u;
 
 static void fd_zero_entry(fd_entry_t* entry) {
     entry->used = 0u;
@@ -29,28 +12,48 @@ static void fd_zero_entry(fd_entry_t* entry) {
     entry->flags = 0u;
 }
 
-void fd_core_init(void) {
+void fd_core_table_init(fd_table_t* table) {
     uint32_t i;
 
-    for (i = 0u; i < POSIX_FD_CAP; ++i) {
-        fd_zero_entry(&g_fds[i]);
+    if (table == 0) {
+        return;
     }
 
-    g_fds[POSIX_STDIN_FILENO].used = 1u;
-    g_fds[POSIX_STDIN_FILENO].kind = FD_KIND_TTY_IN;
+    for (i = 0u; i < POSIX_FD_CAP; ++i) {
+        fd_zero_entry(&table->entries[i]);
+    }
 
-    g_fds[POSIX_STDOUT_FILENO].used = 1u;
-    g_fds[POSIX_STDOUT_FILENO].kind = FD_KIND_TTY_OUT;
+    table->entries[POSIX_STDIN_FILENO].used = 1u;
+    table->entries[POSIX_STDIN_FILENO].kind = FD_KIND_TTY_IN;
 
-    g_fds[POSIX_STDERR_FILENO].used = 1u;
-    g_fds[POSIX_STDERR_FILENO].kind = FD_KIND_TTY_OUT;
+    table->entries[POSIX_STDOUT_FILENO].used = 1u;
+    table->entries[POSIX_STDOUT_FILENO].kind = FD_KIND_TTY_OUT;
 
-    g_fd_initialized = 1u;
+    table->entries[POSIX_STDERR_FILENO].used = 1u;
+    table->entries[POSIX_STDERR_FILENO].kind = FD_KIND_TTY_OUT;
+
+    table->initialized = 1u;
+}
+
+static fd_table_t* fd_current_table(void) {
+    process_t* current = process_core_current();
+
+    if (current == 0) {
+        return 0;
+    }
+
+    return &current->fd_table;
+}
+
+void fd_core_init(void) {
+    fd_core_table_init(fd_current_table());
 }
 
 static void fd_core_ensure_init(void) {
-    if (g_fd_initialized == 0u) {
-        fd_core_init();
+    fd_table_t* table = fd_current_table();
+
+    if (table != 0 && table->initialized == 0u) {
+        fd_core_table_init(table);
     }
 }
 
@@ -69,20 +72,29 @@ static int fd_to_errno(int rc) {
     return -err;
 }
 
-static int fd_valid(int fd) {
+static int fd_valid(fd_table_t* table, int fd) {
     if (fd < 0 || fd >= (int)POSIX_FD_CAP) {
         return 0;
     }
 
-    return (int)(g_fds[fd].used != 0u);
+    if (table == 0) {
+        return 0;
+    }
+
+    return (int)(table->entries[fd].used != 0u);
 }
 
 int fd_core_open(const char* path, uint32_t flags) {
+    fd_table_t* table;
     uint32_t node_id = 0u;
     uint32_t i;
     int rc;
 
     fd_core_ensure_init();
+    table = fd_current_table();
+    if (table == 0) {
+        return -POSIX_EBADF;
+    }
 
     rc = fs_core_open(path, flags, &node_id);
     if (rc != FS_OK) {
@@ -90,22 +102,22 @@ int fd_core_open(const char* path, uint32_t flags) {
     }
 
     for (i = 3u; i < POSIX_FD_CAP; ++i) {
-        if (g_fds[i].used == 0u) {
-            g_fds[i].used = 1u;
-            g_fds[i].kind = FD_KIND_VFS;
-            g_fds[i].node_id = node_id;
-            g_fds[i].flags = flags;
-            g_fds[i].offset = 0u;
+        if (table->entries[i].used == 0u) {
+            table->entries[i].used = 1u;
+            table->entries[i].kind = FD_KIND_VFS;
+            table->entries[i].node_id = node_id;
+            table->entries[i].flags = flags;
+            table->entries[i].offset = 0u;
 
             if ((flags & FS_O_APPEND) != 0u) {
                 uint32_t size = 0u;
                 rc = fs_core_size(node_id, &size);
                 if (rc != FS_OK) {
-                    fd_zero_entry(&g_fds[i]);
+                    fd_zero_entry(&table->entries[i]);
                     (void)fs_core_close(node_id);
                     return fd_to_errno(rc);
                 }
-                g_fds[i].offset = size;
+                table->entries[i].offset = size;
             }
 
             return (int)i;
@@ -117,37 +129,41 @@ int fd_core_open(const char* path, uint32_t flags) {
 }
 
 int fd_core_close(int fd) {
+    fd_table_t* table;
     int rc;
 
     fd_core_ensure_init();
+    table = fd_current_table();
 
-    if (fd < 3 || fd_valid(fd) == 0) {
+    if (fd < 3 || fd_valid(table, fd) == 0) {
         return -POSIX_EBADF;
     }
 
-    if (g_fds[fd].kind == FD_KIND_VFS) {
-        rc = fs_core_close(g_fds[fd].node_id);
+    if (table->entries[fd].kind == FD_KIND_VFS) {
+        rc = fs_core_close(table->entries[fd].node_id);
         if (rc != FS_OK) {
             return fd_to_errno(rc);
         }
     }
 
-    fd_zero_entry(&g_fds[fd]);
+    fd_zero_entry(&table->entries[fd]);
     return 0;
 }
 
 int fd_core_read(int fd, void* buffer, uint32_t count) {
+    fd_table_t* table;
     fd_entry_t* entry;
     uint32_t size = 0u;
     int rc;
 
     fd_core_ensure_init();
+    table = fd_current_table();
 
-    if (fd_valid(fd) == 0 || buffer == 0) {
+    if (fd_valid(table, fd) == 0 || buffer == 0) {
         return -POSIX_EBADF;
     }
 
-    entry = &g_fds[fd];
+    entry = &table->entries[fd];
     if (entry->kind == FD_KIND_TTY_IN) {
         return tty_readline((char*)buffer, count);
     }
@@ -170,18 +186,20 @@ int fd_core_read(int fd, void* buffer, uint32_t count) {
 }
 
 int fd_core_write(int fd, const void* buffer, uint32_t count) {
+    fd_table_t* table;
     fd_entry_t* entry;
     uint32_t written = 0u;
     uint32_t i;
     int rc;
 
     fd_core_ensure_init();
+    table = fd_current_table();
 
-    if (fd_valid(fd) == 0 || buffer == 0) {
+    if (fd_valid(table, fd) == 0 || buffer == 0) {
         return -POSIX_EBADF;
     }
 
-    entry = &g_fds[fd];
+    entry = &table->entries[fd];
     if (entry->kind == FD_KIND_TTY_OUT) {
         const char* bytes = (const char*)buffer;
         for (i = 0u; i < count; ++i) {
@@ -217,6 +235,7 @@ int fd_core_write(int fd, const void* buffer, uint32_t count) {
 }
 
 int fd_core_lseek(int fd, int offset, uint32_t whence) {
+    fd_table_t* table;
     fd_entry_t* entry;
     uint32_t file_size = 0u;
     int base;
@@ -224,12 +243,13 @@ int fd_core_lseek(int fd, int offset, uint32_t whence) {
     int rc;
 
     fd_core_ensure_init();
+    table = fd_current_table();
 
-    if (fd_valid(fd) == 0 || g_fds[fd].kind != FD_KIND_VFS) {
+    if (fd_valid(table, fd) == 0 || table->entries[fd].kind != FD_KIND_VFS) {
         return -POSIX_EBADF;
     }
 
-    entry = &g_fds[fd];
+    entry = &table->entries[fd];
     if (whence == FS_SEEK_SET) {
         base = 0;
     } else if (whence == FS_SEEK_CUR) {
@@ -254,15 +274,17 @@ int fd_core_lseek(int fd, int offset, uint32_t whence) {
 }
 
 int fd_core_fstat(int fd, fs_stat_t* out_stat) {
+    fd_table_t* table;
     int rc;
 
     fd_core_ensure_init();
+    table = fd_current_table();
 
-    if (fd_valid(fd) == 0 || out_stat == 0 || g_fds[fd].kind != FD_KIND_VFS) {
+    if (fd_valid(table, fd) == 0 || out_stat == 0 || table->entries[fd].kind != FD_KIND_VFS) {
         return -POSIX_EBADF;
     }
 
-    rc = fs_core_fstat(g_fds[fd].node_id, out_stat);
+    rc = fs_core_fstat(table->entries[fd].node_id, out_stat);
     if (rc != FS_OK) {
         return fd_to_errno(rc);
     }

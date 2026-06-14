@@ -1,8 +1,11 @@
 #include "syscall_core.h"
 #include "fs.h"
 #include "posix.h"
+#include "process.h"
 
 void syscall_core_init(void) {
+    process_init();
+    posix_init();
 }
 
 int syscall_core_dispatch(uint32_t nr, uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3) {
