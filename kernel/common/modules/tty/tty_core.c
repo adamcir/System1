@@ -155,6 +155,14 @@ int tty_core_readline_ex(char* buf, uint32_t cap, const tty_readline_hooks_t* ho
             continue;
         }
 
+        if (key == 0x03) {
+            buf[0] = '\0';
+            vga_putc('^');
+            vga_putc('C');
+            vga_putc('\n');
+            return 0;
+        }
+
         if (key == '\n') {
             buf[len] = '\0';
             vga_putc('\n');

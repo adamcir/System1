@@ -149,6 +149,16 @@ static char ascii_to_lower(char c) {
     return c;
 }
 
+static char ascii_to_ctrl(char c) {
+    char lower = ascii_to_lower(c);
+
+    if (lower >= 'a' && lower <= 'z') {
+        return (char)(lower - 'a' + 1);
+    }
+
+    return 0;
+}
+
 static char translate_scancode(uint8_t scancode) {
     static const char base_map[128] = {
         [0x02] = '1', [0x03] = '2', [0x04] = '3', [0x05] = '4',
@@ -337,6 +347,14 @@ static void keyboard_process_scancode(uint8_t scancode) {
 
     translated = translate_scancode(scancode);
     if (translated != 0) {
+        if (ctrl_pressed != 0u) {
+            char ctrl_char = ascii_to_ctrl(translated);
+            if (ctrl_char != 0) {
+                queue_push((int)ctrl_char);
+                return;
+            }
+        }
+
         queue_push((int)translated);
     }
 }
