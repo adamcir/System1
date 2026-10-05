@@ -19,7 +19,7 @@ docs/                      architecture notes and development plans
 examples/                  example System/1 programs
 ```
 
-See `docs/architecture.md` for the detailed layout and bootstrap flow.
+See `docs/architecture.md` for the detailed layout and bootstrap flow, and `docs/userspace.md` for the SPRG/process/syscall ABI.
 
 ## Requirements on x86_64 hosts
 
