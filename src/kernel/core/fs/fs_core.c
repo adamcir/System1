@@ -960,9 +960,8 @@ static int fs_import_media_dir(const char* path) {
     return FS_OK;
 }
 
-int fs_core_init(void) {
+int fs_core_init_ramfs(void) {
     int rc;
-    block_device_t* root_device;
 
     g_root_driver = 0;
     g_media_driver = 0;
@@ -970,48 +969,74 @@ int fs_core_init(void) {
     fs_dirty_dirs_clear();
     fs_dirty_files_clear();
 
-    /*
-     * RAMFS is mandatory and always becomes / first. Physical boot media is
-     * optional. A missing or unreadable FAT12/ISO9660 filesystem must not
-     * prevent System/1 from reaching the built-in shell.
-     */
     rc = ramfs_core_init();
     if (rc != FS_OK) {
         return rc;
     }
+
     g_root_driver = ramfs_core_driver();
     ramfs_core_clear_dirty();
+    return FS_OK;
+}
+
+int fs_core_mount_boot_media(void) {
+    block_device_t* root_device;
+    int rc;
+
+    if (g_root_driver != ramfs_core_driver()) {
+        return FS_ERR_INVALID;
+    }
 
     fs_install_bootmedia_device();
     root_device = block_core_get_root_device();
+
     rc = fs_probe_block_root(root_device);
     if (rc != FS_OK) {
         g_media_driver = 0;
         g_media_kind = FS_MEDIA_NONE;
-        return FS_OK;
+        return FS_ERR_NOT_FOUND;
     }
 
     /*
-     * Preserve the current shell contract for now: physical metadata is
-     * mirrored into RAMFS while unchanged file contents are read from media.
-     * Later this can become a real mount/overlay VFS without changing boot.
+     * Compatibility layer for the current shell: mirror only metadata into
+     * RAMFS. File contents remain on the physical filesystem until changed.
      */
     rc = fs_import_media_dir("/");
     if (rc != FS_OK) {
         g_media_driver = 0;
         g_media_kind = FS_MEDIA_NONE;
 
-        rc = ramfs_core_init();
-        if (rc != FS_OK) {
-            return rc;
+        /*
+         * Drop a partial import. The system must remain usable as a clean
+         * RAM-only System/1 instance even when the physical FS is invalid or
+         * too large for the current fixed RAMFS metadata limits.
+         */
+        if (ramfs_core_init() != FS_OK) {
+            return FS_ERR_NO_SPACE;
         }
 
         g_root_driver = ramfs_core_driver();
         ramfs_core_clear_dirty();
-        return FS_OK;
+        return rc;
     }
 
     ramfs_core_clear_dirty();
+    return FS_OK;
+}
+
+int fs_core_init(void) {
+    int rc;
+
+    rc = fs_core_init_ramfs();
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    /*
+     * Physical media is optional. Callers using the legacy fs_init() API get
+     * a working RAMFS even when no FAT12/ISO9660 filesystem is available.
+     */
+    (void)fs_core_mount_boot_media();
     return FS_OK;
 }
 
@@ -1191,7 +1216,13 @@ int fs_core_read_file(const char* path, char* buffer, uint32_t cap, uint32_t* ou
     }
 
     if (fs_is_dirty_file(full_path) == 0u && g_media_driver != 0 && g_media_driver->read_file != 0) {
-        return g_media_driver->read_file(full_path, buffer, cap, out_size);
+        rc = g_media_driver->read_file(full_path, buffer, cap, out_size);
+        if (rc == FS_OK) {
+            return FS_OK;
+        }
+        if (rc != FS_ERR_NOT_FOUND) {
+            return rc;
+        }
     }
 
     if (g_root_driver != 0 && g_root_driver->read_file != 0) {

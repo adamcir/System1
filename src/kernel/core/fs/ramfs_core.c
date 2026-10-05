@@ -464,6 +464,7 @@ int ramfs_core_init(void) {
     fs_node_t* dev = 0;
     fs_node_t* tmp = 0;
     fs_node_t* mnt = 0;
+    fs_node_t* run = 0;
 
     if (ramfs_core_reset_empty() != FS_OK) {
         return FS_ERR_NO_SPACE;
@@ -475,12 +476,14 @@ int ramfs_core_init(void) {
      */
     if (fs_create_bootstrap_dir(g_root, "dev", &dev) != FS_OK ||
         fs_create_bootstrap_dir(g_root, "tmp", &tmp) != FS_OK ||
+        fs_create_bootstrap_dir(g_root, "run", &run) != FS_OK ||
         fs_create_bootstrap_dir(g_root, "mnt", &mnt) != FS_OK) {
         return FS_ERR_NO_SPACE;
     }
 
     (void)dev;
     (void)tmp;
+    (void)run;
     (void)mnt;
     return FS_OK;
 }

@@ -1,0 +1,35 @@
+name: System1 build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential gcc-multilib nasm xorriso mtools dosfstools perl \
+            grub-pc-bin grub-common
+
+      - name: Compile kernel targets
+        run: |
+          make modules-32
+          make modules-64
+          make modules-img-32
+
+      - name: Build boot images
+        run: |
+          make iso-32
+          make iso-64
+          make img-32
+
+      - name: Check example programs
+        run: make -C examples/programs/test check
