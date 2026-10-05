@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STAGE_DIR="$ROOT_DIR/build/staging/iso32"
-ROOTFS_SRC_DIR="$ROOT_DIR/filesystem/fs32"
+ROOTFS_SRC_DIR="$ROOT_DIR/rootfs/i386"
 ROOTFS_BUILD_DIR="$ROOT_DIR/build/staging/rootfs-iso32"
 ROOTFS_ISO_TMP="$ROOT_DIR/build/staging/rootfs-iso32.iso"
 KERNEL_ELF="$ROOT_DIR/build/artifacts/i386/kernel.elf"

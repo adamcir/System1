@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="$ROOT_DIR/build"
 ARTIFACT_DIR="$BUILD_DIR/artifacts"
 STAGING_DIR="$BUILD_DIR/staging/floppy"
-ROOTFS_SRC_DIR="$ROOT_DIR/filesystem/fs32img"
+ROOTFS_SRC_DIR="$ROOT_DIR/rootfs/i386-floppy"
 ROOTFS_BUILD_DIR="$BUILD_DIR/staging/rootfs-img32"
 IMG="$ARTIFACT_DIR/images/system1-img-32.img"
 STAGE1="$STAGING_DIR/stage1.bin"
@@ -47,7 +47,7 @@ fi
 mkdir -p "$STAGING_DIR" "$(dirname "$IMG")"
 rm -rf "$ROOTFS_BUILD_DIR"
 
-"$NASM_BIN" -f bin "$ROOT_DIR/boot/simple32/stage2.asm" -o "$STAGE2"
+"$NASM_BIN" -f bin "$ROOT_DIR/src/boot/simple32/stage2.asm" -o "$STAGE2"
 
 STAGE2_SIZE=$(stat -c '%s' "$STAGE2")
 STAGE2_SECTORS=$(( (STAGE2_SIZE + 511) / 512 ))
@@ -60,7 +60,7 @@ fi
 "$NASM_BIN" -f bin \
   -DSTAGE2_LBA="$STAGE2_LBA" \
   -DSTAGE2_SECTORS="$STAGE2_SECTORS" \
-  "$ROOT_DIR/boot/simple32/stage1.asm" -o "$STAGE1"
+  "$ROOT_DIR/src/boot/simple32/stage1.asm" -o "$STAGE1"
 
 "$OBJCOPY_BIN" -O binary "$KERNEL_ELF" "$KERNEL_RAW"
 

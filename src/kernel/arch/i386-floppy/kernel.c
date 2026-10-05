@@ -6,8 +6,7 @@
 #include "tty.h"
 #include "paging.h"
 #include "mm.h"
-#include "fs.h"
-#include "syscall.h"
+#include "bootstrap.h"
 
 #define FLOPPY_MAGIC 0x53314D47u
 
@@ -52,11 +51,9 @@ void kmain_floppy_i386(uint32_t magic, uint32_t boot_info_ptr) {
 
     klog_info("boot", "System/1 boot via floppy loader");
     klog_info("kernel", "Modules: vga, signals, interrupts, keyboard, shell");
-    fs_set_boot_context(magic, boot_info_ptr);
-    if (fs_init() != FS_OK) {
-        panic("Unable to mount FS");
+    if (bootstrap_init(magic, boot_info_ptr) != 0) {
+        panic("Bootstrap failed");
     }
-    syscall_init();
     tty_set_color(TTY_GREEN);
     tty_puts("drive: ");
     tty_hex_u32(info->boot_drive);

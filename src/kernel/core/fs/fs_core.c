@@ -592,7 +592,7 @@ static void fs_install_bootmedia_device(void) {
     block_core_set_root_device(&g_boot_floppy_device);
 }
 
-static int fs_mount_driver(const vfs_driver_t* driver) {
+static int fs_mount_media_driver(const vfs_driver_t* driver) {
     int rc;
 
     if (driver == 0 || driver->init == 0) {
@@ -604,31 +604,39 @@ static int fs_mount_driver(const vfs_driver_t* driver) {
         return rc;
     }
 
-    g_root_driver = driver;
+    g_media_driver = driver;
     return FS_OK;
 }
 
 static int fs_probe_block_root(block_device_t* dev) {
     int rc;
 
+    g_media_kind = FS_MEDIA_NONE;
+    g_media_driver = 0;
+
     if (dev == 0) {
-        return FS_ERR_INVALID;
+        return FS_ERR_NOT_FOUND;
     }
 
-    g_media_kind = FS_MEDIA_NONE;
     rc = fat12_core_mount(dev);
     if (rc == FS_OK) {
-        g_media_kind = FS_MEDIA_FAT12;
-        return fs_mount_driver(fat12_core_driver());
+        rc = fs_mount_media_driver(fat12_core_driver());
+        if (rc == FS_OK) {
+            g_media_kind = FS_MEDIA_FAT12;
+        }
+        return rc;
     }
 
     rc = iso9660_core_mount(dev);
     if (rc == FS_OK) {
-        g_media_kind = FS_MEDIA_ISO9660;
-        return fs_mount_driver(iso9660_core_driver());
+        rc = fs_mount_media_driver(iso9660_core_driver());
+        if (rc == FS_OK) {
+            g_media_kind = FS_MEDIA_ISO9660;
+        }
+        return rc;
     }
 
-    return FS_ERR_INVALID;
+    return FS_ERR_NOT_FOUND;
 }
 
 static int fs_path_join(char* out, uint32_t cap, const char* dir, const char* name) {
@@ -952,30 +960,6 @@ static int fs_import_media_dir(const char* path) {
     return FS_OK;
 }
 
-static int fs_switch_root_to_ramfs(void) {
-    int rc;
-
-    if (g_root_driver == 0) {
-        return FS_ERR_INVALID;
-    }
-
-    g_media_driver = g_root_driver;
-
-    rc = ramfs_core_reset_empty();
-    if (rc != FS_OK) {
-        return rc;
-    }
-
-    rc = fs_import_media_dir("/");
-    if (rc != FS_OK) {
-        return rc;
-    }
-
-    ramfs_core_clear_dirty();
-    g_root_driver = ramfs_core_driver();
-    return FS_OK;
-}
-
 int fs_core_init(void) {
     int rc;
     block_device_t* root_device;
@@ -985,14 +969,50 @@ int fs_core_init(void) {
     g_media_kind = FS_MEDIA_NONE;
     fs_dirty_dirs_clear();
     fs_dirty_files_clear();
+
+    /*
+     * RAMFS is mandatory and always becomes / first. Physical boot media is
+     * optional. A missing or unreadable FAT12/ISO9660 filesystem must not
+     * prevent System/1 from reaching the built-in shell.
+     */
+    rc = ramfs_core_init();
+    if (rc != FS_OK) {
+        return rc;
+    }
+    g_root_driver = ramfs_core_driver();
+    ramfs_core_clear_dirty();
+
     fs_install_bootmedia_device();
     root_device = block_core_get_root_device();
     rc = fs_probe_block_root(root_device);
-    if (rc == FS_OK) {
-        return fs_switch_root_to_ramfs();
+    if (rc != FS_OK) {
+        g_media_driver = 0;
+        g_media_kind = FS_MEDIA_NONE;
+        return FS_OK;
     }
 
-    return FS_ERR_NOT_FOUND;
+    /*
+     * Preserve the current shell contract for now: physical metadata is
+     * mirrored into RAMFS while unchanged file contents are read from media.
+     * Later this can become a real mount/overlay VFS without changing boot.
+     */
+    rc = fs_import_media_dir("/");
+    if (rc != FS_OK) {
+        g_media_driver = 0;
+        g_media_kind = FS_MEDIA_NONE;
+
+        rc = ramfs_core_init();
+        if (rc != FS_OK) {
+            return rc;
+        }
+
+        g_root_driver = ramfs_core_driver();
+        ramfs_core_clear_dirty();
+        return FS_OK;
+    }
+
+    ramfs_core_clear_dirty();
+    return FS_OK;
 }
 
 void fs_core_set_boot_context(uint32_t boot_magic, uint32_t boot_info_ptr) {
@@ -1009,6 +1029,10 @@ uint8_t fs_core_has_pending_changes(void) {
 static int fs_core_flush_to_boot_media(void) {
     uint32_t i;
     block_device_t* dev;
+
+    if (g_media_kind == FS_MEDIA_NONE) {
+        return FS_OK;
+    }
 
     if (g_media_kind == FS_MEDIA_ISO9660) {
         return FS_ERR_READ_ONLY;
@@ -1210,7 +1234,7 @@ int fs_core_open(const char* path, uint32_t flags, uint32_t* out_node_id) {
         return rc;
     }
 
-    if (g_media_kind == FS_MEDIA_FAT12 &&
+    if (g_media_kind != FS_MEDIA_NONE &&
         ((flags & FS_O_CREAT) != 0u ||
          (flags & FS_O_TRUNC) != 0u ||
          (flags & FS_O_APPEND) != 0u ||

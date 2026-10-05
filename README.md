@@ -1,69 +1,71 @@
 # System/1
 
-System/1 is a small educational hobbyist operating system built for i386 (32 bit) and x86-64 architectures. The project features a unified modular driver structure (VGA, Keyboard, TTY, shell, signals, filesystem), a custom 16-bit Unreal Mode bootloader, and custom filesystem stacks for FAT12 (floppy) and ISO9660 (CD-ROM). The project is mainly intended for learning how an operating system works.
+System/1 is a small educational hobby operating system written mainly in C and assembly. It currently targets i386, x86-64 and a custom i386 floppy boot path.
 
-QEMU is the recommended environment for testing.
+The kernel uses a RAMFS-first bootstrap: RAMFS is mounted as the initial root filesystem, then FAT12 or ISO9660 boot media is detected and attached as backing storage when available. If no physical filesystem is available, System/1 continues in RAM-only mode and starts the built-in kernel shell.
 
-## Requirements on x86_64 Hosts
+## Repository layout
 
-Install the tools required for building the kernel modules, assembly bootloaders, ISO outputs, and floppy images:
+```text
+src/
+  boot/                    boot sources
+  kernel/core/             shared kernel modules
+  kernel/arch/             architecture-specific kernel code
+  lib/user/                userspace support library
+include/system1/           public System/1 headers
+rootfs/                    filesystem source trees for boot images
+tools/                     image builders and linker scripts
+docs/                      architecture notes and development plans
+examples/                  example System/1 programs
+```
+
+See `docs/architecture.md` for the detailed layout and bootstrap flow.
+
+## Requirements on x86_64 hosts
 
 ```sh
 sudo apt update
 sudo apt install -y \
-  build-essential nasm xorriso mtools perl \
+  build-essential nasm xorriso mtools dosfstools perl \
   qemu-system-x86
 ```
 
 ## Build
-
-Clean the build workspace and compile all targets (CD-ROM ISOs and Floppy images):
 
 ```sh
 make clean
 make all
 ```
 
-Or build specific targets individually:
+Individual targets:
 
 ```sh
-make iso-32       # Build i386 GRUB ISO
-make iso-64       # Build x86_64 GRUB ISO
-make img-32       # Build i386 floppy image
+make iso-32
+make iso-64
+make img-32
 ```
 
-## Output Files
+## Output files
 
-After a successful build, the main artifacts are written to `build/artifacts/`:
+Build artifacts are written to `build/artifacts/`:
 
-- `build/artifacts/images/system1-iso-32.iso` (i386 CD-ROM ISO)
-- `build/artifacts/images/system1-iso-x86_64.iso` (x86_64 CD-ROM ISO)
-- `build/artifacts/images/system1-img-32.img` (i386 Floppy Image)
-- `build/artifacts/i386/kernel.elf` (i386 CD Kernel)
-- `build/artifacts/x86_64/kernel.elf` (x86_64 CD Kernel)
-- `build/artifacts/i386-floppy/kernel.elf` (i386 Floppy Kernel)
+- `build/artifacts/images/system1-iso-32.iso`
+- `build/artifacts/images/system1-iso-x86_64.iso`
+- `build/artifacts/images/system1-img-32.img`
+- `build/artifacts/i386/kernel.elf`
+- `build/artifacts/x86_64/kernel.elf`
+- `build/artifacts/i386-floppy/kernel.elf`
 
 ## Run in QEMU
 
-You can run your compiled builds instantly in QEMU:
-
-### 32-bit CD-ROM ISO
-
 ```sh
-qemu-system-i386 -cdrom build/artifacts/images/system1-iso-32.iso
+make run-32
+make run-64
+make run-img-32
 ```
 
-### 64-bit CD-ROM ISO
+The ISO targets use more RAM for GRUB and CD boot. The floppy target keeps the 1 MiB low-memory profile.
 
-```sh
-qemu-system-x86_64 -cdrom build/artifacts/images/system1-iso-x86_64.iso
-```
-
-### 32-bit Floppy Image
-
-```sh
-qemu-system-i386 -fda build/artifacts/images/system1-img-32.img
-```
 ---
 
-*System/1 - by adamcir (Adava) AdavaSoftware in 2026. The OS is under license GPLv3.0*
+System/1 — Adam Cír (Adava / Adava Software), 2026. Licensed under GPLv3.

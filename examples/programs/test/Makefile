@@ -26,19 +26,19 @@ $(BUILD_DIR):
 $(BUILD_DIR)/test.i386.o: test.c | $(BUILD_DIR)
 	$(I386_CC) $(I386_CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/unistd.i386.o: $(ROOT_DIR)/lib/user/unistd.c | $(BUILD_DIR)
+$(BUILD_DIR)/unistd.i386.o: $(ROOT_DIR)/src/lib/user/unistd.c | $(BUILD_DIR)
 	$(I386_CC) $(I386_CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/syscall.i386.o: $(ROOT_DIR)/lib/user/syscall.c | $(BUILD_DIR)
+$(BUILD_DIR)/syscall.i386.o: $(ROOT_DIR)/src/lib/user/syscall.c | $(BUILD_DIR)
 	$(I386_CC) $(I386_CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/test.x86_64.o: test.c | $(BUILD_DIR)
 	$(X64_CC) $(X64_CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/unistd.x86_64.o: $(ROOT_DIR)/lib/user/unistd.c | $(BUILD_DIR)
+$(BUILD_DIR)/unistd.x86_64.o: $(ROOT_DIR)/src/lib/user/unistd.c | $(BUILD_DIR)
 	$(X64_CC) $(X64_CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/syscall.x86_64.o: $(ROOT_DIR)/lib/user/syscall.c | $(BUILD_DIR)
+$(BUILD_DIR)/syscall.x86_64.o: $(ROOT_DIR)/src/lib/user/syscall.c | $(BUILD_DIR)
 	$(X64_CC) $(X64_CFLAGS) -c $< -o $@
 
 $(I386_PRG): linker.i386.ld $(I386_OBJS)

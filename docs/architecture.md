@@ -1,0 +1,57 @@
+# System/1 source layout
+
+System/1 keeps platform-independent code separate from architecture and boot-media code.
+
+```text
+src/
+  boot/                    early boot sources and custom floppy loader
+  kernel/
+    core/                  architecture-independent kernel modules
+    arch/
+      i386/                i386 entry, ISR and architecture wrappers
+      i386-floppy/         i386 custom-floppy target
+      x86_64/              x86-64 entry, ISR and architecture wrappers
+  lib/
+    user/                  userspace support library
+
+include/
+  system1/                 public System/1 userspace headers
+
+rootfs/
+  i386/                    i386 CD filesystem source
+  i386-floppy/             FAT12 floppy filesystem source
+  x86_64/                  x86-64 CD filesystem source
+
+tools/
+  linker/                  kernel linker scripts
+  mkiso-i386.sh
+  mkiso-x86_64.sh
+  mkimg-32.sh
+
+docs/                      design notes and historical plans
+examples/                  example System/1 programs
+```
+
+## Early bootstrap
+
+The kernel does not depend on a userspace `init` yet.
+
+Current boot order:
+
+```text
+bootloader
+  -> architecture kernel entry
+  -> paging / memory / interrupts / keyboard
+  -> kernel bootstrap
+  -> RAMFS mounted as /
+  -> optional FAT12 or ISO9660 detection
+  -> physical filesystem used as backing media when available
+  -> syscalls
+  -> built-in kernel shell
+```
+
+RAMFS is mandatory. Physical media is optional: failure to find or mount a
+physical filesystem must not prevent the built-in shell from starting.
+
+When executable process loading is ready, the kernel bootstrap can hand off to
+an `init.prg` process instead of starting the built-in shell directly.

@@ -461,29 +461,27 @@ int ramfs_core_reset_empty(void) {
 }
 
 int ramfs_core_init(void) {
-    fs_node_t* boot = 0;
     fs_node_t* dev = 0;
-    fs_node_t* etc = 0;
     fs_node_t* tmp = 0;
+    fs_node_t* mnt = 0;
 
     if (ramfs_core_reset_empty() != FS_OK) {
         return FS_ERR_NO_SPACE;
     }
 
-    if (fs_create_bootstrap_dir(g_root, "boot", &boot) != FS_OK ||
-        fs_create_bootstrap_dir(g_root, "dev", &dev) != FS_OK ||
-        fs_create_bootstrap_dir(g_root, "etc", &etc) != FS_OK ||
-        fs_create_bootstrap_dir(g_root, "tmp", &tmp) != FS_OK) {
+    /*
+     * RAMFS is the first root filesystem of System/1.
+     * Persistent boot-media metadata is attached only after probing.
+     */
+    if (fs_create_bootstrap_dir(g_root, "dev", &dev) != FS_OK ||
+        fs_create_bootstrap_dir(g_root, "tmp", &tmp) != FS_OK ||
+        fs_create_bootstrap_dir(g_root, "mnt", &mnt) != FS_OK) {
         return FS_ERR_NO_SPACE;
     }
 
-    if (fs_create_bootstrap_file(boot, "kernel") != FS_OK ||
-        fs_create_bootstrap_file(etc, "init") != FS_OK ||
-        fs_create_bootstrap_file(dev, "tty0") != FS_OK) {
-        return FS_ERR_NO_SPACE;
-    }
-
+    (void)dev;
     (void)tmp;
+    (void)mnt;
     return FS_OK;
 }
 

@@ -6,8 +6,7 @@
 #include "tty.h"
 #include "paging.h"
 #include "mm.h"
-#include "fs.h"
-#include "syscall.h"
+#include "bootstrap.h"
 
 void kmain_x86_64(uint32_t magic, uint32_t info) {
     tty_init();
@@ -28,11 +27,9 @@ void kmain_x86_64(uint32_t magic, uint32_t info) {
     interrupts_enable();
     klog_info("boot", "System/1 boot via GRUB");
     klog_info("kernel", "Modules: vga, signals, interrupts, keyboard, shell");
-    fs_set_boot_context(magic, info);
-    if (fs_init() != FS_OK) {
-        panic("Unable to mount FS");
+    if (bootstrap_init(magic, info) != 0) {
+        panic("Bootstrap failed");
     }
-    syscall_init();
     klog_info("mm", "Initial stats");
     mm_print_stats();
     klog_system_logo();

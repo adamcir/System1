@@ -3,8 +3,9 @@ I386_LD      ?= $(shell command -v i686-elf-ld 2>/dev/null || command -v i686-li
 I386_OBJCOPY ?= $(shell command -v i686-elf-objcopy 2>/dev/null || command -v i686-linux-gnu-objcopy 2>/dev/null || command -v objcopy 2>/dev/null)
 X64_CC       ?= $(shell command -v x86_64-elf-gcc 2>/dev/null || command -v x86_64-linux-gnu-gcc 2>/dev/null || command -v gcc 2>/dev/null)
 X64_LD       ?= $(shell command -v x86_64-elf-ld 2>/dev/null || command -v x86_64-linux-gnu-ld 2>/dev/null || command -v ld 2>/dev/null)
-QEMU32       ?= qemu-system-i386 -m 1M
-QEMU64       ?= qemu-system-x86_64 -m 1M
+QEMU32       ?= qemu-system-i386 -m 32M
+QEMU64       ?= qemu-system-x86_64 -m 64M
+QEMUFLP      ?= qemu-system-i386 -m 1M
 
 BUILD_DIR := build
 BUILD_OBJ := $(BUILD_DIR)/obj
@@ -16,23 +17,24 @@ FLP_OUT_DIR := $(BUILD_OUT)/i386-floppy
 
 CFLAGS_COMMON := -ffreestanding -fno-pic -fno-stack-protector -nostdlib -nostdinc -Wall -Wextra
 
-KDIR_I386 := kernel/i386
-KDIR_X64  := kernel/x86_64
-KDIR_FLP  := kernel/i386-floppy
-COMMON_MODULE_DIR := kernel/common/modules
+KERNEL_SRC := src/kernel
+KDIR_I386 := $(KERNEL_SRC)/arch/i386
+KDIR_X64  := $(KERNEL_SRC)/arch/x86_64
+KDIR_FLP  := $(KERNEL_SRC)/arch/i386-floppy
+COMMON_MODULE_DIR := $(KERNEL_SRC)/core
 
 MODULES ?= $(sort $(notdir $(wildcard $(COMMON_MODULE_DIR)/*)))
 
-MB2_SRC      := boot/multiboot2_header.S
-ENTRY32_SRC  := arch/i386/entry_i386.S
-ENTRY64_SRC  := arch/x86_64/entry_x86_64_bridge.S
-ENTRYFLP_SRC := arch/i386/entry_floppy_i386.S
-ISR32_SRC    := arch/i386/isr_i386.S
-ISR64_SRC    := arch/x86_64/isr_x86_64.S
-ISRFLP_SRC   := arch/i386/isr_floppy_i386.S
-LDS32        := linker/linker.i386.ld
-LDS64        := linker/linker.x86_64.ld
-LDSFLP       := linker/linker.floppy.i386.ld
+MB2_SRC      := src/boot/multiboot2_header.S
+ENTRY32_SRC  := $(KDIR_I386)/entry.S
+ENTRY64_SRC  := $(KDIR_X64)/entry.S
+ENTRYFLP_SRC := $(KDIR_FLP)/entry.S
+ISR32_SRC    := $(KDIR_I386)/isr.S
+ISR64_SRC    := $(KDIR_X64)/isr.S
+ISRFLP_SRC   := $(KDIR_FLP)/isr.S
+LDS32        := tools/linker/linker.i386.ld
+LDS64        := tools/linker/linker.x86_64.ld
+LDSFLP       := tools/linker/linker.floppy.i386.ld
 
 KERNEL32_ELF  := $(I386_OUT_DIR)/kernel.elf
 KERNEL64_ELF  := $(X64_OUT_DIR)/kernel.elf
@@ -160,17 +162,17 @@ $(KERNELFLP_ELF): $(LDSFLP) $(BUILD_OBJ)/entry_floppy_i386.o $(BUILD_OBJ)/isr_fl
 	$(I386_LD) -m elf_i386 -T $(LDSFLP) -o $@ \
 		$(BUILD_OBJ)/entry_floppy_i386.o $(BUILD_OBJ)/isr_floppy_i386.o $(BUILD_OBJ)/kernel_i386_floppy.o $(FLP_MODULE_OBJS)
 
-$(ISO32): $(KERNEL32_ELF) scripts/mkiso-i386.sh | $(IMAGE_OUT_DIR)
-	chmod +x scripts/mkiso-i386.sh
-	./scripts/mkiso-i386.sh
+$(ISO32): $(KERNEL32_ELF) tools/mkiso-i386.sh | $(IMAGE_OUT_DIR)
+	chmod +x tools/mkiso-i386.sh
+	./tools/mkiso-i386.sh
 
-$(ISO64): $(KERNEL64_ELF) scripts/mkiso-x86_64.sh | $(IMAGE_OUT_DIR)
-	chmod +x scripts/mkiso-x86_64.sh
-	./scripts/mkiso-x86_64.sh
+$(ISO64): $(KERNEL64_ELF) tools/mkiso-x86_64.sh | $(IMAGE_OUT_DIR)
+	chmod +x tools/mkiso-x86_64.sh
+	./tools/mkiso-x86_64.sh
 
-$(IMG32): $(KERNELFLP_ELF) scripts/mkimg-32.sh boot/simple32/stage1.asm boot/simple32/stage2.asm | $(IMAGE_OUT_DIR)
-	chmod +x scripts/mkimg-32.sh
-	./scripts/mkimg-32.sh
+$(IMG32): $(KERNELFLP_ELF) tools/mkimg-32.sh src/boot/simple32/stage1.asm src/boot/simple32/stage2.asm | $(IMAGE_OUT_DIR)
+	chmod +x tools/mkimg-32.sh
+	./tools/mkimg-32.sh
 
 iso-32: $(ISO32)
 
@@ -192,7 +194,7 @@ run-x86_64: $(ISO64)
 	$(QEMU64) -cdrom $(ISO64)
 
 run-img-32: $(IMG32)
-	$(QEMU32) -fda $(IMG32)
+	$(QEMUFLP) -fda $(IMG32)
 
 clean:
 	rm -rf $(BUILD_DIR)
