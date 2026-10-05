@@ -138,11 +138,6 @@ static int fs_cached_floppy_read(block_device_t* dev, uint32_t lba, uint32_t cou
         return FS_ERR_INVALID;
     }
 
-    if (info->floppy_image_addr != 0) {
-        fs_copy_bytes((uint8_t*)buffer, (const uint8_t*)((uintptr_t)info->floppy_image_addr + lba * 512u), count * 512u);
-        return FS_OK;
-    }
-
     for (i = 0u; i < count; ++i) {
         uint32_t current_lba = lba + i;
         uint8_t* dst = out + (i * 512u);
@@ -188,10 +183,6 @@ static int fs_cached_floppy_write(block_device_t* dev, uint32_t lba, uint32_t co
         uint32_t current_lba = lba + i;
         const uint8_t* src = in + (i * 512u);
         int rc;
-
-        if (info->floppy_image_addr != 0u) {
-            fs_copy_bytes((uint8_t*)((uintptr_t)info->floppy_image_addr + current_lba * 512u), src, 512u);
-        }
 
         if (current_lba == 0u && info->boot_sector_addr != 0u) {
             fs_copy_bytes((uint8_t*)(uintptr_t)info->boot_sector_addr, src, 512u);
@@ -1437,9 +1428,6 @@ void fs_core_get_stats(fs_core_stats_t* out_stats) {
     out_stats->boot_media_buffer_bytes = 0u;
     out_stats->block_cache_bytes = 0u;
 
-    if (g_boot_floppy_info != 0 && g_boot_floppy_info->floppy_image_addr != 0u) {
-        out_stats->boot_media_buffer_bytes = 2880u * 512u;
-    }
     if (g_media_kind == FS_MEDIA_FAT12) {
         out_stats->block_cache_bytes = fat12_core_buffer_bytes();
     }

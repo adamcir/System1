@@ -55,3 +55,12 @@ physical filesystem must not prevent the built-in shell from starting.
 
 When executable process loading is ready, the kernel bootstrap can hand off to
 an `init.prg` process instead of starting the built-in shell directly.
+
+
+## Floppy memory model
+
+The i386 floppy target does not mirror the complete 1.44 MB disk in RAM.
+The stage-2 loader keeps only the FAT12 boot sector, FAT and root-directory
+metadata in low memory. File and subdirectory sectors are read through the
+floppy controller on demand. This keeps RAMFS independent from the physical
+disk image and avoids requiring memory at 0x00200000 on the 1 MiB profile.

@@ -75,7 +75,8 @@ start:
     inc ax
     loop .read_fat
 
-    ; Search BOOT directory in root dir
+    ; Cache the complete FAT12 root directory in low memory.
+    ; The kernel can use this metadata without needing a full floppy image.
     mov ax, [root_lba]
     mov cx, [root_dir_sectors]
     mov di, root_buffer
@@ -85,9 +86,15 @@ start:
     mov bx, di
     call read_lba_sector
     jc disk_fail
+    pop cx
+    pop ax
+    inc ax
+    add di, 512
+    loop .read_root
 
-    mov si, di
-    mov dx, 16            ; 16 entries per sector
+    ; Search BOOT directory in the cached root directory.
+    mov si, root_buffer
+    mov dx, [root_entries]
 .scan_root_entries:
     cmp byte [si], 0x00
     je kernel_not_found
@@ -105,17 +112,9 @@ start:
     add si, 32
     dec dx
     jnz .scan_root_entries
-
-    pop cx
-    pop ax
-    inc ax
-    add di, 512
-    loop .read_root
     jmp kernel_not_found
 
 boot_dir_found:
-    pop cx  ; clean up stack
-    pop ax  ; clean up stack
 
     ; Get cluster of BOOT directory
     mov ax, [si + 26]
@@ -192,44 +191,9 @@ kernel_found:
 done_loading:
     call floppy_motor_off
 
-    ; Enter Unreal Mode to load the entire floppy disk to 0x00200000 (2 MB)
-    call enter_unreal
-
-    ; Loop through LBA 0 to 2879
-    xor cx, cx              ; CX = current_lba = 0
-.load_floppy_loop:
-    push cx
-    mov ax, cx
-    mov bx, boot_sector
-    call read_lba_sector
-    pop cx
-    jnc .copy_sector
-    jmp disk_fail
-
-.copy_sector:
-    ; Copy 512 bytes (128 dwords) from boot_sector to GS:[0x00200000 + CX * 512]
-    push cx
-    
-    ; EDI = 0x00200000 + CX * 512
-    xor edi, edi
-    mov di, cx
-    shl edi, 9
-    add edi, 0x00200000
-
-    mov ecx, 128
-    mov esi, boot_sector
-.copy_dword:
-    mov eax, [esi]
-    mov [gs:edi], eax
-    add esi, 4
-    add edi, 4
-    dec ecx
-    jnz .copy_dword
-
-    pop cx
-    inc cx
-    cmp cx, 2880
-    jne .load_floppy_loop
+    ; Do not mirror the 1.44 MB floppy into RAM. The loader keeps only
+    ; boot/FAT/root metadata in low memory; the kernel streams other sectors
+    ; from the physical floppy controller on demand.
 
     ; Fill boot_info at BOOT_INFO_SEG:0
     mov ax, BOOT_INFO_SEG
@@ -272,7 +236,8 @@ done_loading:
     stosd
 
     ; Member 11: floppy_image_addr
-    mov eax, 0x00200000
+    ; Zero means there is intentionally no full-disk RAM mirror.
+    xor eax, eax
     stosd
 
     call enter_protected_mode
@@ -372,31 +337,6 @@ read_lba_sector_esbx:
     pop cx
     pop bx
     pop ax
-    ret
-
-enter_unreal:
-    push ds
-    push es
-    cli
-    lgdt [gdt_ptr]
-
-    ; Switch to protected mode
-    mov eax, cr0
-    or eax, 1
-    mov cr0, eax
-
-    ; Load flat 4GB selector into GS
-    mov ax, 0x10
-    mov gs, ax
-
-    ; Switch back to real mode
-    mov eax, cr0
-    and eax, 0xFFFFFFFE
-    mov cr0, eax
-
-    pop es
-    pop ds
-    sti
     ret
 
 enter_protected_mode:
