@@ -172,6 +172,7 @@ $(KERNELFLP_ELF): $(LDSFLP) $(BUILD_OBJ)/entry_floppy_i386.o $(BUILD_OBJ)/isr_fl
 
 user-programs:
 	$(MAKE) -C examples/programs/test all
+	$(MAKE) -C src/userland all
 
 $(ISO32): user-programs $(KERNEL32_ELF) tools/mkiso-i386.sh | $(IMAGE_OUT_DIR)
 	chmod +x tools/mkiso-i386.sh
@@ -210,3 +211,4 @@ run-img-32: $(IMG32)
 clean:
 	rm -rf $(BUILD_DIR)
 	$(MAKE) -C examples/programs/test clean
+	$(MAKE) -C src/userland clean

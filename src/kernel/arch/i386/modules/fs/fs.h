@@ -11,9 +11,11 @@
 
 #define FS_NODE_DIR 1u
 #define FS_NODE_FILE 2u
+#define FS_NODE_SYMLINK 3u
 
 #define FS_MODE_DIR  0040000u
 #define FS_MODE_FILE 0100000u
+#define FS_MODE_SYMLINK 0120000u
 
 #define FS_OK 0
 #define FS_ERR_NOT_FOUND -1
@@ -81,6 +83,8 @@ int fs_read_file(const char* path, char* buffer, uint32_t cap, uint32_t* out_siz
 int fs_to_errno(int rc);
 int fs_stat(const char* path, fs_stat_t* out_stat);
 int fs_unlink(const char* path);
+int fs_symlink(const char* target, const char* linkpath);
+int fs_readlink(const char* path, char* buffer, uint32_t cap, uint32_t* out_size);
 void fs_get_stats(fs_core_stats_t* out_stats);
 
 #endif

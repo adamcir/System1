@@ -49,6 +49,14 @@ int fs_unlink(const char* path) {
     return fs_core_unlink(path);
 }
 
+int fs_symlink(const char* target, const char* linkpath) {
+    return fs_core_symlink(target, linkpath);
+}
+
+int fs_readlink(const char* path, char* buffer, uint32_t cap, uint32_t* out_size) {
+    return fs_core_readlink(path, buffer, cap, out_size);
+}
+
 void fs_get_stats(fs_core_stats_t* out_stats) {
     fs_core_get_stats(out_stats);
 }

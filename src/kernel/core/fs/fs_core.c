@@ -16,6 +16,9 @@ static uint32_t g_boot_info_ptr = 0u;
 #define FS_MB2_BOOTLOADER_MAGIC 0x36D76289u
 #define FS_MB2_TAG_TYPE_END 0u
 #define FS_MB2_TAG_TYPE_MODULE 3u
+#define FS_SYMLINK_PREFIX "S1SYMLINK:"
+#define FS_SYMLINK_PREFIX_LEN 10u
+#define FS_SYMLINK_MAX_DEPTH 8u
 
 typedef enum {
     FS_MEDIA_NONE = 0,
@@ -56,6 +59,7 @@ static block_device_t g_mb2_module_device;
 static uint32_t g_mb2_module_start = 0u;
 static uint32_t g_mb2_module_size = 0u;
 static fs_media_kind_t g_media_kind = FS_MEDIA_NONE;
+static char g_symlink_buffer[FS_PATH_CAP + 16u];
 
 int fs_core_to_errno(int rc) {
     if (rc == FS_OK) {
@@ -745,6 +749,135 @@ int fs_core_normalize_path(const char* cwd, const char* path, char* out, uint32_
     return FS_OK;
 }
 
+static int fs_raw_readlink(const char* full_path, char* buffer, uint32_t cap, uint32_t* out_size) {
+    fs_stat_t st;
+    uint32_t size = 0u;
+    uint32_t i;
+    int rc;
+
+    if (full_path == 0 || buffer == 0 || cap == 0u || out_size == 0 ||
+        g_root_driver == 0 || g_root_driver->stat == 0 || g_root_driver->read_file == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    rc = g_root_driver->stat(full_path, &st);
+    if (rc != FS_OK) {
+        return rc;
+    }
+    if ((st.mode & FS_MODE_FILE) == 0u || st.size <= FS_SYMLINK_PREFIX_LEN ||
+        st.size >= (uint32_t)sizeof(g_symlink_buffer)) {
+        return FS_ERR_INVALID;
+    }
+
+    rc = g_root_driver->read_file(full_path, g_symlink_buffer,
+                                  (uint32_t)sizeof(g_symlink_buffer), &size);
+    if (rc != FS_OK) {
+        return rc;
+    }
+    if (size <= FS_SYMLINK_PREFIX_LEN) {
+        return FS_ERR_INVALID;
+    }
+
+    for (i = 0u; i < FS_SYMLINK_PREFIX_LEN; ++i) {
+        if (g_symlink_buffer[i] != FS_SYMLINK_PREFIX[i]) {
+            return FS_ERR_INVALID;
+        }
+    }
+
+    size -= FS_SYMLINK_PREFIX_LEN;
+    if (size + 1u > cap) {
+        return FS_ERR_NO_SPACE;
+    }
+
+    for (i = 0u; i < size; ++i) {
+        char ch = g_symlink_buffer[FS_SYMLINK_PREFIX_LEN + i];
+        if (ch == '\n' || ch == '\r' || ch == '\0') {
+            size = i;
+            break;
+        }
+        buffer[i] = ch;
+    }
+    buffer[size] = '\0';
+    *out_size = size;
+    return FS_OK;
+}
+
+static int fs_parent_path(const char* path, char* out, uint32_t cap) {
+    uint32_t len = 0u;
+    uint32_t cut;
+
+    if (path == 0 || out == 0 || cap < 2u || path[0] != '/') {
+        return FS_ERR_INVALID;
+    }
+
+    while (path[len] != '\0') {
+        ++len;
+    }
+    if (len <= 1u) {
+        out[0] = '/';
+        out[1] = '\0';
+        return FS_OK;
+    }
+
+    cut = len;
+    while (cut > 1u && path[cut - 1u] != '/') {
+        --cut;
+    }
+    if (cut <= 1u) {
+        out[0] = '/';
+        out[1] = '\0';
+        return FS_OK;
+    }
+
+    --cut;
+    if (cut + 1u > cap) {
+        return FS_ERR_NO_SPACE;
+    }
+
+    for (len = 0u; len < cut; ++len) {
+        out[len] = path[len];
+    }
+    out[cut] = '\0';
+    return FS_OK;
+}
+
+static int fs_resolve_final_symlink(const char* full_path, char* out, uint32_t cap) {
+    char current[FS_PATH_CAP];
+    char target[FS_PATH_CAP];
+    char parent[FS_PATH_CAP];
+    uint32_t target_size = 0u;
+    uint32_t depth;
+    int rc;
+
+    fs_copy_name(current, FS_PATH_CAP, full_path);
+
+    for (depth = 0u; depth < FS_SYMLINK_MAX_DEPTH; ++depth) {
+        rc = fs_raw_readlink(current, target, FS_PATH_CAP, &target_size);
+        if (rc != FS_OK) {
+            fs_copy_name(out, cap, current);
+            return FS_OK;
+        }
+
+        if (target_size == 0u) {
+            return FS_ERR_INVALID;
+        }
+
+        if (target[0] == '/') {
+            rc = fs_core_normalize_path("/", target, current, FS_PATH_CAP);
+        } else {
+            rc = fs_parent_path(current, parent, FS_PATH_CAP);
+            if (rc == FS_OK) {
+                rc = fs_core_normalize_path(parent, target, current, FS_PATH_CAP);
+            }
+        }
+        if (rc != FS_OK) {
+            return rc;
+        }
+    }
+
+    return FS_ERR_INVALID;
+}
+
 int fs_core_init_ramfs(void) {
     int rc;
 
@@ -837,6 +970,7 @@ const char* fs_core_get_cwd_path(void) {
 
 int fs_core_change_dir(const char* path) {
     char full_path[FS_PATH_CAP];
+    char resolved[FS_PATH_CAP];
     int rc;
 
     if (g_root_driver == 0 || g_root_driver->change_dir == 0) {
@@ -848,12 +982,17 @@ int fs_core_change_dir(const char* path) {
         return rc;
     }
 
-    rc = g_root_driver->change_dir(full_path);
+    rc = fs_resolve_final_symlink(full_path, resolved, FS_PATH_CAP);
     if (rc != FS_OK) {
         return rc;
     }
 
-    process_core_set_cwd(process_core_current(), full_path);
+    rc = g_root_driver->change_dir(resolved);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    process_core_set_cwd(process_core_current(), resolved);
     return FS_OK;
 }
 
@@ -890,7 +1029,45 @@ int fs_core_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, uint3
         return rc;
     }
 
-    return g_root_driver->list_dir(full_path, entries, cap, out_count);
+    rc = g_root_driver->list_dir(full_path, entries, cap, out_count);
+    if (rc == FS_OK) {
+        uint32_t i;
+        for (i = 0u; i < *out_count; ++i) {
+            char child[FS_PATH_CAP];
+            char link_target[FS_PATH_CAP];
+            uint32_t link_size = 0u;
+            uint32_t base_len = 0u;
+            uint32_t name_len = 0u;
+            uint32_t j;
+
+            while (full_path[base_len] != '\0') {
+                ++base_len;
+            }
+            while (entries[i].name[name_len] != '\0') {
+                ++name_len;
+            }
+
+            if (base_len + name_len + 2u >= FS_PATH_CAP) {
+                continue;
+            }
+
+            for (j = 0u; j < base_len; ++j) {
+                child[j] = full_path[j];
+            }
+            if (base_len == 0u || child[base_len - 1u] != '/') {
+                child[base_len++] = '/';
+            }
+            for (j = 0u; j < name_len; ++j) {
+                child[base_len + j] = entries[i].name[j];
+            }
+            child[base_len + name_len] = '\0';
+
+            if (fs_raw_readlink(child, link_target, FS_PATH_CAP, &link_size) == FS_OK) {
+                entries[i].type = FS_NODE_SYMLINK;
+            }
+        }
+    }
+    return rc;
 }
 
 int fs_core_read_file(const char* path, char* buffer, uint32_t cap, uint32_t* out_size) {
@@ -910,7 +1087,14 @@ int fs_core_read_file(const char* path, char* buffer, uint32_t cap, uint32_t* ou
         return FS_ERR_INVALID;
     }
 
-    return g_root_driver->read_file(full_path, buffer, cap, out_size);
+    {
+        char resolved[FS_PATH_CAP];
+        rc = fs_resolve_final_symlink(full_path, resolved, FS_PATH_CAP);
+        if (rc != FS_OK) {
+            return rc;
+        }
+        return g_root_driver->read_file(resolved, buffer, cap, out_size);
+    }
 }
 
 int fs_core_open(const char* path, uint32_t flags, uint32_t* out_node_id) {
@@ -930,7 +1114,19 @@ int fs_core_open(const char* path, uint32_t flags, uint32_t* out_node_id) {
         return FS_ERR_INVALID;
     }
 
-    return g_root_driver->open(full_path, flags, out_node_id);
+    {
+        char resolved[FS_PATH_CAP];
+
+        if ((flags & FS_O_CREAT) != 0u) {
+            return g_root_driver->open(full_path, flags, out_node_id);
+        }
+
+        rc = fs_resolve_final_symlink(full_path, resolved, FS_PATH_CAP);
+        if (rc != FS_OK) {
+            return rc;
+        }
+        return g_root_driver->open(resolved, flags, out_node_id);
+    }
 }
 
 int fs_core_read(uint32_t node_id, uint32_t offset, char* buffer, uint32_t cap, uint32_t* out_size) {
@@ -982,7 +1178,14 @@ int fs_core_stat(const char* path, fs_stat_t* out_stat) {
         return FS_ERR_INVALID;
     }
 
-    return g_root_driver->stat(full_path, out_stat);
+    {
+        char resolved[FS_PATH_CAP];
+        rc = fs_resolve_final_symlink(full_path, resolved, FS_PATH_CAP);
+        if (rc != FS_OK) {
+            return rc;
+        }
+        return g_root_driver->stat(resolved, out_stat);
+    }
 }
 
 int fs_core_fstat(uint32_t node_id, fs_stat_t* out_stat) {
@@ -1011,6 +1214,71 @@ int fs_core_unlink(const char* path) {
     }
 
     return g_root_driver->unlink(full_path);
+}
+
+int fs_core_readlink(const char* path, char* buffer, uint32_t cap, uint32_t* out_size) {
+    char full_path[FS_PATH_CAP];
+    int rc;
+
+    if (path == 0 || buffer == 0 || out_size == 0) {
+        return FS_ERR_INVALID;
+    }
+
+    rc = fs_core_normalize_path(fs_core_get_cwd_path(), path, full_path, FS_PATH_CAP);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    return fs_raw_readlink(full_path, buffer, cap, out_size);
+}
+
+int fs_core_symlink(const char* target, const char* linkpath) {
+    char full_path[FS_PATH_CAP];
+    char data[FS_PATH_CAP + 16u];
+    uint32_t target_len = 0u;
+    uint32_t i;
+    uint32_t node_id = 0u;
+    uint32_t written = 0u;
+    int rc;
+
+    if (target == 0 || target[0] == '\0' || linkpath == 0 || linkpath[0] == '\0') {
+        return FS_ERR_INVALID;
+    }
+
+    while (target[target_len] != '\0') {
+        if (target_len + FS_SYMLINK_PREFIX_LEN + 1u >= (uint32_t)sizeof(data)) {
+            return FS_ERR_NO_SPACE;
+        }
+        ++target_len;
+    }
+
+    rc = fs_core_normalize_path(fs_core_get_cwd_path(), linkpath, full_path, FS_PATH_CAP);
+    if (rc != FS_OK) {
+        return rc;
+    }
+    if (g_root_driver == 0 || g_root_driver->open == 0 || g_root_driver->write == 0) {
+        return FS_ERR_READ_ONLY;
+    }
+
+    for (i = 0u; i < FS_SYMLINK_PREFIX_LEN; ++i) {
+        data[i] = FS_SYMLINK_PREFIX[i];
+    }
+    for (i = 0u; i < target_len; ++i) {
+        data[FS_SYMLINK_PREFIX_LEN + i] = target[i];
+    }
+
+    rc = g_root_driver->open(full_path, FS_O_CREAT | FS_O_TRUNC | FS_O_WRONLY, &node_id);
+    if (rc != FS_OK) {
+        return rc;
+    }
+
+    rc = g_root_driver->write(node_id, 0u, data,
+                              FS_SYMLINK_PREFIX_LEN + target_len, &written);
+    (void)g_root_driver->close(node_id);
+    if (rc != FS_OK) {
+        return rc;
+    }
+    return (written == FS_SYMLINK_PREFIX_LEN + target_len) ? FS_OK : FS_ERR_INVALID;
 }
 
 void fs_core_get_stats(fs_core_stats_t* out_stats) {

@@ -2,6 +2,7 @@
 #define SYSTEM1_COMMON_POSIX_ERRNO_H
 
 #define POSIX_EPERM   1
+#define POSIX_E2BIG   7
 #define POSIX_ENOENT  2
 #define POSIX_EIO     5
 #define POSIX_ENOEXEC 8

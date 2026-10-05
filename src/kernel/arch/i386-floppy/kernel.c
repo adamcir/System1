@@ -71,6 +71,7 @@ void kmain_floppy_i386(uint32_t magic, uint32_t boot_info_ptr) {
     klog_info("mm", "Initial stats");
     mm_print_stats();
     klog_system_logo();
+    (void)bootstrap_start_shell();
     shell_run();
     panic("Kernel loop ended!");
 }

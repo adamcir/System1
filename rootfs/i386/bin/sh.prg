@@ -1,0 +1,1 @@
+S1SYMLINK:/bin/msh.prg

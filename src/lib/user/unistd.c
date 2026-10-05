@@ -1,3 +1,4 @@
+#include "system1/dirent.h"
 #include "system1/fcntl.h"
 #include "system1/stat.h"
 #include "system1/unistd.h"
@@ -32,6 +33,29 @@ int mkdir(const char* path) {
 
 int unlink(const char* path) {
     return system1_syscall(SYS_UNLINK, (uint32_t)(uintptr_t)path, 0u, 0u, 0u);
+}
+
+int symlink(const char* target, const char* linkpath) {
+    return system1_syscall(SYS_SYMLINK,
+        (uint32_t)(uintptr_t)target,
+        (uint32_t)(uintptr_t)linkpath,
+        0u, 0u);
+}
+
+int readlink(const char* path, char* buf, unsigned size) {
+    return system1_syscall(SYS_READLINK,
+        (uint32_t)(uintptr_t)path,
+        (uint32_t)(uintptr_t)buf,
+        (uint32_t)size,
+        0u);
+}
+
+int getdents(const char* path, struct dirent* entries, unsigned cap) {
+    return system1_syscall(SYS_GETDENTS,
+        (uint32_t)(uintptr_t)path,
+        (uint32_t)(uintptr_t)entries,
+        (uint32_t)cap,
+        0u);
 }
 
 int execve(const char* path, char* const argv[], char* const envp[]) {

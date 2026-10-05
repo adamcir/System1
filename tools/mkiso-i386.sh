@@ -8,6 +8,7 @@ ROOTFS_BUILD_DIR="$ROOT_DIR/build/staging/rootfs-iso32"
 ROOTFS_ISO_TMP="$ROOT_DIR/build/staging/rootfs-iso32.iso"
 KERNEL_ELF="$ROOT_DIR/build/artifacts/i386/kernel.elf"
 TEST_PRG="$ROOT_DIR/examples/programs/test/build/program-i386.prg"
+USERLAND_DIR="$ROOT_DIR/src/userland/build/i386"
 ROOTFS_ISO="$STAGE_DIR/boot/rootfs.iso"
 OUT_ISO="$ROOT_DIR/build/artifacts/images/system1-iso-32.iso"
 
@@ -35,6 +36,7 @@ fi
 
 mkdir -p "$ROOTFS_BUILD_DIR/bin"
 cp "$TEST_PRG" "$ROOTFS_BUILD_DIR/bin/test.prg"
+cp "$USERLAND_DIR"/*.prg "$ROOTFS_BUILD_DIR/bin/"
 cp "$KERNEL_ELF" "$ROOTFS_BUILD_DIR/boot/kernel.elf"
 xorriso -as mkisofs -R -J -o "$ROOTFS_ISO_TMP" "$ROOTFS_BUILD_DIR" >/dev/null 2>&1
 cp "$ROOTFS_ISO_TMP" "$ROOTFS_BUILD_DIR/boot/rootfs.iso"

@@ -16,9 +16,8 @@
 #define SHELL_CAT_BUF_CAP 4096u
 
 static const char* g_shell_commands[] = {
-    "help", "clear", "echo", "reboot", "shutdown", "ticks",
-    "version", "pwd", "ls", "cd", "mkdir", "cat", "stat",
-    "touch", "write", "rm", "exec", "fsstat", "mmstat"
+    "help", "clear", "echo", "reboot", "shutdown",
+    "version", "ls", "cat", "exec", "fsstat", "mmstat"
 };
 
 static char g_shell_history[SHELL_HISTORY_CAP][SHELL_LINE_CAP];
@@ -506,7 +505,9 @@ static void shell_put_u32_dec(uint32_t value) {
 }
 
 static void shell_cmd_help(void) {
-    tty_puts("help clear echo reboot shutdown ticks version pwd ls cd mkdir cat stat touch write rm exec fsstat mmstat\n");
+    tty_puts("Kernel Shell builtins:\n");
+    tty_puts("help clear echo reboot shutdown version ls cat exec fsstat mmstat\n");
+    tty_puts("Normal System/1 commands live in /bin and are run by MultiShell.\n");
 }
 
 static void shell_cmd_clear(void) {
@@ -1223,30 +1224,37 @@ static void shell_cmd_rm(char** argv, uint32_t argc) {
 
 static void shell_cmd_exec(char** argv, uint32_t argc) {
     uint32_t first = 1u;
+    char* child_argv[SHELL_ARGV_MAX];
+    uint32_t child_argc = 0u;
+    uint32_t i;
     int rc;
 
     if (first < argc && shell_streq(argv[first], "--")) {
         ++first;
     }
 
-    if ((first + 1u) != argc) {
-        shell_print_usage("exec", "usage: exec file.prg");
+    if (first >= argc) {
+        shell_print_usage("exec", "usage: exec file.prg [args...]");
         return;
     }
 
-    rc = posix_execve(argv[first], 0, 0);
+    for (i = first; i < argc && child_argc + 1u < SHELL_ARGV_MAX; ++i) {
+        child_argv[child_argc++] = argv[i];
+    }
+    child_argv[child_argc] = 0;
+
+    rc = posix_execve(argv[first], child_argv, 0);
     if (rc < 0) {
         shell_print_posix_path_error("exec", argv[first], rc);
     }
 }
 
 static void shell_print_prompt(void) {
-    tty_puts(fs_get_cwd_path());
-    tty_puts(" > ");
+    tty_puts("kernel> ");
 }
 
 void shell_core_run(void) {
-	klog_info("shell", "Starting shell...\n");
+	klog_info("shell", "Starting Kernel Shell...");
 	tty_set_color(TTY_WHITE);
     uint16_t row = 0u;
     uint16_t col = 0u;
@@ -1296,92 +1304,42 @@ void shell_core_run(void) {
             shell_cmd_help();
             continue;
         }
-
         if (shell_streq(argv[0], "clear")) {
             shell_cmd_clear();
             continue;
         }
-
         if (shell_streq(argv[0], "echo")) {
             shell_cmd_echo(argv, argc);
             continue;
         }
-
         if (shell_streq(argv[0], "reboot")) {
             shell_cmd_reboot();
             continue;
         }
-
         if (shell_streq(argv[0], "shutdown")) {
             shell_cmd_shutdown();
             continue;
         }
-
-        if (shell_streq(argv[0], "ticks")) {
-            shell_cmd_ticks();
+        if (shell_streq(argv[0], "version")) {
+            shell_version();
             continue;
         }
-        
-        if (shell_streq(argv[0], "version")){
-			shell_version();
-			continue;
-		}
-
-        if (shell_streq(argv[0], "pwd")) {
-            shell_cmd_pwd(argv, argc);
-            continue;
-        }
-
         if (shell_streq(argv[0], "ls")) {
             shell_cmd_ls(argv, argc);
             continue;
         }
-
-        if (shell_streq(argv[0], "cd")) {
-            shell_cmd_cd(argv, argc);
-            continue;
-        }
-
-        if (shell_streq(argv[0], "mkdir")) {
-            shell_cmd_mkdir(argv, argc);
-            continue;
-        }
-
         if (shell_streq(argv[0], "cat")) {
             shell_cmd_cat(argv, argc);
             continue;
         }
-
-        if (shell_streq(argv[0], "stat")) {
-            shell_cmd_stat(argv, argc);
-            continue;
-        }
-
-        if (shell_streq(argv[0], "touch")) {
-            shell_cmd_touch(argv, argc);
-            continue;
-        }
-
-        if (shell_streq(argv[0], "write")) {
-            shell_cmd_write(argv, argc);
-            continue;
-        }
-
-        if (shell_streq(argv[0], "rm")) {
-            shell_cmd_rm(argv, argc);
-            continue;
-        }
-
         if (shell_streq(argv[0], "exec")) {
             shell_cmd_exec(argv, argc);
             continue;
         }
-
         if (shell_streq(argv[0], "fsstat")) {
             shell_cmd_fsstat();
             continue;
         }
-
         if (shell_streq(argv[0], "mmstat")) {
             shell_cmd_mmstat();
             continue;

@@ -4,6 +4,7 @@
 #include "types.h"
 #include "fs.h"
 #include "posix_errno.h"
+#include "system1_dirent.h"
 
 #define POSIX_STDIN_FILENO 0
 #define POSIX_STDOUT_FILENO 1
@@ -18,6 +19,9 @@ int posix_lseek(int fd, int offset, uint32_t whence);
 int posix_stat(const char* path, fs_stat_t* out_stat);
 int posix_fstat(int fd, fs_stat_t* out_stat);
 int posix_unlink(const char* path);
+int posix_symlink(const char* target, const char* linkpath);
+int posix_readlink(const char* path, char* buffer, uint32_t cap);
+int posix_getdents(const char* path, system1_dirent_t* entries, uint32_t cap);
 int posix_execve(const char* path, char* const argv[], char* const envp[]);
 void posix_exit(int status) __attribute__((noreturn));
 

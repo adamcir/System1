@@ -31,5 +31,7 @@ jobs:
           make iso-64
           make img-32
 
-      - name: Check example programs
-        run: make -C examples/programs/test check
+      - name: Check userspace programs
+        run: |
+          make -C examples/programs/test check
+          make -C src/userland check

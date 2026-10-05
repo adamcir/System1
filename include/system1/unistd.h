@@ -13,6 +13,9 @@
 #define SYS_CHDIR  11u
 #define SYS_MKDIR  12u
 #define SYS_UNLINK 13u
+#define SYS_SYMLINK 83u
+#define SYS_READLINK 85u
+#define SYS_GETDENTS 141u
 #define SYS_EXECVE 59u
 #define SYS_EXIT   60u
 
@@ -37,6 +40,8 @@ int lseek(int fd, int offset, unsigned whence);
 int chdir(const char* path);
 int mkdir(const char* path);
 int unlink(const char* path);
+int symlink(const char* target, const char* linkpath);
+int readlink(const char* path, char* buf, unsigned size);
 int execve(const char* path, char* const argv[], char* const envp[]);
 void _exit(int status) __attribute__((noreturn));
 char* getcwd(char* buf, unsigned size);

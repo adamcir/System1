@@ -38,6 +38,7 @@ void kmain_x86_64(uint32_t magic, uint32_t info) {
     klog_info("mm", "Initial stats");
     mm_print_stats();
     klog_system_logo();
+    (void)bootstrap_start_shell();
     shell_run();
     panic("Kernel loop ended!");
 }
