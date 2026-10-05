@@ -33,6 +33,10 @@ void tty_text_begin(uint16_t row, uint16_t col) {
     tty_core_text_begin(row, col);
 }
 
+void tty_line_redraw(const char* buf, uint32_t len, uint32_t cursor, uint16_t row, uint16_t col) {
+    tty_core_line_redraw(buf, len, cursor, row, col);
+}
+
 int tty_readline(char* buf, uint32_t cap) {
     return tty_core_readline(buf, cap);
 }

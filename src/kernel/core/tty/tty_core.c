@@ -121,6 +121,10 @@ static void tty_redraw_line(char* buf, uint32_t len, uint32_t cursor, uint16_t r
     }
 }
 
+void tty_core_line_redraw(const char* buf, uint32_t len, uint32_t cursor, uint16_t row, uint16_t col) {
+    tty_redraw_line((char*)buf, len, cursor, row, col);
+}
+
 int tty_core_readline(char* buf, uint32_t cap) {
     return tty_core_readline_ex(buf, cap, 0);
 }

@@ -2,8 +2,8 @@
 #include "system1/unistd.h"
 #include "../common/uutil.h"
 int main(int argc, char** argv, char** envp) {
-    struct dirent e[16]; const char* path=(argc>1)?argv[1]:"."; int n,i; (void)envp;
-    n=getdents(path,e,16u);
+    struct dirent e[32]; const char* path=(argc>1)?argv[1]:"."; int n,i; (void)envp;
+    n=getdents(path,e,32u);
     if(n<0){u_err("ls: failed\n");return 1;}
     for(i=0;i<n;++i){
         u_puts(e[i].d_name);

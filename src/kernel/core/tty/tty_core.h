@@ -45,6 +45,7 @@ void tty_core_puts(const char* s);
 void tty_core_hex_u32(uint32_t value);
 void tty_core_get_cursor(uint16_t* out_row, uint16_t* out_col);
 void tty_core_text_begin(uint16_t row, uint16_t col);
+void tty_core_line_redraw(const char* buf, uint32_t len, uint32_t cursor, uint16_t row, uint16_t col);
 int tty_core_readline(char* buf, uint32_t cap);
 int tty_core_readline_ex(char* buf, uint32_t cap, const tty_readline_hooks_t* hooks);
 

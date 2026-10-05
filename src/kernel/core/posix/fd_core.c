@@ -1,8 +1,19 @@
 #include "fd_core.h"
 #include "fs_core.h"
+#include "keyboard.h"
+#include "signals.h"
 #include "posix.h"
 #include "process_core.h"
 #include "tty.h"
+
+static uint16_t g_tty_line_row;
+static uint16_t g_tty_line_col;
+
+typedef struct {
+    const char* buffer;
+    uint32_t len;
+    uint32_t cursor;
+} fd_tty_line_t;
 
 static void fd_zero_entry(fd_entry_t* entry) {
     entry->used = 0u;
@@ -294,15 +305,63 @@ int fd_core_fstat(int fd, fs_stat_t* out_stat) {
 
 int fd_core_ioctl(int fd, uint32_t request, uint32_t arg) {
     fd_table_t* table;
+    fd_entry_t* entry;
 
     fd_core_ensure_init();
     table = fd_current_table();
 
     if (fd_valid(table, fd) == 0) return -POSIX_EBADF;
-    if (request != 0x5301u) return -POSIX_ENOTTY;
-    if (table->entries[fd].kind != FD_KIND_TTY_IN && table->entries[fd].kind != FD_KIND_TTY_OUT) return -POSIX_ENOTTY;
-    if (arg > (uint32_t)TTY_WHITE) return -POSIX_EINVAL;
+    entry = &table->entries[fd];
 
-    tty_set_color((tty_color_t)arg);
-    return 0;
+    if (entry->kind != FD_KIND_TTY_IN && entry->kind != FD_KIND_TTY_OUT) {
+        return -POSIX_ENOTTY;
+    }
+
+    if (request == 0x5301u) {
+        if (arg > (uint32_t)TTY_WHITE) return -POSIX_EINVAL;
+        tty_set_color((tty_color_t)arg);
+        return 0;
+    }
+
+    if (request == 0x5302u) {
+        int key;
+
+        if (entry->kind != FD_KIND_TTY_IN) return -POSIX_ENOTTY;
+
+        for (;;) {
+            keyboard_poll();
+            key = keyboard_take_key();
+            if (key == KEY_NONE) {
+                __asm__ volatile ("hlt");
+                continue;
+            }
+            if (key == KEY_CTRL_ALT_DEL) {
+                signal_raise(HW_RESET);
+                continue;
+            }
+            return key;
+        }
+    }
+
+    if (request == 0x5303u) {
+        if (entry->kind != FD_KIND_TTY_IN) return -POSIX_ENOTTY;
+        tty_get_cursor(&g_tty_line_row, &g_tty_line_col);
+        tty_text_begin(g_tty_line_row, g_tty_line_col);
+        return 0;
+    }
+
+    if (request == 0x5304u) {
+        const fd_tty_line_t* line = (const fd_tty_line_t*)(uintptr_t)arg;
+
+        if (entry->kind != FD_KIND_TTY_IN || line == 0 || line->buffer == 0) {
+            return -POSIX_EINVAL;
+        }
+        if (line->cursor > line->len) return -POSIX_EINVAL;
+
+        tty_line_redraw(line->buffer, line->len, line->cursor,
+                        g_tty_line_row, g_tty_line_col);
+        return 0;
+    }
+
+    return -POSIX_ENOTTY;
 }

@@ -20,6 +20,7 @@ int posix_stat(const char* path, fs_stat_t* out_stat);
 int posix_fstat(int fd, fs_stat_t* out_stat);
 int posix_unlink(const char* path);
 int posix_ioctl(int fd, uint32_t request, uint32_t arg);
+int posix_reboot(uint32_t how);
 int posix_symlink(const char* target, const char* linkpath);
 int posix_readlink(const char* path, char* buffer, uint32_t cap);
 int posix_getdents(const char* path, system1_dirent_t* entries, uint32_t cap);

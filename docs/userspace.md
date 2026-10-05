@@ -72,7 +72,9 @@ Current System/1 syscall numbers:
 11  chdir
 12  mkdir
 13  unlink
+16  ioctl
 59  execve
+88  reboot
 60  _exit
 ```
 
@@ -193,3 +195,55 @@ The normal log form is:
 
 The System/1 logo is no longer compiled into klog; it lives in
 `/etc/motd`.
+
+
+## MultiShell interactive editor and syntax
+
+MSh owns its interactive line editor in userspace. The kernel exposes raw TTY
+key events and line redraw primitives through TTY ioctl requests while normal
+`read(STDIN_FILENO, ...)` remains canonical for ordinary programs.
+
+Interactive editing includes:
+
+- Up/Down persistent history navigation.
+- Left/Right cursor movement.
+- Insert/Delete and Backspace editing.
+- Tab completion for commands in `/bin`, builtins, and filesystem paths.
+
+The parser currently supports:
+
+```text
+*       wildcard matching zero or more characters
+?       wildcard matching one character
+'...'   literal quoted text
+"..."   quoted text
+\       escape next character
+#       comment when starting a token
+;       unconditional command separator
+&&      run next command only after success
+||      run next command only after failure
+```
+
+Globbing expands the final path component against directory entries. Hidden
+names are not matched by `*` or `?` unless the pattern itself begins with
+a dot.
+
+Pipes and file-descriptor redirection are intentionally deferred until the
+process layer has `fork()`, pipes and `dup2()`; MSh does not fake those
+semantics internally.
+
+## Reboot and shutdown
+
+`/bin/reboot.prg` and `/bin/shutdown.prg` are normal userspace programs.
+They use the System/1 reboot syscall rather than depending on Kernel Shell
+builtins.
+
+
+Raw interactive MSh editing uses these System/1 TTY ioctl requests:
+
+```text
+TIOCSCOLOR      set VGA/TTY foreground color
+TIOCGETKEY      block for one raw keyboard event
+TIOCLINEBEGIN   mark the start position of an editable line
+TIOCLINEREDRAW  redraw an editable userspace line and place its cursor
+```

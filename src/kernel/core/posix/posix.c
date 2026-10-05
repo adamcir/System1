@@ -2,6 +2,7 @@
 #include "fd_core.h"
 #include "fs_core.h"
 #include "process_core.h"
+#include "signals.h"
 #include "system1_dirent.h"
 #include "usermode.h"
 
@@ -61,6 +62,18 @@ int posix_ioctl(int fd, uint32_t request, uint32_t arg) {
     return fd_core_ioctl(fd, request, arg);
 }
 
+int posix_reboot(uint32_t how) {
+    if (how == 0u) {
+        signal_raise(HW_RESET);
+        return 0;
+    }
+    if (how == 1u) {
+        signal_raise(HW_PWR_DOWN);
+        return 0;
+    }
+    return -POSIX_EINVAL;
+}
+
 int posix_unlink(const char* path) {
     int rc = fs_core_unlink(path);
     if (rc != FS_OK) {
@@ -86,7 +99,7 @@ int posix_readlink(const char* path, char* buffer, uint32_t cap) {
 }
 
 int posix_getdents(const char* path, system1_dirent_t* entries, uint32_t cap) {
-    fs_dirent_t kernel_entries[16];
+    fs_dirent_t kernel_entries[32];
     uint32_t count = 0u;
     uint32_t i;
     uint32_t j;
@@ -95,8 +108,8 @@ int posix_getdents(const char* path, system1_dirent_t* entries, uint32_t cap) {
     if (entries == 0 || cap == 0u) {
         return -POSIX_EINVAL;
     }
-    if (cap > 16u) {
-        cap = 16u;
+    if (cap > 32u) {
+        cap = 32u;
     }
 
     rc = fs_core_list_dir(path, kernel_entries, cap, &count);
