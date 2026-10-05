@@ -11,6 +11,12 @@ syscall_entry:
     cld
     pusha
 
+    /*
+     * int 0x80 clears IF. Enable interrupts after saving the syscall frame so
+     * blocking TTY input can sleep and wake on keyboard IRQs.
+     */
+    sti
+
     movl 28(%esp), %eax
     movl 16(%esp), %ebx
     movl 24(%esp), %ecx
@@ -25,6 +31,7 @@ syscall_entry:
     call syscall_dispatch
     addl $20, %esp
 
+    cli
     movl %eax, 28(%esp)
     popa
     iret

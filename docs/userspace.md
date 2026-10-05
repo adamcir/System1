@@ -100,3 +100,55 @@ program returns through POSIX `_exit()`.
 The x86-64 SPRG is built and installed in `/bin`, but x86-64 ring-3 execution
 is not enabled yet. `execve()` returns `ENOSYS` there until its architecture
 entry/return path is implemented.
+
+
+## Shell configuration
+
+System/1 keeps shell selection separate from the kernel shell fallback.
+
+```text
+/etc/kernel.cfg   kernel boot/userspace-shell selection
+/etc/shells       valid userspace shells
+/etc/msh.cfg      MultiShell behavior
+```
+
+Default `/etc/kernel.cfg`:
+
+```text
+version=1
+shell=/bin/sh.prg
+shells=/etc/shells
+fallback=kernel
+```
+
+Default `/etc/shells`:
+
+```text
+/bin/sh.prg
+/bin/msh.prg
+```
+
+`/bin/sh.prg` is a System/1 VFS symlink to `/bin/msh.prg`.
+
+Default MultiShell configuration:
+
+```text
+version=1
+path=/bin
+prompt_mode=cwd
+prompt_text=msh
+prompt_suffix= > 
+banner=1
+```
+
+With `prompt_mode=cwd`, MultiShell displays the current directory, for
+example `/ > ` and `/bin > `. Set `prompt_mode=name` to use
+`prompt_text` instead.
+
+Running `kconfig` without arguments opens a small interactive kernel
+configurator. `kconfig shell` opens the shell selector based on
+`/etc/shells`; `kconfig shell /bin/name.prg` selects a shell directly.
+
+The i386 syscall entry deliberately re-enables hardware interrupts after the
+syscall register frame is saved. This is required for blocking TTY reads:
+canonical stdin sleeps until keyboard IRQs provide a completed line.

@@ -11,6 +11,14 @@ syscall_entry:
     cld
     pusha
 
+    /*
+     * int 0x80 enters through an interrupt gate, so IF is cleared by the CPU.
+     * Re-enable IRQs after the register frame is safe. This is required for
+     * blocking TTY read(): tty_readline() sleeps with HLT and must be woken by
+     * the keyboard IRQ.
+     */
+    sti
+
     movl 28(%esp), %eax
     movl 16(%esp), %ebx
     movl 24(%esp), %ecx
@@ -25,6 +33,7 @@ syscall_entry:
     call syscall_dispatch
     addl $20, %esp
 
+    cli
     movl %eax, 28(%esp)
     popa
     iret

@@ -5,6 +5,7 @@
 #include "posix.h"
 #include "process.h"
 #include "syscall.h"
+#include "tty.h"
 
 int bootstrap_init(uint32_t boot_magic, uint32_t boot_info_ptr) {
     int rc;
@@ -88,6 +89,8 @@ int bootstrap_start_shell(void) {
     argv[1] = 0;
 
     klog_info("bootstrap", "Starting configured userspace shell");
+    /* Boot diagnostics use colors; normal userspace starts with white text. */
+    tty_set_color(TTY_WHITE);
     rc = posix_execve(shell_path, argv, 0);
     if (rc < 0) {
         klog_info("bootstrap", "Userspace shell unavailable; using Kernel Shell");
