@@ -7,5 +7,6 @@ int paging_core_init(uint32_t boot_magic, uint32_t boot_info_ptr);
 uint8_t paging_core_is_enabled(void);
 uintptr_t paging_core_identity_limit(void);
 void paging_core_handle_page_fault(void);
+int paging_core_set_user_range(uintptr_t start, uintptr_t end, uint8_t writable);
 
 #endif

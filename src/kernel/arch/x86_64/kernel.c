@@ -7,6 +7,7 @@
 #include "paging.h"
 #include "mm.h"
 #include "bootstrap.h"
+#include "usermode.h"
 
 void kmain_x86_64(uint32_t magic, uint32_t info) {
     tty_init();
@@ -20,6 +21,10 @@ void kmain_x86_64(uint32_t magic, uint32_t info) {
         panic("MM_init failed");
     }
     klog_info("mm", "Initialized");
+
+    if (usermode_init() != 0) {
+        panic("Usermode_init failed");
+    }
 
     interrupts_init();
     keyboard_init();

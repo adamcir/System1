@@ -19,5 +19,6 @@ int posix_stat(const char* path, fs_stat_t* out_stat);
 int posix_fstat(int fd, fs_stat_t* out_stat);
 int posix_unlink(const char* path);
 int posix_execve(const char* path, char* const argv[], char* const envp[]);
+void posix_exit(int status) __attribute__((noreturn));
 
 #endif

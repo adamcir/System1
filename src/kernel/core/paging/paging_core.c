@@ -220,3 +220,44 @@ void paging_core_handle_page_fault(void) {
     tty_putc('\n');
     panic("Unhandled page fault");
 }
+
+
+int paging_core_set_user_range(uintptr_t start, uintptr_t end, uint8_t writable) {
+#if defined(__x86_64__)
+    (void)start;
+    (void)end;
+    (void)writable;
+    return -1;
+#else
+    uintptr_t addr;
+
+    if (start >= end || end > (uintptr_t)PAGING_IDENTITY_LIMIT) {
+        return -1;
+    }
+
+    start &= ~(uintptr_t)(PAGE_SIZE - 1u);
+    end = (end + PAGE_SIZE - 1u) & ~(uintptr_t)(PAGE_SIZE - 1u);
+
+    for (addr = start; addr < end; addr += PAGE_SIZE) {
+        uint32_t pd_index = (uint32_t)(addr >> 22);
+        uint32_t pt_index = (uint32_t)((addr >> 12) & 0x3FFu);
+        uint32_t entry;
+
+        if (pd_index >= 16u) {
+            return -1;
+        }
+
+        g_pd[pd_index] |= 0x4u;
+        entry = g_pt[pd_index][pt_index] | 0x4u;
+        if (writable != 0u) {
+            entry |= 0x2u;
+        } else {
+            entry &= ~0x2u;
+        }
+        g_pt[pd_index][pt_index] = entry;
+        __asm__ volatile ("invlpg (%0)" : : "r"(addr) : "memory");
+    }
+
+    return 0;
+#endif
+}

@@ -4,3 +4,9 @@
 int sprg_validate_file(const char* path, uint32_t expected_arch, sprg_image_t* out_image) {
     return sprg_core_validate_file(path, expected_arch, out_image);
 }
+
+int sprg_load_file(const char* path, uint32_t expected_arch,
+                   uintptr_t user_min, uintptr_t user_max,
+                   sprg_image_t* out_image) {
+    return sprg_core_load_file(path, expected_arch, user_min, user_max, out_image);
+}

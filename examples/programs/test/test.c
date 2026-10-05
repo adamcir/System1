@@ -1,10 +1,9 @@
 #include "system1/unistd.h"
 
-static const char message[] = "System/1 SPRG test program\n";
+static const char message[] =
+    "Hello from /bin/test.prg - System/1 userspace!\n";
 
 void _start(void) {
-    (void)write(1, message, sizeof(message) - 1u);
-
-    for (;;) {
-    }
+    int rc = write(STDOUT_FILENO, message, sizeof(message) - 1u);
+    _exit((rc < 0) ? 1 : 0);
 }

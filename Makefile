@@ -32,6 +32,8 @@ ENTRYFLP_SRC := $(KDIR_FLP)/entry.S
 ISR32_SRC    := $(KDIR_I386)/isr.S
 ISR64_SRC    := $(KDIR_X64)/isr.S
 ISRFLP_SRC   := $(KDIR_FLP)/isr.S
+USERMODE32_SRC  := $(KDIR_I386)/usermode.S
+USERMODEFLP_SRC := $(KDIR_FLP)/usermode.S
 LDS32        := tools/linker/linker.i386.ld
 LDS64        := tools/linker/linker.x86_64.ld
 LDSFLP       := tools/linker/linker.floppy.i386.ld
@@ -76,7 +78,7 @@ I386_MODULE_OBJS := $(patsubst %.c,$(BUILD_OBJ)/i386/%.o,$(I386_MODULE_SRCS))
 X64_MODULE_OBJS  := $(patsubst %.c,$(BUILD_OBJ)/x86_64/%.o,$(X64_MODULE_SRCS))
 FLP_MODULE_OBJS  := $(patsubst %.c,$(BUILD_OBJ)/i386-floppy/%.o,$(FLP_MODULE_SRCS))
 
-.PHONY: all help modules-32 modules-64 modules-img-32 iso-32 iso-64 iso-x86_64 floppy-kernel32 img-32 run-32 run-64 run-x86_64 run-img-32 clean
+.PHONY: all help user-programs modules-32 modules-64 modules-img-32 iso-32 iso-64 iso-x86_64 floppy-kernel32 img-32 run-32 run-64 run-x86_64 run-img-32 clean
 
 all: iso-32 iso-64 img-32
 
@@ -129,6 +131,9 @@ $(BUILD_OBJ)/isr_i386.o: $(ISR32_SRC) | $(BUILD_OBJ)
 $(BUILD_OBJ)/kernel_i386.o: $(KDIR_I386)/kernel.c | $(BUILD_OBJ)
 	$(I386_CC) $(CFLAGS_COMMON) $(I386_INCLUDES) -m32 -c $< -o $@
 
+$(BUILD_OBJ)/usermode_i386.o: $(USERMODE32_SRC) | $(BUILD_OBJ)
+	$(I386_CC) $(CFLAGS_COMMON) $(I386_INCLUDES) -m32 -c $< -o $@
+
 $(BUILD_OBJ)/mb2_64.o: $(MB2_SRC) | $(BUILD_OBJ)
 	$(X64_CC) $(CFLAGS_COMMON) $(X64_INCLUDES) -m64 -mno-red-zone -c $< -o $@
 
@@ -150,27 +155,33 @@ $(BUILD_OBJ)/isr_floppy_i386.o: $(ISRFLP_SRC) | $(BUILD_OBJ)
 $(BUILD_OBJ)/kernel_i386_floppy.o: $(KDIR_FLP)/kernel.c | $(BUILD_OBJ)
 	$(I386_CC) $(CFLAGS_COMMON) $(FLP_INCLUDES) -m32 -c $< -o $@
 
-$(KERNEL32_ELF): $(LDS32) $(BUILD_OBJ)/mb2_32.o $(BUILD_OBJ)/entry_i386.o $(BUILD_OBJ)/isr_i386.o $(BUILD_OBJ)/kernel_i386.o $(I386_MODULE_OBJS) | $(I386_OUT_DIR)
+$(BUILD_OBJ)/usermode_floppy_i386.o: $(USERMODEFLP_SRC) | $(BUILD_OBJ)
+	$(I386_CC) $(CFLAGS_COMMON) $(FLP_INCLUDES) -m32 -c $< -o $@
+
+$(KERNEL32_ELF): $(LDS32) $(BUILD_OBJ)/mb2_32.o $(BUILD_OBJ)/entry_i386.o $(BUILD_OBJ)/isr_i386.o $(BUILD_OBJ)/usermode_i386.o $(BUILD_OBJ)/kernel_i386.o $(I386_MODULE_OBJS) | $(I386_OUT_DIR)
 	$(I386_LD) -m elf_i386 -T $(LDS32) -o $@ \
-		$(BUILD_OBJ)/mb2_32.o $(BUILD_OBJ)/entry_i386.o $(BUILD_OBJ)/isr_i386.o $(BUILD_OBJ)/kernel_i386.o $(I386_MODULE_OBJS)
+		$(BUILD_OBJ)/mb2_32.o $(BUILD_OBJ)/entry_i386.o $(BUILD_OBJ)/isr_i386.o $(BUILD_OBJ)/usermode_i386.o $(BUILD_OBJ)/kernel_i386.o $(I386_MODULE_OBJS)
 
 $(KERNEL64_ELF): $(LDS64) $(BUILD_OBJ)/mb2_64.o $(BUILD_OBJ)/entry_x64.o $(BUILD_OBJ)/isr_x64.o $(BUILD_OBJ)/kernel_x64.o $(X64_MODULE_OBJS) | $(X64_OUT_DIR)
 	$(X64_LD) -m elf_x86_64 -T $(LDS64) -o $@ \
 		$(BUILD_OBJ)/mb2_64.o $(BUILD_OBJ)/entry_x64.o $(BUILD_OBJ)/isr_x64.o $(BUILD_OBJ)/kernel_x64.o $(X64_MODULE_OBJS)
 
-$(KERNELFLP_ELF): $(LDSFLP) $(BUILD_OBJ)/entry_floppy_i386.o $(BUILD_OBJ)/isr_floppy_i386.o $(BUILD_OBJ)/kernel_i386_floppy.o $(FLP_MODULE_OBJS) | $(FLP_OUT_DIR)
+$(KERNELFLP_ELF): $(LDSFLP) $(BUILD_OBJ)/entry_floppy_i386.o $(BUILD_OBJ)/isr_floppy_i386.o $(BUILD_OBJ)/usermode_floppy_i386.o $(BUILD_OBJ)/kernel_i386_floppy.o $(FLP_MODULE_OBJS) | $(FLP_OUT_DIR)
 	$(I386_LD) -m elf_i386 -T $(LDSFLP) -o $@ \
-		$(BUILD_OBJ)/entry_floppy_i386.o $(BUILD_OBJ)/isr_floppy_i386.o $(BUILD_OBJ)/kernel_i386_floppy.o $(FLP_MODULE_OBJS)
+		$(BUILD_OBJ)/entry_floppy_i386.o $(BUILD_OBJ)/isr_floppy_i386.o $(BUILD_OBJ)/usermode_floppy_i386.o $(BUILD_OBJ)/kernel_i386_floppy.o $(FLP_MODULE_OBJS)
 
-$(ISO32): $(KERNEL32_ELF) tools/mkiso-i386.sh | $(IMAGE_OUT_DIR)
+user-programs:
+	$(MAKE) -C examples/programs/test all
+
+$(ISO32): user-programs $(KERNEL32_ELF) tools/mkiso-i386.sh | $(IMAGE_OUT_DIR)
 	chmod +x tools/mkiso-i386.sh
 	./tools/mkiso-i386.sh
 
-$(ISO64): $(KERNEL64_ELF) tools/mkiso-x86_64.sh | $(IMAGE_OUT_DIR)
+$(ISO64): user-programs $(KERNEL64_ELF) tools/mkiso-x86_64.sh | $(IMAGE_OUT_DIR)
 	chmod +x tools/mkiso-x86_64.sh
 	./tools/mkiso-x86_64.sh
 
-$(IMG32): $(KERNELFLP_ELF) tools/mkimg-32.sh src/boot/simple32/stage1.asm src/boot/simple32/stage2.asm | $(IMAGE_OUT_DIR)
+$(IMG32): user-programs $(KERNELFLP_ELF) tools/mkimg-32.sh src/boot/simple32/stage1.asm src/boot/simple32/stage2.asm | $(IMAGE_OUT_DIR)
 	chmod +x tools/mkimg-32.sh
 	./tools/mkimg-32.sh
 
@@ -198,3 +209,4 @@ run-img-32: $(IMG32)
 
 clean:
 	rm -rf $(BUILD_DIR)
+	$(MAKE) -C examples/programs/test clean

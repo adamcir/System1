@@ -21,7 +21,7 @@ SECTIONS
         LONG(__program_start)
         LONG(__program_filesz)
         LONG(__program_memsz)
-        LONG(0x5)                /* R | X */
+        LONG(0x7)                /* R | W | X (single bootstrap segment) */
         LONG(0x1000)
         LONG(0)
     }

@@ -16,3 +16,7 @@ uintptr_t paging_identity_limit(void) {
 void paging_handle_page_fault(void) {
     paging_core_handle_page_fault();
 }
+
+int paging_set_user_range(uintptr_t start, uintptr_t end, uint8_t writable) {
+    return paging_core_set_user_range(start, end, writable);
+}

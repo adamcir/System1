@@ -14,6 +14,11 @@
 #define SYS_MKDIR  12u
 #define SYS_UNLINK 13u
 #define SYS_EXECVE 59u
+#define SYS_EXIT   60u
+
+#define STDIN_FILENO  0
+#define STDOUT_FILENO 1
+#define STDERR_FILENO 2
 
 #define SEEK_SET 0u
 #define SEEK_CUR 1u
@@ -33,6 +38,7 @@ int chdir(const char* path);
 int mkdir(const char* path);
 int unlink(const char* path);
 int execve(const char* path, char* const argv[], char* const envp[]);
+void _exit(int status) __attribute__((noreturn));
 char* getcwd(char* buf, unsigned size);
 
 #endif

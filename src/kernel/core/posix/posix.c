@@ -2,15 +2,7 @@
 #include "fd_core.h"
 #include "fs_core.h"
 #include "process_core.h"
-#include "sprg.h"
-
-static uint32_t posix_current_arch(void) {
-#if defined(__x86_64__)
-    return SPRG_ARCH_X86_64;
-#else
-    return SPRG_ARCH_I386;
-#endif
-}
+#include "usermode.h"
 
 static int posix_fs_to_errno(int rc) {
     int err;
@@ -73,30 +65,7 @@ int posix_unlink(const char* path) {
     return 0;
 }
 
-static int posix_sprg_to_errno(int rc) {
-    if (rc == SPRG_ERR_NOT_FOUND) {
-        return -POSIX_ENOENT;
-    }
-
-    if (rc == SPRG_ERR_BAD_MAGIC ||
-        rc == SPRG_ERR_BAD_VERSION ||
-        rc == SPRG_ERR_BAD_ARCH ||
-        rc == SPRG_ERR_BAD_HEADER ||
-        rc == SPRG_ERR_UNSUPPORTED) {
-        return -POSIX_ENOEXEC;
-    }
-
-    if (rc == SPRG_ERR_TOO_LARGE) {
-        return -POSIX_ENOSPC;
-    }
-
-    return -POSIX_EINVAL;
-}
-
 int posix_execve(const char* path, char* const argv[], char* const envp[]) {
-    sprg_image_t image;
-    process_t* current;
-    int rc;
     (void)argv;
     (void)envp;
 
@@ -104,16 +73,14 @@ int posix_execve(const char* path, char* const argv[], char* const envp[]) {
         return -POSIX_EINVAL;
     }
 
-    rc = sprg_validate_file(path, posix_current_arch(), &image);
-    if (rc != SPRG_OK) {
-        return posix_sprg_to_errno(rc);
-    }
+    /*
+     * The current kernel shell launches a userspace process synchronously.
+     * Once a userspace shell exists, execve can replace the calling process
+     * without this compatibility return path.
+     */
+    return usermode_exec(path);
+}
 
-    current = process_core_current();
-    if (current == 0) {
-        return -POSIX_EIO;
-    }
-
-    process_core_record_exec_image(current, path, image.arch, image.entry, image.segment_count, image.file_size);
-    return -POSIX_ENOSYS;
+void posix_exit(int status) {
+    usermode_exit(status);
 }

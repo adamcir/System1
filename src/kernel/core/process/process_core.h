@@ -18,6 +18,7 @@ typedef enum {
 
 typedef struct {
     uint32_t pid;
+    uint32_t ppid;
     process_state_t state;
     int exit_status;
     char cwd[FS_PATH_CAP];
@@ -36,5 +37,10 @@ void process_core_init(void);
 process_t* process_core_current(void);
 void process_core_set_cwd(process_t* process, const char* cwd);
 void process_core_record_exec_image(process_t* process, const char* path, uint32_t arch, uint32_t entry, uint32_t segment_count, uint32_t file_size);
+process_t* process_core_spawn_exec(const char* path, uint32_t arch, uint32_t entry,
+                                   uint32_t segment_count, uint32_t file_size,
+                                   uintptr_t user_sp);
+void process_core_exit_current(int status);
+void process_core_reap(process_t* process);
 
 #endif

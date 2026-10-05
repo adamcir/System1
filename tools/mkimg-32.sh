@@ -12,6 +12,7 @@ STAGE1="$STAGING_DIR/stage1.bin"
 STAGE2="$STAGING_DIR/stage2.bin"
 KERNEL_ELF="$ARTIFACT_DIR/i386-floppy/kernel.elf"
 KERNEL_RAW="$STAGING_DIR/kernel.bin"
+TEST_PRG="$ROOT_DIR/examples/programs/test/build/program-i386.prg"
 
 NASM_BIN="${NASM:-nasm}"
 MKFS_FAT_BIN="${MKFS_FAT:-mkfs.fat}"
@@ -69,6 +70,8 @@ fi
 
 cp -a "$ROOTFS_SRC_DIR" "$ROOTFS_BUILD_DIR"
 find "$ROOTFS_BUILD_DIR" -type f -name '.gitkeep' -delete
+mkdir -p "$ROOTFS_BUILD_DIR/bin"
+cp "$TEST_PRG" "$ROOTFS_BUILD_DIR/bin/test.prg"
 if [[ -d "$ROOTFS_BUILD_DIR/boot" ]]; then
   cp "$KERNEL_RAW" "$ROOTFS_BUILD_DIR/boot/KERNEL.BIN"
   cp "$STAGE1" "$ROOTFS_BUILD_DIR/boot/STAGE1.BIN"
@@ -121,5 +124,6 @@ shopt -u nullglob dotglob
 "$MDIR_BIN" -i "$IMG" ::/boot >/dev/null
 "$MDIR_BIN" -i "$IMG" ::/root >/dev/null
 "$MDIR_BIN" -i "$IMG" ::/boot/KERNEL.BIN >/dev/null
+"$MDIR_BIN" -i "$IMG" ::/bin/test.prg >/dev/null
 
 echo "Created $IMG"

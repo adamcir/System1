@@ -14,6 +14,7 @@
 #define SYS_MKDIR  12u
 #define SYS_UNLINK 13u
 #define SYS_EXECVE 59u
+#define SYS_EXIT   60u
 
 void syscall_core_init(void);
 int syscall_core_dispatch(uint32_t nr, uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3);

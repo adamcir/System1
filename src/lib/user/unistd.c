@@ -50,3 +50,10 @@ char* getcwd(char* buf, unsigned size) {
     int rc = system1_syscall(SYS_GETCWD, (uint32_t)(uintptr_t)buf, (uint32_t)size, 0u, 0u);
     return (rc < 0) ? 0 : buf;
 }
+
+
+void _exit(int status) {
+    (void)system1_syscall(SYS_EXIT, (uint32_t)status, 0u, 0u, 0u);
+    for (;;) {
+    }
+}

@@ -185,3 +185,55 @@ int sprg_core_validate_file(const char* path, uint32_t expected_arch, sprg_image
 
     return sprg_validate_segment_table(out_image);
 }
+
+
+int sprg_core_load_file(const char* path, uint32_t expected_arch,
+                        uintptr_t user_min, uintptr_t user_max,
+                        sprg_image_t* out_image) {
+    uint32_t i;
+    uint8_t entry_is_executable = 0u;
+    int rc;
+
+    if (user_min >= user_max) {
+        return SPRG_ERR_INVALID;
+    }
+
+    rc = sprg_core_validate_file(path, expected_arch, out_image);
+    if (rc != SPRG_OK) {
+        return rc;
+    }
+
+    for (i = 0u; i < out_image->segment_count; ++i) {
+        sprg_segment_t* seg = &out_image->segments[i];
+        uintptr_t start = (uintptr_t)seg->vaddr;
+        uintptr_t end = start + (uintptr_t)seg->memsz;
+        uint32_t j;
+
+        if (end < start || start < user_min || end > user_max) {
+            return SPRG_ERR_BAD_HEADER;
+        }
+
+        if ((seg->flags & ~(SPRG_FLAG_R | SPRG_FLAG_W | SPRG_FLAG_X)) != 0u) {
+            return SPRG_ERR_BAD_HEADER;
+        }
+
+        if ((seg->flags & SPRG_FLAG_X) != 0u &&
+            (uintptr_t)out_image->entry >= start &&
+            (uintptr_t)out_image->entry < end) {
+            entry_is_executable = 1u;
+        }
+
+        for (j = 0u; j < seg->filesz; ++j) {
+            ((uint8_t*)start)[j] = g_sprg_file[seg->offset + j];
+        }
+        for (j = seg->filesz; j < seg->memsz; ++j) {
+            ((uint8_t*)start)[j] = 0u;
+        }
+    }
+
+    if (entry_is_executable == 0u) {
+        return SPRG_ERR_BAD_HEADER;
+    }
+
+    return SPRG_OK;
+}

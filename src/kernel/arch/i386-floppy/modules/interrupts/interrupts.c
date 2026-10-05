@@ -32,6 +32,7 @@ DECL_ISR(36); DECL_ISR(37); DECL_ISR(38); DECL_ISR(39);
 DECL_ISR(40); DECL_ISR(41); DECL_ISR(42); DECL_ISR(43);
 DECL_ISR(44); DECL_ISR(45); DECL_ISR(46); DECL_ISR(47);
 #undef DECL_ISR
+extern void syscall_entry(void);
 
 static void (*const g_isr_stub_table[48])(void) = {
     isr0, isr1, isr2, isr3, isr4, isr5, isr6, isr7,
@@ -91,6 +92,9 @@ void interrupts_init(void) {
     for (i = 0; i < 48; i++) {
         idt_set_gate((uint8_t)i, (uint32_t)(uintptr_t)g_isr_stub_table[i], code_selector, 0x8E);
     }
+
+    /* POSIX-like userspace syscall gate. DPL=3 allows int 0x80 from ring 3. */
+    idt_set_gate(0x80u, (uint32_t)(uintptr_t)syscall_entry, code_selector, 0xEEu);
 
     idtr.limit = (uint16_t)(sizeof(g_idt) - 1);
     idtr.base = (uint32_t)(uintptr_t)&g_idt[0];

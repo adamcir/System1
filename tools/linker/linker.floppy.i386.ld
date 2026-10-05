@@ -22,4 +22,7 @@ SECTIONS {
   }
   . = ALIGN(4096);
   __kernel_end = .;
+
+  ASSERT(__kernel_end <= 0x00060000,
+         "floppy kernel overlaps reserved i386 userspace at 0x60000")
 }
