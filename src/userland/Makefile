@@ -45,7 +45,7 @@ $(BUILD_DIR)/%.prg: linker.command.i386.ld $(BUILD_DIR)/%.o $(COMMON_OBJS)
 check: all
 	@for f in $(MSH_PRG) $(COMMAND_PRGS); do \
 		test "$$(od -An -tx1 -N4 $$f | tr -d ' \n')" = "53505247" || exit 1; \
-		test "$$(stat -c '%s' $$f)" -le 8192 || { echo "$$f exceeds SPRG 8 KiB limit"; exit 1; }; \
+		test "$(stat -c '%s' $f)" -le 65536 || { echo "$f exceeds SPRG 64 KiB file limit"; exit 1; }; \
 	done
 
 clean:

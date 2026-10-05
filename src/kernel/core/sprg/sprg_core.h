@@ -18,7 +18,7 @@
 #define SPRG_FLAG_X 0x4u
 
 #define SPRG_MAX_PHDRS 8u
-#define SPRG_MAX_FILE_SIZE 8192u
+#define SPRG_MAX_FILE_SIZE 65536u
 
 #define SPRG_OK 0
 #define SPRG_ERR_INVALID -1

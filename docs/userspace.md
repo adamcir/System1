@@ -247,3 +247,15 @@ TIOCGETKEY      block for one raw keyboard event
 TIOCLINEBEGIN   mark the start position of an editable line
 TIOCLINEREDRAW  redraw an editable userspace line and place its cursor
 ```
+
+
+## Streaming SPRG loader
+
+SPRG validation/loading no longer copies the complete program file into a
+fixed kernel buffer. The loader reads the 28-byte header and program headers
+by offset, then streams loadable segment data in 512-byte chunks directly
+from the active filesystem into the target userspace range.
+
+The file-size ceiling is now 64 KiB without reserving a 64 KiB kernel BSS
+buffer. The architecture-specific userspace memory slot remains the final
+authority for whether an image actually fits in memory.
