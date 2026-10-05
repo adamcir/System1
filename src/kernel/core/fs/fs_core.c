@@ -16,12 +16,6 @@ static uint32_t g_boot_info_ptr = 0u;
 #define FS_MB2_BOOTLOADER_MAGIC 0x36D76289u
 #define FS_MB2_TAG_TYPE_END 0u
 #define FS_MB2_TAG_TYPE_MODULE 3u
-#define FS_IMPORT_ENTRY_CAP 32u
-#define FS_DIRTY_DIR_CAP 16u
-#define FS_DIRTY_FILE_CAP 16u
-#define FS_WRITEBACK_FILE_CAP 4096u
-#define FS_MEDIA_NODE_FLAG 0x80000000u
-#define FS_NODE_ID_MASK 0x7FFFFFFFu
 
 typedef enum {
     FS_MEDIA_NONE = 0,
@@ -62,11 +56,6 @@ static block_device_t g_mb2_module_device;
 static uint32_t g_mb2_module_start = 0u;
 static uint32_t g_mb2_module_size = 0u;
 static fs_media_kind_t g_media_kind = FS_MEDIA_NONE;
-static char g_dirty_dirs[FS_DIRTY_DIR_CAP][FS_PATH_CAP];
-static char g_dirty_files[FS_DIRTY_FILE_CAP][FS_PATH_CAP];
-static uint32_t g_dirty_dir_count = 0u;
-static uint32_t g_dirty_file_count = 0u;
-static char g_writeback_file[FS_WRITEBACK_FILE_CAP];
 
 int fs_core_to_errno(int rc) {
     if (rc == FS_OK) {
@@ -630,46 +619,6 @@ static int fs_probe_block_root(block_device_t* dev) {
     return FS_ERR_NOT_FOUND;
 }
 
-static int fs_path_join(char* out, uint32_t cap, const char* dir, const char* name) {
-    uint32_t pos = 0u;
-    uint32_t i = 0u;
-
-    if (out == 0 || cap == 0u || dir == 0 || name == 0 || name[0] == '\0') {
-        return FS_ERR_INVALID;
-    }
-
-    if (dir[0] != '/') {
-        return FS_ERR_INVALID;
-    }
-
-    while (dir[i] != '\0') {
-        if (pos + 1u >= cap) {
-            return FS_ERR_INVALID;
-        }
-        out[pos++] = dir[i++];
-    }
-
-    if (pos > 1u && out[pos - 1u] == '/') {
-        --pos;
-    }
-
-    if (pos + 1u >= cap) {
-        return FS_ERR_INVALID;
-    }
-    out[pos++] = '/';
-
-    i = 0u;
-    while (name[i] != '\0') {
-        if (pos + 1u >= cap) {
-            return FS_ERR_INVALID;
-        }
-        out[pos++] = name[i++];
-    }
-
-    out[pos] = '\0';
-    return FS_OK;
-}
-
 static void fs_copy_name(char* dst, uint32_t cap, const char* src) {
     uint32_t i = 0u;
 
@@ -796,170 +745,12 @@ int fs_core_normalize_path(const char* cwd, const char* path, char* out, uint32_
     return FS_OK;
 }
 
-static void fs_dirty_dirs_clear(void) {
-    uint32_t i;
-
-    for (i = 0u; i < FS_DIRTY_DIR_CAP; ++i) {
-        g_dirty_dirs[i][0] = '\0';
-    }
-    g_dirty_dir_count = 0u;
-}
-
-static void fs_dirty_files_clear(void) {
-    uint32_t i;
-
-    for (i = 0u; i < FS_DIRTY_FILE_CAP; ++i) {
-        g_dirty_files[i][0] = '\0';
-    }
-    g_dirty_file_count = 0u;
-}
-
-static int fs_record_dirty_dir(const char* path) {
-    uint32_t i;
-
-    if (path == 0 || path[0] == '\0') {
-        return FS_ERR_INVALID;
-    }
-
-    for (i = 0u; i < g_dirty_dir_count; ++i) {
-        if (fs_streq_local(g_dirty_dirs[i], path) != 0) {
-            return FS_OK;
-        }
-    }
-
-    if (g_dirty_dir_count >= FS_DIRTY_DIR_CAP) {
-        return FS_ERR_NO_SPACE;
-    }
-
-    fs_copy_name(g_dirty_dirs[g_dirty_dir_count], FS_PATH_CAP, path);
-    ++g_dirty_dir_count;
-    return FS_OK;
-}
-
-static int fs_record_dirty_file(const char* path) {
-    uint32_t i;
-
-    if (path == 0 || path[0] == '\0') {
-        return FS_ERR_INVALID;
-    }
-
-    for (i = 0u; i < g_dirty_file_count; ++i) {
-        if (fs_streq_local(g_dirty_files[i], path) != 0) {
-            return FS_OK;
-        }
-    }
-
-    if (g_dirty_file_count >= FS_DIRTY_FILE_CAP) {
-        return FS_ERR_NO_SPACE;
-    }
-
-    fs_copy_name(g_dirty_files[g_dirty_file_count], FS_PATH_CAP, path);
-    ++g_dirty_file_count;
-    return FS_OK;
-}
-
-static uint8_t fs_is_dirty_file(const char* path) {
-    uint32_t i;
-
-    if (path == 0) {
-        return 0u;
-    }
-
-    for (i = 0u; i < g_dirty_file_count; ++i) {
-        if (fs_streq_local(g_dirty_files[i], path) != 0) {
-            return 1u;
-        }
-    }
-
-    return 0u;
-}
-
-static int fs_is_special_dir_entry(const char* name) {
-    if (name == 0) {
-        return 0;
-    }
-
-    if (name[0] == '.' && name[1] == '\0') {
-        return 1;
-    }
-
-    if (name[0] == '.' && name[1] == '.' && name[2] == '\0') {
-        return 1;
-    }
-
-    return 0;
-}
-
-static int fs_import_media_dir(const char* path) {
-    fs_dirent_t entries[FS_IMPORT_ENTRY_CAP];
-    char entry_names[FS_IMPORT_ENTRY_CAP][FS_NAME_CAP];
-    uint8_t entry_types[FS_IMPORT_ENTRY_CAP];
-    uint32_t count = 0u;
-    uint32_t i;
-    int rc;
-
-    if (g_media_driver == 0 || g_media_driver->list_dir == 0) {
-        return FS_ERR_INVALID;
-    }
-
-    rc = g_media_driver->list_dir(path, entries, FS_IMPORT_ENTRY_CAP, &count);
-    if (rc != FS_OK) {
-        return rc;
-    }
-
-    for (i = 0u; i < count; ++i) {
-        fs_copy_name(entry_names[i], FS_NAME_CAP, entries[i].name);
-        entry_types[i] = entries[i].type;
-    }
-
-    for (i = 0u; i < count; ++i) {
-        char child_path[FS_PATH_CAP];
-
-        if (fs_is_special_dir_entry(entry_names[i]) != 0) {
-            continue;
-        }
-
-        rc = fs_path_join(child_path, FS_PATH_CAP, path, entry_names[i]);
-        if (rc != FS_OK) {
-            return rc;
-        }
-
-        if (entry_types[i] == FS_NODE_DIR) {
-            rc = ramfs_core_import_dir(child_path);
-            if (rc != FS_OK) {
-                return rc;
-            }
-
-            rc = fs_import_media_dir(child_path);
-            if (rc != FS_OK) {
-                return rc;
-            }
-            continue;
-        }
-
-        if (entry_types[i] == FS_NODE_FILE) {
-            rc = ramfs_core_import_file(child_path);
-            if (rc != FS_OK) {
-                return rc;
-            }
-            continue;
-        }
-
-        return FS_ERR_INVALID;
-    }
-
-    return FS_OK;
-}
-
 int fs_core_init_ramfs(void) {
     int rc;
 
     g_root_driver = 0;
     g_media_driver = 0;
     g_media_kind = FS_MEDIA_NONE;
-    fs_dirty_dirs_clear();
-    fs_dirty_files_clear();
-
     rc = ramfs_core_init();
     if (rc != FS_OK) {
         return rc;
@@ -989,29 +780,12 @@ int fs_core_mount_boot_media(void) {
     }
 
     /*
-     * Compatibility layer for the current shell: mirror only metadata into
-     * RAMFS. File contents remain on the physical filesystem until changed.
+     * RAMFS is only the bootstrap/fallback root. Once a physical filesystem
+     * is available, it becomes the active root directly. This avoids metadata
+     * mirroring and makes writes visible on writable media immediately.
      */
-    rc = fs_import_media_dir("/");
-    if (rc != FS_OK) {
-        g_media_driver = 0;
-        g_media_kind = FS_MEDIA_NONE;
-
-        /*
-         * Drop a partial import. The system must remain usable as a clean
-         * RAM-only System/1 instance even when the physical FS is invalid or
-         * too large for the current fixed RAMFS metadata limits.
-         */
-        if (ramfs_core_init() != FS_OK) {
-            return FS_ERR_NO_SPACE;
-        }
-
-        g_root_driver = ramfs_core_driver();
-        ramfs_core_clear_dirty();
-        return rc;
-    }
-
-    ramfs_core_clear_dirty();
+    g_root_driver = g_media_driver;
+    process_core_set_cwd(process_core_current(), "/");
     return FS_OK;
 }
 
@@ -1039,72 +813,12 @@ void fs_core_set_boot_context(uint32_t boot_magic, uint32_t boot_info_ptr) {
 }
 
 uint8_t fs_core_has_pending_changes(void) {
-    return ramfs_core_is_dirty();
-}
-
-static int fs_core_flush_to_boot_media(void) {
-    uint32_t i;
-    block_device_t* dev;
-
-    if (g_media_kind == FS_MEDIA_NONE) {
-        return FS_OK;
-    }
-
-    if (g_media_kind == FS_MEDIA_ISO9660) {
-        return FS_ERR_READ_ONLY;
-    }
-
-    if (g_media_kind == FS_MEDIA_FAT12) {
-        dev = block_core_get_root_device();
-        if (dev == 0 || dev->write == 0) {
-            return FS_ERR_READ_ONLY;
-        }
-
-        for (i = 0u; i < g_dirty_dir_count; ++i) {
-            int rc = fat12_core_create_dir_on_device(dev, g_dirty_dirs[i]);
-            if (rc != FS_OK) {
-                return rc;
-            }
-        }
-
-        for (i = 0u; i < g_dirty_file_count; ++i) {
-            uint32_t size = 0u;
-            int rc = ramfs_core_read_file(g_dirty_files[i], g_writeback_file, FS_WRITEBACK_FILE_CAP, &size);
-            if (rc != FS_OK) {
-                return rc;
-            }
-
-            rc = fat12_core_write_file_on_device(dev, g_dirty_files[i], g_writeback_file, size);
-            if (rc != FS_OK) {
-                return rc;
-            }
-        }
-
-        fs_dirty_dirs_clear();
-        fs_dirty_files_clear();
-        return FS_OK;
-    }
-
-    return FS_ERR_INVALID;
+    return 0u;
 }
 
 int fs_core_shutdown(uint8_t write_changes) {
-    int rc;
-
-    if (ramfs_core_is_dirty() == 0u) {
-        return FS_OK;
-    }
-
-    if (write_changes == 0u) {
-        return FS_OK;
-    }
-
-    rc = fs_core_flush_to_boot_media();
-    if (rc == FS_OK) {
-        ramfs_core_clear_dirty();
-    }
-
-    return rc;
+    (void)write_changes;
+    return FS_OK;
 }
 
 const char* fs_core_get_cwd_path(void) {
@@ -1145,32 +859,18 @@ int fs_core_change_dir(const char* path) {
 
 int fs_core_make_dir(const char* path) {
     char full_path[FS_PATH_CAP];
-    const char* cwd;
     int rc;
 
     if (g_root_driver == 0 || g_root_driver->make_dir == 0) {
         return FS_ERR_READ_ONLY;
     }
 
-    cwd = fs_core_get_cwd_path();
-    rc = fs_core_normalize_path(cwd, path, full_path, FS_PATH_CAP);
+    rc = fs_core_normalize_path(fs_core_get_cwd_path(), path, full_path, FS_PATH_CAP);
     if (rc != FS_OK) {
         return rc;
     }
 
-    rc = g_root_driver->make_dir(full_path);
-    if (rc != FS_OK) {
-        return rc;
-    }
-
-    if (g_media_kind == FS_MEDIA_FAT12) {
-        rc = fs_record_dirty_dir(full_path);
-        if (rc != FS_OK) {
-            return rc;
-        }
-    }
-
-    return FS_OK;
+    return g_root_driver->make_dir(full_path);
 }
 
 int fs_core_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, uint32_t* out_count) {
@@ -1206,26 +906,15 @@ int fs_core_read_file(const char* path, char* buffer, uint32_t cap, uint32_t* ou
         return rc;
     }
 
-    if (fs_is_dirty_file(full_path) == 0u && g_media_driver != 0 && g_media_driver->read_file != 0) {
-        rc = g_media_driver->read_file(full_path, buffer, cap, out_size);
-        if (rc == FS_OK) {
-            return FS_OK;
-        }
-        if (rc != FS_ERR_NOT_FOUND) {
-            return rc;
-        }
+    if (g_root_driver == 0 || g_root_driver->read_file == 0) {
+        return FS_ERR_INVALID;
     }
 
-    if (g_root_driver != 0 && g_root_driver->read_file != 0) {
-        return g_root_driver->read_file(full_path, buffer, cap, out_size);
-    }
-
-    return FS_ERR_INVALID;
+    return g_root_driver->read_file(full_path, buffer, cap, out_size);
 }
 
 int fs_core_open(const char* path, uint32_t flags, uint32_t* out_node_id) {
     char full_path[FS_PATH_CAP];
-    uint32_t node_id = 0u;
     int rc;
 
     if (path == 0 || out_node_id == 0) {
@@ -1237,115 +926,43 @@ int fs_core_open(const char* path, uint32_t flags, uint32_t* out_node_id) {
         return rc;
     }
 
-    if (fs_is_dirty_file(full_path) == 0u &&
-        (flags & (FS_O_WRONLY | FS_O_CREAT | FS_O_TRUNC | FS_O_APPEND)) == 0u &&
-        g_media_driver != 0 && g_media_driver->open != 0) {
-        rc = g_media_driver->open(full_path, flags, &node_id);
-        if (rc == FS_OK) {
-            *out_node_id = node_id | FS_MEDIA_NODE_FLAG;
-            return FS_OK;
-        }
-    }
-
     if (g_root_driver == 0 || g_root_driver->open == 0) {
         return FS_ERR_INVALID;
     }
 
-    rc = g_root_driver->open(full_path, flags, &node_id);
-    if (rc != FS_OK) {
-        return rc;
-    }
-
-    if (g_media_kind != FS_MEDIA_NONE &&
-        ((flags & FS_O_CREAT) != 0u ||
-         (flags & FS_O_TRUNC) != 0u ||
-         (flags & FS_O_APPEND) != 0u ||
-         (flags & FS_O_RDWR) == FS_O_WRONLY ||
-         (flags & FS_O_RDWR) == FS_O_RDWR)) {
-        rc = fs_record_dirty_file(full_path);
-        if (rc != FS_OK) {
-            return rc;
-        }
-    }
-
-    *out_node_id = node_id;
-    return FS_OK;
+    return g_root_driver->open(full_path, flags, out_node_id);
 }
 
 int fs_core_read(uint32_t node_id, uint32_t offset, char* buffer, uint32_t cap, uint32_t* out_size) {
-    const vfs_driver_t* driver;
-    uint32_t local_id;
-
-    if ((node_id & FS_MEDIA_NODE_FLAG) != 0u) {
-        driver = g_media_driver;
-        local_id = node_id & FS_NODE_ID_MASK;
-    } else {
-        driver = g_root_driver;
-        local_id = node_id;
-    }
-
-    if (driver == 0 || driver->read == 0) {
+    if (g_root_driver == 0 || g_root_driver->read == 0) {
         return FS_ERR_INVALID;
     }
 
-    return driver->read(local_id, offset, buffer, cap, out_size);
+    return g_root_driver->read(node_id, offset, buffer, cap, out_size);
 }
 
 int fs_core_write(uint32_t node_id, uint32_t offset, const char* buffer, uint32_t size, uint32_t* out_written) {
-    const vfs_driver_t* driver;
-    uint32_t local_id;
-
-    if ((node_id & FS_MEDIA_NODE_FLAG) != 0u) {
-        driver = g_media_driver;
-        local_id = node_id & FS_NODE_ID_MASK;
-    } else {
-        driver = g_root_driver;
-        local_id = node_id;
-    }
-
-    if (driver == 0 || driver->write == 0) {
+    if (g_root_driver == 0 || g_root_driver->write == 0) {
         return FS_ERR_READ_ONLY;
     }
 
-    return driver->write(local_id, offset, buffer, size, out_written);
+    return g_root_driver->write(node_id, offset, buffer, size, out_written);
 }
 
 int fs_core_size(uint32_t node_id, uint32_t* out_size) {
-    const vfs_driver_t* driver;
-    uint32_t local_id;
-
-    if ((node_id & FS_MEDIA_NODE_FLAG) != 0u) {
-        driver = g_media_driver;
-        local_id = node_id & FS_NODE_ID_MASK;
-    } else {
-        driver = g_root_driver;
-        local_id = node_id;
-    }
-
-    if (driver == 0 || driver->size == 0) {
+    if (g_root_driver == 0 || g_root_driver->size == 0) {
         return FS_ERR_INVALID;
     }
 
-    return driver->size(local_id, out_size);
+    return g_root_driver->size(node_id, out_size);
 }
 
 int fs_core_close(uint32_t node_id) {
-    const vfs_driver_t* driver;
-    uint32_t local_id;
-
-    if ((node_id & FS_MEDIA_NODE_FLAG) != 0u) {
-        driver = g_media_driver;
-        local_id = node_id & FS_NODE_ID_MASK;
-    } else {
-        driver = g_root_driver;
-        local_id = node_id;
-    }
-
-    if (driver == 0 || driver->close == 0) {
+    if (g_root_driver == 0 || g_root_driver->close == 0) {
         return FS_OK;
     }
 
-    return driver->close(local_id);
+    return g_root_driver->close(node_id);
 }
 
 int fs_core_stat(const char* path, fs_stat_t* out_stat) {
@@ -1361,13 +978,6 @@ int fs_core_stat(const char* path, fs_stat_t* out_stat) {
         return rc;
     }
 
-    if (fs_is_dirty_file(full_path) == 0u && g_media_driver != 0 && g_media_driver->stat != 0) {
-        rc = g_media_driver->stat(full_path, out_stat);
-        if (rc == FS_OK) {
-            return FS_OK;
-        }
-    }
-
     if (g_root_driver == 0 || g_root_driver->stat == 0) {
         return FS_ERR_INVALID;
     }
@@ -1376,22 +986,11 @@ int fs_core_stat(const char* path, fs_stat_t* out_stat) {
 }
 
 int fs_core_fstat(uint32_t node_id, fs_stat_t* out_stat) {
-    const vfs_driver_t* driver;
-    uint32_t local_id;
-
-    if ((node_id & FS_MEDIA_NODE_FLAG) != 0u) {
-        driver = g_media_driver;
-        local_id = node_id & FS_NODE_ID_MASK;
-    } else {
-        driver = g_root_driver;
-        local_id = node_id;
-    }
-
-    if (driver == 0 || driver->fstat == 0) {
+    if (g_root_driver == 0 || g_root_driver->fstat == 0) {
         return FS_ERR_INVALID;
     }
 
-    return driver->fstat(local_id, out_stat);
+    return g_root_driver->fstat(node_id, out_stat);
 }
 
 int fs_core_unlink(const char* path) {
@@ -1415,28 +1014,20 @@ int fs_core_unlink(const char* path) {
 }
 
 void fs_core_get_stats(fs_core_stats_t* out_stats) {
-    uint32_t largest_scratch = FS_WRITEBACK_FILE_CAP;
-
     if (out_stats == 0) {
         return;
     }
 
     ramfs_core_get_stats(&out_stats->ramfs);
-    out_stats->dirty_dir_count = g_dirty_dir_count;
-    out_stats->dirty_file_count = g_dirty_file_count;
+    out_stats->dirty_dir_count = 0u;
+    out_stats->dirty_file_count = 0u;
     out_stats->boot_media_kind = (uint32_t)g_media_kind;
     out_stats->boot_media_buffer_bytes = 0u;
     out_stats->block_cache_bytes = 0u;
+    out_stats->largest_fs_scratch_bytes = 0u;
 
     if (g_media_kind == FS_MEDIA_FAT12) {
         out_stats->block_cache_bytes = fat12_core_buffer_bytes();
+        out_stats->largest_fs_scratch_bytes = fat12_core_buffer_bytes();
     }
-
-    if (sizeof(g_dirty_dirs) > largest_scratch) {
-        largest_scratch = (uint32_t)sizeof(g_dirty_dirs);
-    }
-    if (sizeof(g_dirty_files) > largest_scratch) {
-        largest_scratch = (uint32_t)sizeof(g_dirty_files);
-    }
-    out_stats->largest_fs_scratch_bytes = largest_scratch;
 }

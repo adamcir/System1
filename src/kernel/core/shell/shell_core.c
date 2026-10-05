@@ -560,41 +560,13 @@ static void shell_cmd_echo(char** argv, uint32_t argc) {
     }
 }
 
-static void shell_flush_pending_changes(void) {
-    uint8_t write_changes = 0u;
-    int rc;
-
-    if (fs_has_pending_changes() != 0u) {
-        char answer[8];
-
-        tty_puts("Write changes to boot media? [Y/n] ");
-        tty_readline(answer, 8u);
-        if (answer[0] == '\0' || answer[0] == ' ' || answer[0] == 'y' || answer[0] == 'Y') {
-            write_changes = 1u;
-        }
-    }
-
-    if (write_changes != 0u) {
-        tty_puts("Writing...\n");
-    }
-
-    rc = fs_shutdown(write_changes);
-    if (rc != FS_OK) {
-        shell_print_fs_error("shutdown", rc);
-    } else if (write_changes != 0u) {
-        tty_puts("Write completed successfully.\n");
-    }
-}
-
 static void shell_cmd_reboot(void) {
     tty_puts("Rebooting...\n");
-    shell_flush_pending_changes();
     signal_raise(HW_RESET);
 }
 
 static void shell_cmd_shutdown(void) {
     tty_puts("Shutting down...\n");
-    shell_flush_pending_changes();
     signal_raise(HW_PWR_DOWN);
 }
 
@@ -1123,6 +1095,8 @@ static void shell_cmd_touch(char** argv, uint32_t argc) {
 }
 
 static void shell_cmd_write(char** argv, uint32_t argc) {
+    char data[SHELL_LINE_CAP];
+    uint32_t data_len = 0u;
     uint32_t i;
     uint32_t first = 1u;
     uint8_t append = 0u;
@@ -1156,37 +1130,53 @@ static void shell_cmd_write(char** argv, uint32_t argc) {
         return;
     }
 
-    fd = posix_open(argv[first], FS_O_CREAT | (append != 0u ? FS_O_APPEND : FS_O_TRUNC) | FS_O_WRONLY);
+    /*
+     * Build one payload and issue one filesystem write. On a floppy this
+     * means one immediate FAT12 commit instead of repeatedly rewriting the
+     * file for every word and separating space.
+     */
+    for (i = first + 1u; i < argc; ++i) {
+        uint32_t j = 0u;
+
+        if (i > first + 1u) {
+            if (data_len + 1u >= SHELL_LINE_CAP) {
+                shell_print_usage("write", "text too long");
+                return;
+            }
+            data[data_len++] = ' ';
+        }
+
+        while (argv[i][j] != '\0') {
+            if (data_len + 1u >= SHELL_LINE_CAP) {
+                shell_print_usage("write", "text too long");
+                return;
+            }
+            data[data_len++] = argv[i][j++];
+        }
+    }
+
+    if (newline != 0u) {
+        if (data_len + 1u >= SHELL_LINE_CAP) {
+            shell_print_usage("write", "text too long");
+            return;
+        }
+        data[data_len++] = '\n';
+    }
+
+    fd = posix_open(argv[first],
+                    FS_O_CREAT |
+                    (append != 0u ? FS_O_APPEND : FS_O_TRUNC) |
+                    FS_O_WRONLY);
     if (fd < 0) {
         shell_print_posix_path_error("write", argv[first], fd);
         return;
     }
 
-    for (i = first + 1u; i < argc; ++i) {
-        if (i > (first + 1u)) {
-            rc = posix_write(fd, " ", 1u);
-            if (rc < 0) {
-                shell_print_posix_path_error("write", argv[first], rc);
-                (void)posix_close(fd);
-                return;
-            }
-        }
-
-        rc = posix_write(fd, argv[i], shell_strlen(argv[i]));
-        if (rc < 0) {
-            shell_print_posix_path_error("write", argv[first], rc);
-            (void)posix_close(fd);
-            return;
-        }
-    }
-
-    if (newline != 0u) {
-        rc = posix_write(fd, "\n", 1u);
-        if (rc < 0) {
-            shell_print_posix_path_error("write", argv[first], rc);
-            (void)posix_close(fd);
-            return;
-        }
+    rc = posix_write(fd, data, data_len);
+    if (rc < 0) {
+        shell_print_posix_path_error("write", argv[first], rc);
+        (void)posix_close(fd);
+        return;
     }
 
     rc = posix_close(fd);

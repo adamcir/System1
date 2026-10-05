@@ -2,7 +2,7 @@
 
 System/1 is a small educational hobby operating system written mainly in C and assembly. It currently targets i386, x86-64 and a custom i386 floppy boot path.
 
-The kernel uses a RAMFS-first bootstrap: RAMFS is mounted as the initial root filesystem, then FAT12 or ISO9660 boot media is detected and attached as backing storage when available. If no physical filesystem is available, System/1 continues in RAM-only mode and starts the built-in kernel shell.
+The kernel uses a RAMFS-first bootstrap: RAMFS is created as the initial fallback root, then FAT12 or ISO9660 boot media is detected. When physical media is available, that filesystem becomes `/` directly. A writable FAT12 floppy is modified immediately by create, write, mkdir and unlink operations; there is no shutdown-time writeback queue. If no physical filesystem is available, System/1 continues on an empty RAMFS and starts the built-in kernel shell.
 
 ## Repository layout
 

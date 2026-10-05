@@ -21,7 +21,7 @@ int bootstrap_init(uint32_t boot_magic, uint32_t boot_info_ptr) {
 
     rc = fs_core_mount_boot_media();
     if (rc == FS_OK) {
-        klog_info("bootstrap", "Physical filesystem attached");
+        klog_info("bootstrap", "Physical filesystem mounted as root");
     } else if (rc == FS_ERR_NOT_FOUND) {
         klog_info("bootstrap", "No physical filesystem; RAM-only mode");
     } else {

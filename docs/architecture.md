@@ -64,3 +64,28 @@ The stage-2 loader keeps only the FAT12 boot sector, FAT and root-directory
 metadata in low memory. File and subdirectory sectors are read through the
 floppy controller on demand. This keeps RAMFS independent from the physical
 disk image and avoids requiring memory at 0x00200000 on the 1 MiB profile.
+
+
+## Live physical filesystem mode
+
+RAMFS is only the bootstrap and fallback root. After FAT12 or ISO9660 media is
+successfully detected, the physical filesystem becomes the active `/`.
+
+For writable FAT12 floppy media, filesystem mutations are synchronous:
+
+```text
+mkdir /root/test
+  -> FAT12 directory entry + cluster written to floppy immediately
+
+write /root/file.txt ...
+  -> FAT12 data/FAT/directory entry written to floppy immediately
+
+rm /root/file.txt
+  -> FAT12 directory entry deleted and cluster chain released immediately
+```
+
+There is no dirty-file queue and shutdown/reboot does not ask whether changes
+should be saved. RAMFS is empty by default for now; it does not pre-create
+`/dev`, `/tmp`, `/run` or `/mnt`. The floppy image source currently
+contains only the intended persistent top-level trees such as `/boot` and
+`/root`.
