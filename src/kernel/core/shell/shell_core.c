@@ -628,106 +628,59 @@ static void shell_cmd_fsstat(void) {
     tty_putc('\n');
 }
 
-static void shell_version(void){
-	tty_puts("System/1 by Adava (AdavaSoftware) (C) 2026\n");
+static void shell_version(void) {
+    tty_puts("System/1\n");
+    tty_puts("Copyright (c) 2026 Adam Cír (Adava), Adava Software, Adava Development.\n");
 }
 
 static void shell_print_fs_error(const char* cmd, int rc) {
     int err = fs_to_errno(rc);
+    const char* message = "unknown fs error";
+
+    if (err == POSIX_ENOENT) message = "path not found";
+    else if (err == POSIX_EEXIST) message = "already exists";
+    else if (err == POSIX_ENOTDIR) message = "not a directory";
+    else if (err == POSIX_EINVAL) message = "invalid path";
+    else if (err == POSIX_ENOSPC) message = "no space left in filesystem";
+    else if (err == POSIX_EROFS) message = "read-only filesystem";
 
     tty_set_color(TTY_RED);
     tty_puts(cmd);
     tty_puts(": ");
+    tty_puts(message);
+    tty_putc('\n');
     tty_set_color(TTY_WHITE);
-
-    if (err == POSIX_ENOENT) {
-        tty_puts("path not found\n");
-        return;
-    }
-
-    if (err == POSIX_EEXIST) {
-        tty_puts("already exists\n");
-        return;
-    }
-
-    if (err == POSIX_ENOTDIR) {
-        tty_puts("not a directory\n");
-        return;
-    }
-
-    if (err == POSIX_EINVAL) {
-        tty_puts("invalid path\n");
-        return;
-    }
-
-    if (err == POSIX_ENOSPC) {
-        tty_puts("no space left in filesystem\n");
-        return;
-    }
-
-    if (err == POSIX_EROFS) {
-        tty_puts("read-only filesystem\n");
-        return;
-    }
-
-    tty_puts("unknown fs error\n");
 }
 
 static void shell_print_usage(const char* cmd, const char* usage) {
     tty_set_color(TTY_RED);
     tty_puts(cmd);
     tty_puts(": ");
-    tty_set_color(TTY_WHITE);
     tty_puts(usage);
     tty_putc('\n');
+    tty_set_color(TTY_WHITE);
 }
 
 static void shell_print_posix_path_error(const char* cmd, const char* path, int rc) {
     int err = (rc < 0) ? -rc : rc;
+    const char* message = "Error";
+
+    if (err == POSIX_ENOENT) message = "No such file or directory";
+    else if (err == POSIX_ENOTDIR || err == POSIX_EISDIR) message = "Is a directory";
+    else if (err == POSIX_EBADF) message = "Bad file descriptor";
+    else if (err == POSIX_ENOEXEC) message = "Exec format error";
+    else if (err == POSIX_ENOSYS) message = "Function not implemented";
+    else if (err == POSIX_EINVAL) message = "Invalid argument";
+    else if (err == POSIX_EIO) message = "Input/output error";
 
     tty_set_color(TTY_RED);
     tty_puts(cmd);
     tty_puts(": ");
-    tty_set_color(TTY_WHITE);
     tty_puts(path);
     tty_puts(": ");
-
-    if (err == POSIX_ENOENT) {
-        tty_puts("No such file or directory\n");
-        return;
-    }
-
-    if (err == POSIX_ENOTDIR || err == POSIX_EISDIR) {
-        tty_puts("Is a directory\n");
-        return;
-    }
-
-    if (err == POSIX_EBADF) {
-        tty_puts("Bad file descriptor\n");
-        return;
-    }
-
-    if (err == POSIX_ENOEXEC) {
-        tty_puts("Exec format error\n");
-        return;
-    }
-
-    if (err == POSIX_ENOSYS) {
-        tty_puts("Function not implemented\n");
-        return;
-    }
-
-    if (err == POSIX_EINVAL) {
-        tty_puts("Invalid argument\n");
-        return;
-    }
-
-    if (err == POSIX_EIO) {
-        tty_puts("Input/output error\n");
-        return;
-    }
-
-    tty_puts("Error\n");
+    tty_puts(message);
+    tty_putc('\n');
+    tty_set_color(TTY_WHITE);
 }
 
 static void shell_cmd_pwd(char** argv, uint32_t argc) {

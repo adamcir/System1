@@ -129,8 +129,10 @@ shopt -u nullglob dotglob
 "$MDIR_BIN" -i "$IMG" ::/bin/test.prg >/dev/null
 "$MDIR_BIN" -i "$IMG" ::/bin/msh.prg >/dev/null
 "$MDIR_BIN" -i "$IMG" ::/bin/sh.prg >/dev/null
+"$MDIR_BIN" -i "$IMG" ::/bin/history.prg >/dev/null
 "$MDIR_BIN" -i "$IMG" ::/etc/kernel.cfg >/dev/null
 "$MDIR_BIN" -i "$IMG" ::/etc/msh.cfg >/dev/null
 "$MDIR_BIN" -i "$IMG" ::/etc/shells >/dev/null
+"$MDIR_BIN" -i "$IMG" ::/etc/motd >/dev/null
 
 echo "Created $IMG"

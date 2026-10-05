@@ -5,6 +5,8 @@
 #define LINE_CAP 192u
 #define ARGV_CAP 12u
 #define PATH_CAP 96u
+#define HISTORY_PATH_CAP 96u
+#define MOTD_PATH_CAP 96u
 
 #define PROMPT_MODE_CWD  0u
 #define PROMPT_MODE_NAME 1u
@@ -12,8 +14,11 @@
 static char g_path[64] = "/bin";
 static char g_prompt_text[32] = "msh";
 static char g_prompt_suffix[16] = " > ";
+static char g_history_file[HISTORY_PATH_CAP] = "/root/history";
+static char g_motd_file[MOTD_PATH_CAP] = "/etc/motd";
 static unsigned g_prompt_mode = PROMPT_MODE_CWD;
-static unsigned g_banner = 1u;
+static unsigned g_banner = 0u;
+static unsigned g_history_max_bytes = 3072u;
 
 static int key_matches(const char* buf, unsigned start, unsigned end, const char* key) {
     unsigned i = 0u;
@@ -35,9 +40,22 @@ static void copy_value(char* dst, unsigned cap,
     dst[p] = '\0';
 }
 
+static unsigned parse_uint(const char* s, unsigned fallback) {
+    unsigned value = 0u;
+    unsigned i = 0u;
+
+    if (s == 0 || s[0] == '\0') return fallback;
+    while (s[i] != '\0') {
+        if (s[i] < '0' || s[i] > '9') return fallback;
+        value = value * 10u + (unsigned)(s[i] - '0');
+        ++i;
+    }
+    return value;
+}
+
 static void load_config(void) {
-    char buf[256];
-    char value[64];
+    char buf[320];
+    char value[96];
     int fd = open("/etc/msh.cfg", O_RDONLY);
     int n;
     unsigned i = 0u;
@@ -70,8 +88,58 @@ static void load_config(void) {
         } else if (key_matches(buf, start, end, "banner")) {
             copy_value(value, sizeof(value), buf, start, end, 6u);
             g_banner = u_streq(value, "0") ? 0u : 1u;
+        } else if (key_matches(buf, start, end, "history_file")) {
+            copy_value(g_history_file, sizeof(g_history_file), buf, start, end, 12u);
+        } else if (key_matches(buf, start, end, "history_max_bytes")) {
+            copy_value(value, sizeof(value), buf, start, end, 17u);
+            g_history_max_bytes = parse_uint(value, 3072u);
+        } else if (key_matches(buf, start, end, "motd")) {
+            copy_value(g_motd_file, sizeof(g_motd_file), buf, start, end, 4u);
         }
     }
+}
+
+static void show_motd(void) {
+    char* argv[3];
+
+    if (g_motd_file[0] == '\0') return;
+
+    argv[0] = "cat";
+    argv[1] = g_motd_file;
+    argv[2] = 0;
+    (void)execve("/bin/cat.prg", argv, 0);
+}
+
+static void append_history(const char* line) {
+    char record[LINE_CAP + 1u];
+    unsigned len;
+    unsigned i;
+    int fd;
+    int end;
+
+    if (line == 0 || line[0] == '\0' || g_history_file[0] == '\0' ||
+        g_history_max_bytes == 0u) {
+        return;
+    }
+
+    len = u_strlen(line);
+    if (len + 1u >= sizeof(record) || len + 1u > g_history_max_bytes) return;
+
+    for (i = 0u; i < len; ++i) record[i] = line[i];
+    record[len++] = '\n';
+
+    fd = open(g_history_file, O_CREAT | O_RDWR);
+    if (fd < 0) return;
+
+    end = lseek(fd, 0, SEEK_END);
+    if (end < 0 || (unsigned)end + len > g_history_max_bytes) {
+        (void)close(fd);
+        fd = open(g_history_file, O_CREAT | O_TRUNC | O_WRONLY);
+        if (fd < 0) return;
+    }
+
+    (void)write(fd, record, len);
+    (void)close(fd);
 }
 
 static void print_prompt(void) {
@@ -140,15 +208,12 @@ int main(int argc, char** argv, char** envp) {
     (void)envp;
 
     load_config();
+    show_motd();
     if (g_banner != 0u) u_puts("MultiShell (MSh)\n");
 
     for (;;) {
         print_prompt();
 
-        /*
-         * STDIN is a canonical System/1 TTY. One read returns one edited line;
-         * the kernel handles echo, arrows, backspace and Enter.
-         */
         n = read(STDIN_FILENO, line, sizeof(line) - 1u);
         if (n < 0) {
             u_err("msh: input failed\n");
@@ -156,6 +221,8 @@ int main(int argc, char** argv, char** envp) {
         }
         if (n == 0) continue;
         line[n] = '\0';
+
+        append_history(line);
 
         ac = tokenize(line, args, ARGV_CAP);
         if (ac <= 0) continue;

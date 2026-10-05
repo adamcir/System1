@@ -5,6 +5,7 @@
 #define POSIX_E2BIG   7
 #define POSIX_ENOENT  2
 #define POSIX_EIO     5
+#define POSIX_ENOTTY  25
 #define POSIX_ENOEXEC 8
 #define POSIX_EBADF   9
 #define POSIX_EACCES  13

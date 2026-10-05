@@ -13,6 +13,7 @@
 #define SYS_CHDIR  11u
 #define SYS_MKDIR  12u
 #define SYS_UNLINK 13u
+#define SYS_IOCTL 16u
 #define SYS_SYMLINK 83u
 #define SYS_READLINK 85u
 #define SYS_GETDENTS 141u

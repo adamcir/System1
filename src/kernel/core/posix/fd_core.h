@@ -37,5 +37,6 @@ int fd_core_read(int fd, void* buffer, uint32_t count);
 int fd_core_write(int fd, const void* buffer, uint32_t count);
 int fd_core_lseek(int fd, int offset, uint32_t whence);
 int fd_core_fstat(int fd, fs_stat_t* out_stat);
+int fd_core_ioctl(int fd, uint32_t request, uint32_t arg);
 
 #endif

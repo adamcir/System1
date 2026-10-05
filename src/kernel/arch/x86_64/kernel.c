@@ -31,13 +31,9 @@ void kmain_x86_64(uint32_t magic, uint32_t info) {
     irq_register_handler(1, keyboard_irq_handler);
     interrupts_enable();
     klog_info("boot", "System/1 boot via GRUB");
-    klog_info("kernel", "Modules: vga, signals, interrupts, keyboard, shell");
     if (bootstrap_init(magic, info) != 0) {
         panic("Bootstrap failed");
     }
-    klog_info("mm", "Initial stats");
-    mm_print_stats();
-    klog_system_logo();
     (void)bootstrap_start_shell();
     shell_run();
     panic("Kernel loop ended!");

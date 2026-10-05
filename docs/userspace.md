@@ -152,3 +152,44 @@ configurator. `kconfig shell` opens the shell selector based on
 The i386 syscall entry deliberately re-enables hardware interrupts after the
 syscall register frame is saved. This is required for blocking TTY reads:
 canonical stdin sleeps until keyboard IRQs provide a completed line.
+
+
+## MultiShell MOTD and history
+
+MultiShell reads its runtime settings from `/etc/msh.cfg`. The default
+configuration includes:
+
+```text
+motd=/etc/motd
+history_file=/root/history
+history_max_bytes=3072
+```
+
+At startup MSh displays the MOTD by executing the normal userspace command
+`/bin/cat.prg /etc/motd`. The System/1 ASCII logo therefore belongs to the
+filesystem rather than the kernel image.
+
+Every non-empty interactive command is appended to the configured history
+file. `history.prg` reads the same `history_file` setting; `history -c`
+truncates it. The default filename deliberately remains FAT12 8.3 compatible.
+The history size is bounded below the current FAT12 4 KiB file-write limit.
+
+## TTY ioctl
+
+Userspace may control terminal presentation through `ioctl()`. The first
+System/1-specific TTY request is `TIOCSCOLOR`. Userland error helpers use it
+to render stderr messages in red and restore white afterwards.
+
+## Kernel log timestamps
+
+Kernel log records use a monotonic timestamp derived from the 100 Hz PIT,
+formatted as elapsed seconds and centiseconds from boot. This intentionally
+does not depend on an RTC and is suitable for all current System/1 targets.
+The normal log form is:
+
+```text
+[0.42] INFO  bootstrap: Physical filesystem mounted as root
+```
+
+The System/1 logo is no longer compiled into klog; it lives in
+`/etc/motd`.

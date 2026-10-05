@@ -3,6 +3,5 @@
 
 __attribute__((noreturn)) void panic(const char* msg);
 void klog_info(const char* prefix, const char* msg);
-void klog_system_logo(void);
 
 #endif

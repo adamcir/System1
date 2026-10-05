@@ -5,7 +5,7 @@ ROOT_DIR := ../..
 BUILD_DIR := build/i386
 CFLAGS := -ffreestanding -fno-pic -fno-pie -fno-stack-protector -nostdlib -nostdinc -Os -Wall -Wextra -I$(ROOT_DIR)/include
 
-COMMANDS := echo pwd cat mkdir touch rm ln readlink ls help kconfig
+COMMANDS := echo pwd cat mkdir touch rm ln readlink ls help history kconfig
 COMMAND_PRGS := $(addprefix $(BUILD_DIR)/,$(addsuffix .prg,$(COMMANDS)))
 MSH_PRG := $(BUILD_DIR)/msh.prg
 

@@ -291,3 +291,18 @@ int fd_core_fstat(int fd, fs_stat_t* out_stat) {
 
     return 0;
 }
+
+int fd_core_ioctl(int fd, uint32_t request, uint32_t arg) {
+    fd_table_t* table;
+
+    fd_core_ensure_init();
+    table = fd_current_table();
+
+    if (fd_valid(table, fd) == 0) return -POSIX_EBADF;
+    if (request != 0x5301u) return -POSIX_ENOTTY;
+    if (table->entries[fd].kind != FD_KIND_TTY_IN && table->entries[fd].kind != FD_KIND_TTY_OUT) return -POSIX_ENOTTY;
+    if (arg > (uint32_t)TTY_WHITE) return -POSIX_EINVAL;
+
+    tty_set_color((tty_color_t)arg);
+    return 0;
+}

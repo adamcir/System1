@@ -81,3 +81,7 @@ void _exit(int status) {
     for (;;) {
     }
 }
+
+int ioctl(int fd, unsigned request, unsigned arg) {
+    return system1_syscall(SYS_IOCTL, (uint32_t)fd, (uint32_t)request, (uint32_t)arg, 0u);
+}
