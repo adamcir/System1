@@ -17,12 +17,14 @@ NASM_BIN="${NASM:-nasm}"
 MKFS_FAT_BIN="${MKFS_FAT:-mkfs.fat}"
 MCOPY_BIN="${MCOPY:-mcopy}"
 MMD_BIN="${MMD:-mmd}"
+MDIR_BIN="${MDIR:-mdir}"
 DD_BIN="${DD:-dd}"
 OBJCOPY_BIN="${OBJCOPY:-$(command -v i686-elf-objcopy 2>/dev/null || command -v i686-linux-gnu-objcopy 2>/dev/null || command -v objcopy 2>/dev/null)}"
 PERL_BIN="${PERL:-perl}"
 
-STAGE2_LBA=2800
-MAX_STAGE2_SECTORS=79
+STAGE2_LBA=1
+RESERVED_SECTORS=80
+MAX_STAGE2_SECTORS=$(( RESERVED_SECTORS - 1 ))
 
 if [[ ! -f "$KERNEL_ELF" ]]; then
   echo "Missing $KERNEL_ELF"
@@ -60,6 +62,7 @@ fi
 "$NASM_BIN" -f bin \
   -DSTAGE2_LBA="$STAGE2_LBA" \
   -DSTAGE2_SECTORS="$STAGE2_SECTORS" \
+  -DRESERVED_SECTORS="$RESERVED_SECTORS" \
   "$ROOT_DIR/src/boot/simple32/stage1.asm" -o "$STAGE1"
 
 "$OBJCOPY_BIN" -O binary "$KERNEL_ELF" "$KERNEL_RAW"
@@ -73,7 +76,9 @@ if [[ -d "$ROOTFS_BUILD_DIR/boot" ]]; then
 fi
 
 truncate -s 1474560 "$IMG"
-"$MKFS_FAT_BIN" -F 12 -n SYSTEM1 "$IMG"
+# Reserve the first 80 sectors for stage1 + stage2. FAT12 starts after this
+# area, so normal filesystem allocation can never overwrite the bootloader.
+"$MKFS_FAT_BIN" -F 12 -R "$RESERVED_SECTORS" -n SYSTEM1 "$IMG"
 
 "$PERL_BIN" -e '
   use strict;
@@ -111,5 +116,10 @@ if (( ${#ROOTFS_ITEMS[@]} > 0 )); then
   "$MCOPY_BIN" -i "$IMG" -s "${ROOTFS_ITEMS[@]}" ::
 fi
 shopt -u nullglob dotglob
+
+# Build-time sanity checks for the persistent filesystem layout.
+"$MDIR_BIN" -i "$IMG" ::/boot >/dev/null
+"$MDIR_BIN" -i "$IMG" ::/root >/dev/null
+"$MDIR_BIN" -i "$IMG" ::/boot/KERNEL.BIN >/dev/null
 
 echo "Created $IMG"

@@ -123,13 +123,14 @@ boot_dir_found:
     sub ax, 2
     add ax, [data_lba]
 
-    ; Load the BOOT directory sector into root_buffer
-    mov bx, root_buffer
+    ; Load BOOT directory into its own buffer. root_buffer must remain an
+    ; untouched cache of the FAT12 root directory for the kernel.
+    mov bx, boot_dir_buffer
     call read_lba_sector
     jc disk_fail
 
     ; Search KERNEL in BOOT directory sector
-    mov si, root_buffer
+    mov si, boot_dir_buffer
     mov dx, 16            ; 16 entries in 512-byte sector
 .scan_boot_entries:
     cmp byte [si], 0x00
@@ -409,6 +410,7 @@ kernel_name   db 'KERNEL  BIN'
 boot_dir_name db 'BOOT       '
 
 align 2
-boot_sector: times 512 db 0
-fat_buffer:  times 4608 db 0
-root_buffer: times 7168 db 0
+boot_sector:     times 512 db 0
+fat_buffer:      times 4608 db 0
+root_buffer:     times 7168 db 0
+boot_dir_buffer: times 512 db 0

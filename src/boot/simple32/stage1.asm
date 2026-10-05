@@ -2,11 +2,15 @@ BITS 16
 ORG 0x7C00
 
 %ifndef STAGE2_LBA
-%define STAGE2_LBA 2800
+%define STAGE2_LBA 1
 %endif
 
 %ifndef STAGE2_SECTORS
 %define STAGE2_SECTORS 24
+%endif
+
+%ifndef RESERVED_SECTORS
+%define RESERVED_SECTORS 80
 %endif
 
 jmp short start
@@ -16,7 +20,7 @@ nop
 OEMLabel            db 'SYS1BOOT'
 BytesPerSector      dw 512
 SectorsPerCluster   db 1
-ReservedSectors     dw 1
+ReservedSectors     dw RESERVED_SECTORS
 NumberOfFATs        db 2
 RootEntries         dw 224
 TotalSectors16      dw 2880

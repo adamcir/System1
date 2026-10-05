@@ -89,3 +89,19 @@ should be saved. RAMFS is empty by default for now; it does not pre-create
 `/dev`, `/tmp`, `/run` or `/mnt`. The floppy image source currently
 contains only the intended persistent top-level trees such as `/boot` and
 `/root`.
+
+
+## Floppy boot reservation
+
+The custom FAT12 floppy reserves sectors 0..79 for the boot path:
+
+```text
+LBA 0       stage1 + FAT12 BPB
+LBA 1..79   reserved stage2 area
+LBA 80..    FAT12 tables, root directory and data
+```
+
+This is intentional. The live FAT12 allocator must never be able to reuse the
+sectors containing stage2. Stage2 also keeps the FAT12 root directory and the
+`/boot` directory in separate buffers; loading `/boot` must not overwrite
+the root-directory cache exported to the kernel.
