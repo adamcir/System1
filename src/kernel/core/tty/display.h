@@ -24,6 +24,8 @@ typedef struct {
 } system_display_ops_t;
 
 int display_register(const system_display_ops_t* ops);
+/* Temporary early-boot adapter; replaced by the SMOD bootstrap loader. */
+void display_platform_init(void);
 void display_init(void);
 void display_set_color(uint8_t color);
 void display_get_cursor(uint16_t* row, uint16_t* col);
