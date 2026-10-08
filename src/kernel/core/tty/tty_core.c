@@ -1,6 +1,6 @@
 #include "tty_core.h"
 #include "types.h"
-#include "keyboard.h"
+#include "input.h"
 #include "signals.h"
 #include "display.h"
 
@@ -147,8 +147,8 @@ int tty_core_readline_ex(char* buf, uint32_t cap, const tty_readline_hooks_t* ho
     display_text_begin(row, col);
 
     for (;;) {
-        keyboard_poll();
-        key = keyboard_take_key();
+        input_poll();
+        key = input_take_key();
         if (key == KEY_NONE) {
             __asm__ volatile ("hlt");
             continue;

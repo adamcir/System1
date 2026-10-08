@@ -27,6 +27,19 @@ Do not delete VGA sources or disable the VGA build module yet.
 display implementation is a driver. The future loader may register a
 replacement display driver with the same ABI.
 
+## Driver separation, phase 2
+
+Hardware-specific PC VGA and PS/2 code is now located in
+`src/kernel/drivers/pc/`, not `src/kernel/core/`.
+The core TTY and POSIX descriptor layer use the generic `input.h` event
+interface instead of `keyboard.h`. PC input and display drivers register
+their operations before the TTY and IRQ paths start. The three x86 boot
+targets include the PC drivers explicitly in the Makefile.
+
+These drivers are still **statically linked for bootstrap**. This step
+separates source and APIs; genuine runtime-loaded SMOD requires its own
+format reader, symbol/relocation linker and boot media support.
+
 ## SMOD on-disk format design constraints
 
 Implement this as an independent binary format (not renamed ELF):

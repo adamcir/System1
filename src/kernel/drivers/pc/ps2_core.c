@@ -1,5 +1,5 @@
 #include "types.h"
-#include "keyboard_core.h"
+#include "ps2_core.h"
 
 #define KEY_BUFFER_SIZE 64u
 #define KBD_DATA_PORT 0x60u
@@ -359,7 +359,7 @@ static void keyboard_process_scancode(uint8_t scancode) {
     }
 }
 
-void keyboard_core_init(void) {
+void ps2_init(void) {
     key_head = 0;
     key_tail = 0;
     shift_pressed = 0;
@@ -372,11 +372,11 @@ void keyboard_core_init(void) {
     keyboard_sync_leds();
 }
 
-void keyboard_core_set_poll_fallback(uint8_t enabled) {
+void ps2_set_poll_fallback(uint8_t enabled) {
     poll_fallback_enabled = enabled ? 1u : 0u;
 }
 
-void keyboard_core_poll(void) {
+void ps2_poll(void) {
     uint8_t status;
 
     if (poll_fallback_enabled == 0) {
@@ -391,11 +391,11 @@ void keyboard_core_poll(void) {
     keyboard_process_scancode(inb(0x60));
 }
 
-void keyboard_core_irq_handler(void) {
+void ps2_irq_handler(void) {
     keyboard_process_scancode(inb(0x60));
 }
 
-char keyboard_core_last_char(void) {
+char ps2_last_char(void) {
     int key = queue_peek();
     if (key > 0 && key < 128) {
         return (char)key;
@@ -403,7 +403,7 @@ char keyboard_core_last_char(void) {
     return 0;
 }
 
-char keyboard_core_take_char(void) {
+char ps2_take_char(void) {
     int key = queue_pop();
     if (key > 0 && key < 128) {
         return (char)key;
@@ -411,6 +411,6 @@ char keyboard_core_take_char(void) {
     return 0;
 }
 
-int keyboard_core_take_key(void) {
+int ps2_take_key(void) {
     return queue_pop();
 }

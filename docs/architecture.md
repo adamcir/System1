@@ -6,11 +6,13 @@ System/1 keeps platform-independent code separate from architecture and boot-med
 src/
   boot/                    early boot sources and custom floppy loader
   kernel/
-    core/                  architecture-independent kernel modules
+    core/                  architecture-independent kernel services and driver ABIs
     arch/
       i386/                i386 entry, ISR and architecture wrappers
       i386-floppy/         i386 custom-floppy target
       x86_64/              x86-64 entry, ISR and architecture wrappers
+  drivers/
+    pc/                   PC VGA and PS/2 hardware driver implementations
   lib/
     user/                  userspace support library
 
@@ -41,6 +43,7 @@ Current boot order:
 ```text
 bootloader
   -> architecture kernel entry
+  -> register PC display and input drivers
   -> paging / memory / interrupts / keyboard
   -> kernel bootstrap
   -> RAMFS mounted as /

@@ -22,6 +22,9 @@ KDIR_I386 := $(KERNEL_SRC)/arch/i386
 KDIR_X64  := $(KERNEL_SRC)/arch/x86_64
 KDIR_FLP  := $(KERNEL_SRC)/arch/i386-floppy
 COMMON_MODULE_DIR := $(KERNEL_SRC)/core
+PC_DRIVER_DIR := $(KERNEL_SRC)/drivers/pc
+PC_DRIVER_SRCS := $(wildcard $(PC_DRIVER_DIR)/*.c)
+PC_DRIVER_INCLUDES := -I$(PC_DRIVER_DIR)
 
 MODULES ?= $(sort $(notdir $(wildcard $(COMMON_MODULE_DIR)/*)))
 
@@ -51,7 +54,7 @@ I386_MODULE_INCLUDES := $(foreach m,$(MODULES),-I$(KDIR_I386)/modules/$(m))
 X64_MODULE_INCLUDES := $(foreach m,$(MODULES),-I$(KDIR_X64)/modules/$(m))
 FLP_MODULE_INCLUDES := $(foreach m,$(MODULES),-I$(KDIR_FLP)/modules/$(m))
 
-I386_INCLUDES := -Iinclude $(COMMON_MODULE_INCLUDES) $(I386_MODULE_INCLUDES)
+I386_INCLUDES := -Iinclude $(PC_DRIVER_INCLUDES) $(COMMON_MODULE_INCLUDES) $(I386_MODULE_INCLUDES)
 X64_INCLUDES  := -Iinclude $(COMMON_MODULE_INCLUDES) $(X64_MODULE_INCLUDES)
 FLP_INCLUDES  := -Iinclude $(COMMON_MODULE_INCLUDES) $(FLP_MODULE_INCLUDES)
 
@@ -70,7 +73,7 @@ define module_all_srcs
 $(foreach m,$(MODULES),$(call module_wrapper_src,$(1),$(m)) $(call module_core_src,$(m)))
 endef
 
-I386_MODULE_SRCS := $(call module_all_srcs,$(KDIR_I386))
+I386_MODULE_SRCS := $(call module_all_srcs,$(KDIR_I386)) $(PC_DRIVER_SRCS)
 X64_MODULE_SRCS  := $(call module_all_srcs,$(KDIR_X64))
 FLP_MODULE_SRCS  := $(call module_all_srcs,$(KDIR_FLP))
 

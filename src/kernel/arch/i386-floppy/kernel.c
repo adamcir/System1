@@ -1,7 +1,7 @@
 #include "types.h"
 #include "klog.h"
 #include "interrupts.h"
-#include "keyboard.h"
+#include "input.h"
 #include "shell.h"
 #include "tty.h"
 #include "display.h"
@@ -31,8 +31,9 @@ void kmain_floppy_i386(uint32_t magic, uint32_t boot_info_ptr) {
     klog_info("usermode", "Initialized");
 
     interrupts_init();
-    keyboard_init();
-    irq_register_handler(1, keyboard_irq_handler);
+    input_platform_init();
+    input_init();
+    irq_register_handler(1, input_irq_handler);
     interrupts_enable();
     if (magic != FLOPPY_MAGIC) {
         klog_info("boot - fatal", "Bad boot magic");

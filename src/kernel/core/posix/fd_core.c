@@ -1,6 +1,6 @@
 #include "fd_core.h"
 #include "fs_core.h"
-#include "keyboard.h"
+#include "input.h"
 #include "signals.h"
 #include "posix.h"
 #include "process_core.h"
@@ -476,8 +476,8 @@ int fd_core_ioctl(int fd, uint32_t request, uint32_t arg) {
 
         if (desc->kind != FD_KIND_TTY_IN) return -POSIX_ENOTTY;
         for (;;) {
-            keyboard_poll();
-            key = keyboard_take_key();
+            input_poll();
+            key = input_take_key();
             if (key == KEY_NONE) {
                 __asm__ volatile ("hlt");
                 continue;

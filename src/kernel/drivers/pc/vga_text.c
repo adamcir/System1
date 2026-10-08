@@ -1,5 +1,5 @@
 #include "types.h"
-#include "vga_core.h"
+#include "vga_text.h"
 
 #define VGA_WIDTH 80u
 #define VGA_HEIGHT 25u
@@ -77,21 +77,21 @@ static void vga_text_rerender(void) {
     uint16_t i;
 
     for (pos = text_path[0]; pos < (VGA_WIDTH * VGA_HEIGHT); ++pos) {
-        vga_core_putc_at((uint16_t)(pos / VGA_WIDTH), (uint16_t)(pos % VGA_WIDTH), ' ');
+        pc_vga_putc_at((uint16_t)(pos / VGA_WIDTH), (uint16_t)(pos % VGA_WIDTH), ' ');
     }
 
     vga_cursor_pos_set(text_path[0]);
     text_path[0] = vga_cursor_pos_get();
 
     for (i = 0; i < text_len; ++i) {
-        vga_core_putc(text_data[i]);
+        pc_vga_putc(text_data[i]);
         text_path[i + 1u] = vga_cursor_pos_get();
     }
 
     vga_cursor_pos_set(text_path[text_cursor]);
 }
 
-void vga_core_init(void) {
+void pc_vga_init(void) {
     uint16_t i;
 
     row = 0;
@@ -107,17 +107,17 @@ void vga_core_init(void) {
     vga_hw_cursor_update();
 }
 
-void vga_core_set_color(uint8_t new_color) {
+void pc_vga_set_color(uint8_t new_color) {
     color = (uint8_t)(new_color & 0x0Fu);
 }
 
-void vga_core_set_cursor(uint16_t new_row, uint16_t new_col) {
+void pc_vga_set_cursor(uint16_t new_row, uint16_t new_col) {
     row = (uint16_t)(new_row % VGA_HEIGHT);
     col = (uint16_t)(new_col % VGA_WIDTH);
     vga_hw_cursor_update();
 }
 
-void vga_core_get_cursor(uint16_t* out_row, uint16_t* out_col) {
+void pc_vga_get_cursor(uint16_t* out_row, uint16_t* out_col) {
     if (out_row != 0) {
         *out_row = row;
     }
@@ -126,19 +126,19 @@ void vga_core_get_cursor(uint16_t* out_row, uint16_t* out_col) {
     }
 }
 
-void vga_core_putc_at(uint16_t at_row, uint16_t at_col, char c) {
+void pc_vga_putc_at(uint16_t at_row, uint16_t at_col, char c) {
     uint16_t r = (uint16_t)(at_row % VGA_HEIGHT);
     uint16_t ccol = (uint16_t)(at_col % VGA_WIDTH);
     VGA[r * VGA_WIDTH + ccol] = ((uint16_t)color << 8) | (uint8_t)c;
 }
 
-char vga_core_getc_at(uint16_t at_row, uint16_t at_col) {
+char pc_vga_getc_at(uint16_t at_row, uint16_t at_col) {
     uint16_t r = (uint16_t)(at_row % VGA_HEIGHT);
     uint16_t ccol = (uint16_t)(at_col % VGA_WIDTH);
     return (char)(VGA[r * VGA_WIDTH + ccol] & 0xFFu);
 }
 
-void vga_core_putc(char c) {
+void pc_vga_putc(char c) {
     if (c == '\n') {
         col = 0;
         row++;
@@ -159,24 +159,24 @@ void vga_core_putc(char c) {
     vga_hw_cursor_update();
 }
 
-void vga_core_puts(const char* s) {
+void pc_vga_puts(const char* s) {
     while (*s) {
-        vga_core_putc(*s++);
+        pc_vga_putc(*s++);
     }
 }
 
-void vga_core_hex_u32(uint32_t value) {
+void pc_vga_hex_u32(uint32_t value) {
     static const char hex[] = "0123456789ABCDEF";
     int i;
 
-    vga_core_puts("0x");
+    pc_vga_puts("0x");
     for (i = 7; i >= 0; --i) {
-        vga_core_putc(hex[(value >> (i * 4)) & 0xFu]);
+        pc_vga_putc(hex[(value >> (i * 4)) & 0xFu]);
     }
 }
 
-void vga_core_text_begin(uint16_t start_row, uint16_t start_col) {
-    vga_core_set_cursor(start_row, start_col);
+void pc_vga_text_begin(uint16_t start_row, uint16_t start_col) {
+    pc_vga_set_cursor(start_row, start_col);
     text_path[0] = vga_cursor_pos_get();
     text_len = 0;
     text_cursor = 0;
@@ -184,7 +184,7 @@ void vga_core_text_begin(uint16_t start_row, uint16_t start_col) {
     vga_text_rerender();
 }
 
-void vga_core_text_putc(char c) {
+void pc_vga_text_putc(char c) {
     uint16_t i;
 
     if (text_len >= VGA_TEXT_PATH_MAX) {
@@ -208,7 +208,7 @@ void vga_core_text_putc(char c) {
     vga_text_rerender();
 }
 
-void vga_core_text_backspace(void) {
+void pc_vga_text_backspace(void) {
     uint16_t idx;
 
     if (text_cursor == 0) {
@@ -224,21 +224,21 @@ void vga_core_text_backspace(void) {
     vga_text_rerender();
 }
 
-void vga_core_text_left(void) {
+void pc_vga_text_left(void) {
     if (text_cursor > 0u) {
         text_cursor--;
         vga_cursor_pos_set(text_path[text_cursor]);
     }
 }
 
-void vga_core_text_right(void) {
+void pc_vga_text_right(void) {
     if (text_cursor < text_len) {
         text_cursor++;
         vga_cursor_pos_set(text_path[text_cursor]);
     }
 }
 
-void vga_core_text_delete(void) {
+void pc_vga_text_delete(void) {
     uint16_t idx;
 
     if (text_cursor >= text_len) {
@@ -253,6 +253,6 @@ void vga_core_text_delete(void) {
     vga_text_rerender();
 }
 
-void vga_core_text_toggle_insert(void) {
+void pc_vga_text_toggle_insert(void) {
     text_insert_mode = (uint8_t)(text_insert_mode ? 0u : 1u);
 }

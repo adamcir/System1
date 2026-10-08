@@ -1,7 +1,7 @@
 #include "types.h"
 #include "klog.h"
 #include "interrupts.h"
-#include "keyboard.h"
+#include "input.h"
 #include "shell.h"
 #include "tty.h"
 #include "display.h"
@@ -29,8 +29,9 @@ void kmain_x86_64(uint32_t magic, uint32_t info) {
     }
 
     interrupts_init();
-    keyboard_init();
-    irq_register_handler(1, keyboard_irq_handler);
+    input_platform_init();
+    input_init();
+    irq_register_handler(1, input_irq_handler);
     interrupts_enable();
     klog_info("boot", "System/1 boot via GRUB");
     if (bootstrap_init(magic, info) != 0) {
