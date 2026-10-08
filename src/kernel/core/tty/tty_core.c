@@ -2,20 +2,20 @@
 #include "types.h"
 #include "keyboard.h"
 #include "signals.h"
-#include "vga.h"
+#include "display.h"
 
 #define TTY_TAB_WIDTH 8u
 
 void tty_core_init(void) {
-    vga_init();
+    display_init();
 }
 
 void tty_core_clear(void) {
-    vga_init();
+    display_init();
 }
 
 void tty_core_set_color(tty_color_t new_color) {
-    vga_set_color((vga_color_t)new_color);
+    display_set_color((display_color_t)new_color);
 }
 
 void tty_core_putc(char c) {
@@ -25,35 +25,35 @@ void tty_core_putc(char c) {
     uint16_t i;
 
     if (c == '\t') {
-        vga_get_cursor(&row, &col);
+        display_get_cursor(&row, &col);
         spaces = (uint16_t)(TTY_TAB_WIDTH - ((uint32_t)col % TTY_TAB_WIDTH));
         if (spaces == 0u) {
             spaces = TTY_TAB_WIDTH;
         }
 
         for (i = 0u; i < spaces; ++i) {
-            vga_putc(' ');
+            display_putc(' ');
         }
         return;
     }
 
-    vga_putc(c);
+    display_putc(c);
 }
 
 void tty_core_puts(const char* s) {
-    vga_puts(s);
+    display_puts(s);
 }
 
 void tty_core_hex_u32(uint32_t value) {
-    vga_hex_u32(value);
+    display_hex_u32(value);
 }
 
 void tty_core_get_cursor(uint16_t* out_row, uint16_t* out_col) {
-    vga_get_cursor(out_row, out_col);
+    display_get_cursor(out_row, out_col);
 }
 
 void tty_core_text_begin(uint16_t row, uint16_t col) {
-    vga_text_begin(row, col);
+    display_text_begin(row, col);
 }
 
 static int tty_insert_char(char* buf, uint32_t cap, uint32_t* len, uint32_t* cursor, uint8_t insert_mode, char c) {
@@ -111,13 +111,13 @@ static void tty_delete_at_cursor(char* buf, uint32_t* len, uint32_t cursor) {
 static void tty_redraw_line(char* buf, uint32_t len, uint32_t cursor, uint16_t row, uint16_t col) {
     uint32_t i;
 
-    vga_text_begin(row, col);
+    display_text_begin(row, col);
     for (i = 0u; i < len; ++i) {
-        vga_text_putc(buf[i]);
+        display_text_putc(buf[i]);
     }
 
     for (i = len; i > cursor; --i) {
-        vga_text_left();
+        display_text_left();
     }
 }
 
@@ -143,8 +143,8 @@ int tty_core_readline_ex(char* buf, uint32_t cap, const tty_readline_hooks_t* ho
     }
 
     buf[0] = '\0';
-    vga_get_cursor(&row, &col);
-    vga_text_begin(row, col);
+    display_get_cursor(&row, &col);
+    display_text_begin(row, col);
 
     for (;;) {
         keyboard_poll();
@@ -161,22 +161,22 @@ int tty_core_readline_ex(char* buf, uint32_t cap, const tty_readline_hooks_t* ho
 
         if (key == 0x03) {
             buf[0] = '\0';
-            vga_putc('^');
-            vga_putc('C');
-            vga_putc('\n');
+            display_putc('^');
+            display_putc('C');
+            display_putc('\n');
             return 0;
         }
 
         if (key == '\n') {
             buf[len] = '\0';
-            vga_putc('\n');
+            display_putc('\n');
             return (int)len;
         }
 
         if (key == '\b') {
             if (cursor > 0u) {
                 tty_delete_left(buf, &len, &cursor);
-                vga_text_backspace();
+                display_text_backspace();
             }
             continue;
         }
@@ -184,7 +184,7 @@ int tty_core_readline_ex(char* buf, uint32_t cap, const tty_readline_hooks_t* ho
         if (key == KEY_LEFT) {
             if (cursor > 0u) {
                 cursor--;
-                vga_text_left();
+                display_text_left();
             }
             continue;
         }
@@ -192,7 +192,7 @@ int tty_core_readline_ex(char* buf, uint32_t cap, const tty_readline_hooks_t* ho
         if (key == KEY_RIGHT) {
             if (cursor < len) {
                 cursor++;
-                vga_text_right();
+                display_text_right();
             }
             continue;
         }
@@ -200,14 +200,14 @@ int tty_core_readline_ex(char* buf, uint32_t cap, const tty_readline_hooks_t* ho
         if (key == KEY_DELETE) {
             if (cursor < len) {
                 tty_delete_at_cursor(buf, &len, cursor);
-                vga_text_delete();
+                display_text_delete();
             }
             continue;
         }
 
         if (key == KEY_INSERT) {
             insert_mode = (uint8_t)(insert_mode ? 0u : 1u);
-            vga_text_toggle_insert();
+            display_text_toggle_insert();
             continue;
         }
 
@@ -240,14 +240,14 @@ int tty_core_readline_ex(char* buf, uint32_t cap, const tty_readline_hooks_t* ho
                 if (tty_insert_char(buf, cap, &len, &cursor, insert_mode, ' ') == 0) {
                     break;
                 }
-                vga_text_putc(' ');
+                display_text_putc(' ');
             }
             continue;
         }
 
         if (key > 0 && key < 128) {
             if (tty_insert_char(buf, cap, &len, &cursor, insert_mode, (char)key) != 0) {
-                vga_text_putc((char)key);
+                display_text_putc((char)key);
             }
             continue;
         }
