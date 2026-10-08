@@ -217,15 +217,15 @@ user-programs:
 
 $(ISO32): user-programs $(SMOD_I386_FILES) $(KERNEL32_ELF) tools/mkiso-i386.sh | $(IMAGE_OUT_DIR)
 	chmod +x tools/mkiso-i386.sh
-	./tools/mkiso-i386.sh
+	SMOD_MODULES='$(SMOD_DRIVERS)' ./tools/mkiso-i386.sh
 
 $(ISO64): user-programs $(SMOD_X64_FILES) $(KERNEL64_ELF) tools/mkiso-x86_64.sh | $(IMAGE_OUT_DIR)
 	chmod +x tools/mkiso-x86_64.sh
-	./tools/mkiso-x86_64.sh
+	SMOD_MODULES='$(SMOD_DRIVERS)' ./tools/mkiso-x86_64.sh
 
 $(IMG32): user-programs $(SMOD_I386_FILES) $(KERNELFLP_ELF) tools/mkimg-32.sh src/boot/simple32/stage1.asm src/boot/simple32/stage2.asm | $(IMAGE_OUT_DIR)
 	chmod +x tools/mkimg-32.sh
-	./tools/mkimg-32.sh
+	SMOD_MODULES='$(SMOD_DRIVERS)' ./tools/mkimg-32.sh
 
 iso-32: $(ISO32)
 

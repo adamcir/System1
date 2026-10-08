@@ -94,3 +94,11 @@ boot media can be mounted. This implementation loads actual independent PC
 peripheral code, rather than wrapping existing kernel hardware functions.
 VGA and PS/2 can be moved later after a suitable hot-swap procedure, IRQ
 handoff, and an extended SMOD image format for larger code/data.
+
+## Packaging
+
+`SMOD_DRIVERS` in the Makefile specifies the system's default native driver
+modules. ISO and floppy packaging copy only the selected module files,
+so stale artifacts such as the earlier demo `hello.mod` are never silently
+included by a wildcard. System Module API v1 objects are rejected by the
+new ABI v2 loader.

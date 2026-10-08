@@ -34,7 +34,9 @@ if [[ ! -f "$ROOTFS_BUILD_DIR/boot/grub/grub.cfg" ]]; then
 fi
 
 mkdir -p "$ROOTFS_BUILD_DIR/bin" "$ROOTFS_BUILD_DIR/boot/modules"
-cp "$ROOT_DIR/build/artifacts/modules/i386/"*.mod "$ROOTFS_BUILD_DIR/boot/modules/"
+for module in ${SMOD_MODULES:-com1 cmos}; do
+  cp "$ROOT_DIR/build/artifacts/modules/i386/${module}.mod" "$ROOTFS_BUILD_DIR/boot/modules/"
+done
 cp "$USERLAND_DIR"/*.prg "$ROOTFS_BUILD_DIR/bin/"
 cp "$KERNEL_ELF" "$ROOTFS_BUILD_DIR/boot/kernel.elf"
 xorriso -as mkisofs -R -J -o "$ROOTFS_ISO_TMP" "$ROOTFS_BUILD_DIR" >/dev/null 2>&1
