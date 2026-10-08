@@ -1,0 +1,48 @@
+# System/1 Native Modules — SMOD v1
+
+SMOD is the System/1 native module container, **not ELF**. Source and object
+files may be compiled with GCC/binutils, but the installed `.mod` binary
+contains a System-defined header and executable bytes.
+
+## Binary header (32 bytes, little endian)
+
+| Offset | Field | Bytes |
+|---|---|---|
+| 0 | Magic = `SMOD` | 4 |
+| 4 | Format version = 1 | 2 |
+| 6 | System Module API version = 1 | 2 |
+| 8 | CPU architecture: 1=i386, 2=x86_64 | 2 |
+| 10 | Flags = 1 (executable) | 2 |
+| 12 | Header/image offset = 32 | 4 |
+| 16 | Image size, max 4096 | 4 |
+| 20 | Memory size (including BSS), max 4096 | 4 |
+| 24 | Entry offset, strictly within image | 4 |
+| 28 | Reserved = 0 | 4 |
+
+The entrypoint is `int entry(const smod_api_v1_t*)`; the first API
+revision offers an ABI identifier and a kernel callback. The loader performs
+strict header, file length and architecture checks, copies the program into
+kernel-managed memory, clears BSS, calls the entry and retains successful
+images. It loads files from `/boot/modules/*.mod` after the real filesystem
+is mounted. Invalid/unsupported modules are skipped without preventing boot.
+
+This **initial executable subset** is deliberately limited to
+self-contained position-independent images with **no unresolved relocations**.
+The compiler's ELF object files are only a build-time intermediate. Before
+shipping real VGA/PS2 drivers as SMOD, implement relocations, import/export
+resolution, dependency order, integrity policy and a safe bootstrap path.
+Built-in PC console and keyboard drivers remain necessary for early boot.
+
+## Build
+
+```sh
+make smod-32 smod-64 smod-check
+make iso-32 iso-64 img-32
+```
+
+The first test module, `hello.mod`, calls the exported
+`report_ready` callback, proving that code from a native `.mod`
+was executed dynamically. The loader is common code under
+`src/kernel/core/module/`. On C64 or MULTIPLAN/1 use this same header
+with a different CPU architecture ID and corresponding architecture-specific
+code generator/entry calling convention, **not an x86 binary**.

@@ -2,6 +2,7 @@
 
 #include "fs_core.h"
 #include "klog.h"
+#include "module.h"
 #include "posix.h"
 #include "process.h"
 #include "syscall.h"
@@ -32,6 +33,7 @@ int bootstrap_init(uint32_t boot_magic, uint32_t boot_info_ptr) {
     }
 
     syscall_init();
+    (void)smod_boot_load_all();
     return 0;
 }
 

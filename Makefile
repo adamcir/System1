@@ -1,6 +1,7 @@
 I386_CC      ?= $(shell command -v i686-elf-gcc 2>/dev/null || command -v i686-linux-gnu-gcc 2>/dev/null || command -v gcc 2>/dev/null)
 I386_LD      ?= $(shell command -v i686-elf-ld 2>/dev/null || command -v i686-linux-gnu-ld 2>/dev/null || command -v ld 2>/dev/null)
 I386_OBJCOPY ?= $(shell command -v i686-elf-objcopy 2>/dev/null || command -v i686-linux-gnu-objcopy 2>/dev/null || command -v objcopy 2>/dev/null)
+X64_OBJCOPY  ?= $(shell command -v x86_64-elf-objcopy 2>/dev/null || command -v x86_64-linux-gnu-objcopy 2>/dev/null || command -v objcopy 2>/dev/null)
 X64_CC       ?= $(shell command -v x86_64-elf-gcc 2>/dev/null || command -v x86_64-linux-gnu-gcc 2>/dev/null || command -v gcc 2>/dev/null)
 X64_LD       ?= $(shell command -v x86_64-elf-ld 2>/dev/null || command -v x86_64-linux-gnu-ld 2>/dev/null || command -v ld 2>/dev/null)
 QEMU32       ?= qemu-system-i386 -m 32M
@@ -45,6 +46,11 @@ KERNEL32_ELF  := $(I386_OUT_DIR)/kernel.elf
 KERNEL64_ELF  := $(X64_OUT_DIR)/kernel.elf
 KERNELFLP_ELF := $(FLP_OUT_DIR)/kernel.elf
 
+SMOD_I386 := $(BUILD_OUT)/modules/i386/hello.mod
+SMOD_X64 := $(BUILD_OUT)/modules/x86_64/hello.mod
+SMOD_I386_OBJ := $(BUILD_OBJ)/smod/i386/hello.o
+SMOD_X64_OBJ := $(BUILD_OBJ)/smod/x86_64/hello.o
+
 ISO32 := $(IMAGE_OUT_DIR)/system1-iso-32.iso
 ISO64 := $(IMAGE_OUT_DIR)/system1-iso-x86_64.iso
 IMG32 := $(IMAGE_OUT_DIR)/system1-img-32.img
@@ -81,9 +87,35 @@ I386_MODULE_OBJS := $(patsubst %.c,$(BUILD_OBJ)/i386/%.o,$(I386_MODULE_SRCS))
 X64_MODULE_OBJS  := $(patsubst %.c,$(BUILD_OBJ)/x86_64/%.o,$(X64_MODULE_SRCS))
 FLP_MODULE_OBJS  := $(patsubst %.c,$(BUILD_OBJ)/i386-floppy/%.o,$(FLP_MODULE_SRCS))
 
-.PHONY: all help user-programs modules-32 modules-64 modules-img-32 iso-32 iso-64 iso-x86_64 floppy-kernel32 img-32 run-32 run-64 run-x86_64 run-img-32 clean
+.PHONY: smod-32 smod-64 smod-check all help user-programs modules-32 modules-64 modules-img-32 iso-32 iso-64 iso-x86_64 floppy-kernel32 img-32 run-32 run-64 run-x86_64 run-img-32 clean
 
 all: iso-32 iso-64 img-32
+
+$(SMOD_I386_OBJ): src/modules/hello.c include/smod.h | $(BUILD_OBJ)
+	mkdir -p $(dir $@)
+	$(I386_CC) $(CFLAGS_COMMON) -Iinclude -m32 -O2 -fno-builtin -fno-asynchronous-unwind-tables -c $< -o $@
+
+$(SMOD_X64_OBJ): src/modules/hello.c include/smod.h | $(BUILD_OBJ)
+	mkdir -p $(dir $@)
+	$(X64_CC) $(CFLAGS_COMMON) -Iinclude -m64 -mno-red-zone -O2 -fno-builtin -fno-asynchronous-unwind-tables -c $< -o $@
+
+$(SMOD_I386): $(SMOD_I386_OBJ) tools/mksmod.py
+	mkdir -p $(dir $@)
+	$(I386_OBJCOPY) -j .text -O binary $(SMOD_I386_OBJ) $(BUILD_OBJ)/smod/i386/hello.bin
+	python3 tools/mksmod.py pack --arch i386 $(BUILD_OBJ)/smod/i386/hello.bin $@
+	python3 tools/mksmod.py check --arch i386 $@
+
+$(SMOD_X64): $(SMOD_X64_OBJ) tools/mksmod.py
+	mkdir -p $(dir $@)
+	$(X64_OBJCOPY) -j .text -O binary $(SMOD_X64_OBJ) $(BUILD_OBJ)/smod/x86_64/hello.bin
+	python3 tools/mksmod.py pack --arch x86_64 $(BUILD_OBJ)/smod/x86_64/hello.bin $@
+	python3 tools/mksmod.py check --arch x86_64 $@
+
+smod-32: $(SMOD_I386)
+smod-64: $(SMOD_X64)
+smod-check: smod-32 smod-64
+	python3 -m unittest discover -s tools/tests -p 'test_smod.py'
+
 
 help:
 	@echo "Targets:"
@@ -96,6 +128,8 @@ help:
 	@echo "  modules-32      Build i386 module objects"
 	@echo "  modules-64    Build x86_64 module objects"
 	@echo "  modules-img-32 Build i386-floppy module objects"
+	@echo "  smod-32 / smod-64   Build native System Modules"
+	@echo "  smod-check          Validate native module files and format"
 	@echo "  clean             Remove build directory"
 	@echo ""
 	@echo "Config:"
@@ -176,15 +210,15 @@ $(KERNELFLP_ELF): $(LDSFLP) $(BUILD_OBJ)/entry_floppy_i386.o $(BUILD_OBJ)/isr_fl
 user-programs:
 	$(MAKE) -C src/userland all
 
-$(ISO32): user-programs $(KERNEL32_ELF) tools/mkiso-i386.sh | $(IMAGE_OUT_DIR)
+$(ISO32): user-programs $(SMOD_I386) $(KERNEL32_ELF) tools/mkiso-i386.sh | $(IMAGE_OUT_DIR)
 	chmod +x tools/mkiso-i386.sh
 	./tools/mkiso-i386.sh
 
-$(ISO64): user-programs $(KERNEL64_ELF) tools/mkiso-x86_64.sh | $(IMAGE_OUT_DIR)
+$(ISO64): user-programs $(SMOD_X64) $(KERNEL64_ELF) tools/mkiso-x86_64.sh | $(IMAGE_OUT_DIR)
 	chmod +x tools/mkiso-x86_64.sh
 	./tools/mkiso-x86_64.sh
 
-$(IMG32): user-programs $(KERNELFLP_ELF) tools/mkimg-32.sh src/boot/simple32/stage1.asm src/boot/simple32/stage2.asm | $(IMAGE_OUT_DIR)
+$(IMG32): user-programs $(SMOD_I386) $(KERNELFLP_ELF) tools/mkimg-32.sh src/boot/simple32/stage1.asm src/boot/simple32/stage2.asm | $(IMAGE_OUT_DIR)
 	chmod +x tools/mkimg-32.sh
 	./tools/mkimg-32.sh
 
