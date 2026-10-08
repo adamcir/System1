@@ -15,7 +15,7 @@ void tty_core_clear(void) {
 }
 
 void tty_core_set_color(tty_color_t new_color) {
-    display_set_color((display_color_t)new_color);
+    display_set_color((uint8_t)new_color);
 }
 
 void tty_core_putc(char c) {
