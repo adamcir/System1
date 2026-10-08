@@ -66,3 +66,17 @@ cannot execute i386 kernel machine code. It can share System/1 kernel
 source/interfaces but needs a separately compiled image and a compact loader.
 
 For FAT12 targets, `.mod` and `.bin` fit 8.3 names.
+
+
+## Essential platform CPU/power abstraction
+
+A separate `system_platform_ops_t` registry holds the basic idle,
+halt/panic, reset, and poweroff operations. The native PC implementation
+is in `src/kernel/drivers/pc/platform_pc.c`, and each current x86
+kernel entry registers it before calling into the TTY.
+
+Generic services (`klog`, TTY, POSIX, signals) do not execute PC-specific
+`hlt`, `cli`, `inb` or `outb` instructions directly anymore. This
+is an essential **built-in boot platform ABI**; it cannot be replaced by a
+late SMOD module for early panic and reset operations. Hardware/device
+drivers continue to use `.mod` once the disk is mounted.

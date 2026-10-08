@@ -1,4 +1,5 @@
 #include "tty_core.h"
+#include "platform.h"
 #include "types.h"
 #include "input.h"
 #include "signals.h"
@@ -150,7 +151,7 @@ int tty_core_readline_ex(char* buf, uint32_t cap, const tty_readline_hooks_t* ho
         input_poll();
         key = input_take_key();
         if (key == KEY_NONE) {
-            __asm__ volatile ("hlt");
+            platform_cpu_idle();
             continue;
         }
 

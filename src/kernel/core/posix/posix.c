@@ -1,4 +1,5 @@
 #include "posix.h"
+#include "platform.h"
 #include "fd_core.h"
 #include "fs_core.h"
 #include "interrupts.h"
@@ -124,7 +125,7 @@ int posix_nanosleep(const posix_timespec_t* req, posix_timespec_t* rem) {
 
     start = timer_ticks_get();
     while ((timer_ticks_get() - start) < ticks) {
-        __asm__ volatile ("hlt");
+        platform_cpu_idle();
     }
 
     return 0;

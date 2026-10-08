@@ -2,6 +2,7 @@
 #include "interrupts.h"
 #include "tty.h"
 #include "types.h"
+#include "platform.h"
 
 static void klog_put_u32_dec(uint32_t value) {
     char digits[10];
@@ -36,10 +37,7 @@ static void klog_timestamp(void) {
 }
 
 static __attribute__((noreturn)) void panic_halt(void) {
-    __asm__ volatile ("cli");
-    for (;;) {
-        __asm__ volatile ("hlt");
-    }
+    platform_halt_forever();
 }
 
 __attribute__((noreturn)) void panic_core(const char* msg) {

@@ -6,6 +6,7 @@
 #include "shell.h"
 #include "tty.h"
 #include "display.h"
+#include "platform.h"
 #include "paging.h"
 #include "mm.h"
 #include "bootstrap.h"
@@ -16,6 +17,7 @@
 
 void kmain_floppy_i386(uint32_t magic, uint32_t boot_info_ptr) {
     floppy_controller_platform_init();
+    platform_early_init();
     display_platform_init();
     tty_init();
     if (paging_init(magic, boot_info_ptr) != 0) {

@@ -1,4 +1,5 @@
 #include "fd_core.h"
+#include "platform.h"
 #include "fs_core.h"
 #include "input.h"
 #include "signals.h"
@@ -479,7 +480,7 @@ int fd_core_ioctl(int fd, uint32_t request, uint32_t arg) {
             input_poll();
             key = input_take_key();
             if (key == KEY_NONE) {
-                __asm__ volatile ("hlt");
+                platform_cpu_idle();
                 continue;
             }
             if (key == KEY_CTRL_ALT_DEL) {

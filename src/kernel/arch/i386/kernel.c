@@ -6,12 +6,14 @@
 #include "shell.h"
 #include "tty.h"
 #include "display.h"
+#include "platform.h"
 #include "paging.h"
 #include "mm.h"
 #include "bootstrap.h"
 #include "usermode.h"
 
 void kmain_i386(uint32_t magic, uint32_t info) {
+    platform_early_init();
     display_platform_init();
     tty_init();
 
