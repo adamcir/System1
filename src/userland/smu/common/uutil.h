@@ -1,7 +1,6 @@
 #ifndef SYSTEM1_USERLAND_UUTIL_H
 #define SYSTEM1_USERLAND_UUTIL_H
 
-#include "system1/ioctl.h"
 #include "system1/unistd.h"
 
 static unsigned u_strlen(const char* s) {
@@ -45,9 +44,7 @@ static void u_puts(const char* s) {
 }
 
 static void u_err(const char* s) {
-    (void)ioctl(STDERR_FILENO, TIOCSCOLOR, TTY_COLOR_RED);
     u_puts_fd(STDERR_FILENO, s);
-    (void)ioctl(STDERR_FILENO, TIOCSCOLOR, TTY_COLOR_WHITE);
 }
 
 static int u_copy(char* dst, unsigned cap, const char* src) {

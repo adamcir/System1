@@ -313,7 +313,21 @@ int fd_core_write(int fd, const void* buffer, uint32_t count) {
 
     if (desc->kind == FD_KIND_TTY_OUT) {
         const char* bytes = (const char*)buffer;
+
+        /*
+         * System/1 terminal convention:
+         *   stdout and ordinary TTY descriptors -> white
+         *   stderr (fd 2)                       -> red
+         *
+         * Always restore white after the write so an error cannot leak its
+         * color into the MultiShell prompt or the next program.
+         */
+        if (fd == POSIX_STDERR_FILENO) tty_set_color(TTY_RED);
+        else tty_set_color(TTY_WHITE);
+
         for (i = 0u; i < count; ++i) tty_putc(bytes[i]);
+
+        tty_set_color(TTY_WHITE);
         return (int)count;
     }
 

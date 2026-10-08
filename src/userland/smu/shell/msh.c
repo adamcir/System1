@@ -2,6 +2,7 @@
 #include "system1/fcntl.h"
 #include "system1/ioctl.h"
 #include "system1/unistd.h"
+#include "../common/smu.h"
 #include "../common/uutil.h"
 
 #define LINE_CAP 192u
@@ -754,7 +755,7 @@ int main(int argc, char** argv, char** envp) {
     load_config();
     load_history();
     show_motd();
-    if (g_banner != 0u) u_puts("MultiShell (MSh)\n");
+    if (g_banner != 0u) u_puts(SMU_NAME " - MultiShell (MSh)\n");
 
     for (;;) {
         print_prompt();

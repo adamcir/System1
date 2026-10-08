@@ -3,10 +3,18 @@ I386_LD ?= $(shell command -v i686-elf-ld 2>/dev/null || command -v i686-linux-g
 
 ROOT_DIR := ../..
 BUILD_DIR := build/i386
+SMU_DIR := smu
 CFLAGS := -ffreestanding -fno-pic -fno-pie -fno-stack-protector -nostdlib -nostdinc -Os -Wall -Wextra -I$(ROOT_DIR)/include
 
-COMMANDS := echo pwd cat mkdir touch rm ln readlink ls help history kconfig reboot shutdown
-COMMAND_PRGS := $(addprefix $(BUILD_DIR)/,$(addsuffix .prg,$(COMMANDS)))
+SMU_FS_COMMANDS := cat ls mkdir pwd rm touch ln readlink
+SMU_CORE_COMMANDS := echo help history
+SMU_SYSTEM_COMMANDS := kconfig reboot shutdown
+SMU_COMMANDS := $(SMU_FS_COMMANDS) $(SMU_CORE_COMMANDS) $(SMU_SYSTEM_COMMANDS)
+
+SMU_FS_OBJS := $(addprefix $(BUILD_DIR)/,$(addsuffix .o,$(SMU_FS_COMMANDS)))
+SMU_CORE_OBJS := $(addprefix $(BUILD_DIR)/,$(addsuffix .o,$(SMU_CORE_COMMANDS)))
+SMU_SYSTEM_OBJS := $(addprefix $(BUILD_DIR)/,$(addsuffix .o,$(SMU_SYSTEM_COMMANDS)))
+COMMAND_PRGS := $(addprefix $(BUILD_DIR)/,$(addsuffix .prg,$(SMU_COMMANDS)))
 MSH_PRG := $(BUILD_DIR)/msh.prg
 
 COMMON_OBJS := \
@@ -34,10 +42,16 @@ $(BUILD_DIR)/syscall.o: $(ROOT_DIR)/src/lib/user/syscall.c | $(BUILD_DIR)
 $(BUILD_DIR)/errno.o: $(ROOT_DIR)/src/lib/user/errno.c | $(BUILD_DIR)
 	$(I386_CC) $(CFLAGS) -m32 -c $< -o $@
 
-$(BUILD_DIR)/msh.o: msh/msh.c | $(BUILD_DIR)
+$(BUILD_DIR)/msh.o: $(SMU_DIR)/shell/msh.c | $(BUILD_DIR)
 	$(I386_CC) $(CFLAGS) -m32 -c $< -o $@
 
-$(BUILD_DIR)/%.o: bin/%.c | $(BUILD_DIR)
+$(SMU_FS_OBJS): $(BUILD_DIR)/%.o: $(SMU_DIR)/fs/%.c | $(BUILD_DIR)
+	$(I386_CC) $(CFLAGS) -m32 -c $< -o $@
+
+$(SMU_CORE_OBJS): $(BUILD_DIR)/%.o: $(SMU_DIR)/core/%.c | $(BUILD_DIR)
+	$(I386_CC) $(CFLAGS) -m32 -c $< -o $@
+
+$(SMU_SYSTEM_OBJS): $(BUILD_DIR)/%.o: $(SMU_DIR)/system/%.c | $(BUILD_DIR)
 	$(I386_CC) $(CFLAGS) -m32 -c $< -o $@
 
 $(MSH_PRG): linker.shell.i386.ld $(BUILD_DIR)/msh.o $(COMMON_OBJS)

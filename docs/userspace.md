@@ -179,8 +179,12 @@ The history size is bounded below the current FAT12 4 KiB file-write limit.
 ## TTY ioctl
 
 Userspace may control terminal presentation through `ioctl()`. The first
-System/1-specific TTY request is `TIOCSCOLOR`. Userland error helpers use it
-to render stderr messages in red and restore white afterwards.
+System/1-specific TTY request is `TIOCSCOLOR`.
+
+For the standard terminal convention, the kernel FD layer automatically
+renders writes to `STDERR_FILENO` (fd 2) in red when fd 2 is a TTY. Normal
+TTY output is white, and the terminal is restored to white after every stderr
+write. If stderr is redirected to a regular file, no color handling occurs.
 
 ## Kernel log timestamps
 
@@ -293,10 +297,9 @@ programs inherit the parent's open descriptors. This is required for future
 shell redirection and pipe support.
 
 `STDERR_FILENO` is descriptor 2 and is independent from stdout. It can be
-closed or redirected with `dup2()`. MultiShell's red error helper writes to
-descriptor 2; if stderr is redirected to a regular file, the TTY color ioctl
-naturally fails with `ENOTTY` while the error text is still written to the
-redirected descriptor.
+closed or redirected with `dup2()`. When fd 2 targets a TTY, the kernel
+prints it in red and immediately restores white afterwards. When fd 2 targets
+a regular file, the bytes are written normally without terminal coloring.
 
 TTY descriptors report `S_IFCHR` through `fstat()`.
 
@@ -316,3 +319,25 @@ The additional syscall numbers are currently:
 89   isatty
 110  getppid
 ```
+
+
+## System Multi Utils (SMU)
+
+The standard System/1 userland utilities are maintained as **System Multi
+Utils (SMU)**.
+
+SMU is a source/package identity, not a BusyBox-style multicall executable.
+Each command stays an independent SPRG program in `/bin`. The source tree is
+organized by responsibility:
+
+```text
+src/userland/smu/
+├── common/
+├── shell/      MultiShell (MSh)
+├── fs/
+├── core/
+└── system/
+```
+
+This preserves the UNIX-style one-program-per-executable model while keeping
+the base shell and utilities as one maintained System/1 component.
