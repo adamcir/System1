@@ -90,7 +90,7 @@ I386_MODULE_OBJS := $(patsubst %.c,$(BUILD_OBJ)/i386/%.o,$(I386_MODULE_SRCS))
 X64_MODULE_OBJS  := $(patsubst %.c,$(BUILD_OBJ)/x86_64/%.o,$(X64_MODULE_SRCS))
 FLP_MODULE_OBJS  := $(patsubst %.c,$(BUILD_OBJ)/i386-floppy/%.o,$(FLP_MODULE_SRCS))
 
-.PHONY: smod-32 smod-64 smod-check all help user-programs modules-32 modules-64 modules-img-32 iso-32 iso-64 iso-x86_64 floppy-kernel32 img-32 run-32 run-64 run-x86_64 run-img-32 clean
+.PHONY: check-modularity smod-32 smod-64 smod-check all help user-programs modules-32 modules-64 modules-img-32 iso-32 iso-64 iso-x86_64 floppy-kernel32 img-32 run-32 run-64 run-x86_64 run-img-32 clean
 
 all: iso-32 iso-64 img-32
 
@@ -125,6 +125,9 @@ smod-64: $(SMOD_X64_FILES)
 smod-check: smod-32 smod-64
 	python3 -m unittest discover -s tools/tests -p 'test_smod.py'
 
+check-modularity:
+	python3 -m unittest discover -s tools/tests -p 'test_driver_boundaries.py'
+
 
 help:
 	@echo "Targets:"
@@ -139,6 +142,7 @@ help:
 	@echo "  modules-img-32 Build i386-floppy module objects"
 	@echo "  smod-32 / smod-64   Build native System Modules"
 	@echo "  smod-check          Validate native module files and format"
+	@echo "  check-modularity    Verify portable kernel source boundaries"
 	@echo "  clean             Remove build directory"
 	@echo ""
 	@echo "Config:"

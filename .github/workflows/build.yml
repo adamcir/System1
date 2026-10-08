@@ -28,6 +28,9 @@ jobs:
       - name: Validate native SMOD modules
         run: make smod-check
 
+      - name: Verify portable kernel boundaries
+        run: make check-modularity
+
       - name: Build boot images
         run: |
           make iso-32
