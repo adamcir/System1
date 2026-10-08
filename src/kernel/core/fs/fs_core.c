@@ -6,6 +6,7 @@
 #include "process_core.h"
 #include "ramfs_core.h"
 #include "vfs_core.h"
+#include "floppy_controller.h"
 
 static const vfs_driver_t* g_root_driver = 0;
 static const vfs_driver_t* g_media_driver = 0;
@@ -54,7 +55,6 @@ typedef struct {
 
 static block_device_t g_boot_floppy_device;
 static fs_floppy_boot_info_t* g_boot_floppy_info = 0;
-static uint8_t g_fdc_ready = 0u;
 static block_device_t g_mb2_module_device;
 static uint32_t g_mb2_module_start = 0u;
 static uint32_t g_mb2_module_size = 0u;
@@ -97,20 +97,6 @@ int fs_core_to_errno(int rc) {
     return POSIX_EIO;
 }
 
-static uint8_t fs_inb(uint16_t port) {
-    uint8_t value;
-    __asm__ volatile ("inb %1, %0" : "=a"(value) : "Nd"(port));
-    return value;
-}
-
-static void fs_outb(uint16_t port, uint8_t value) {
-    __asm__ volatile ("outb %0, %1" : : "a"(value), "Nd"(port));
-}
-
-static void fs_io_delay(void) {
-    __asm__ volatile ("outb %%al, $0x80" : : "a"(0));
-}
-
 static void fs_copy_bytes(uint8_t* dst, const uint8_t* src, uint32_t len) {
     uint32_t i;
 
@@ -118,9 +104,6 @@ static void fs_copy_bytes(uint8_t* dst, const uint8_t* src, uint32_t len) {
         dst[i] = src[i];
     }
 }
-
-static int fs_fdc_read_sector_buffer(void* sector_buffer, uint32_t lba);
-static int fs_fdc_write_sector_buffer(const void* sector_buffer, uint32_t lba);
 
 static int fs_cached_floppy_read(block_device_t* dev, uint32_t lba, uint32_t count, void* buffer) {
     uint32_t i;
@@ -153,7 +136,7 @@ static int fs_cached_floppy_read(block_device_t* dev, uint32_t lba, uint32_t cou
         }
 
         {
-            int rc = fs_fdc_read_sector_buffer(dst, current_lba);
+            int rc = floppy_controller_read_sector(dst, current_lba);
             if (rc != FS_OK) {
                 return rc;
             }
@@ -187,7 +170,7 @@ static int fs_cached_floppy_write(block_device_t* dev, uint32_t lba, uint32_t co
             fs_copy_bytes((uint8_t*)((uintptr_t)info->root_dir_addr + offset), src, 512u);
         }
 
-        rc = fs_fdc_write_sector_buffer(src, current_lba);
+        rc = floppy_controller_write_sector(src, current_lba);
         if (rc != FS_OK) {
             return rc;
         }
@@ -195,303 +178,6 @@ static int fs_cached_floppy_write(block_device_t* dev, uint32_t lba, uint32_t co
 
     return FS_OK;
 }
-#define FDC_DOR 0x3F2u
-#define FDC_MSR 0x3F4u
-#define FDC_FIFO 0x3F5u
-#define FDC_CCR 0x3F7u
-#define FDC_SECTORS_PER_TRACK 18u
-#define FDC_HEADS 2u
-
-static int fs_fdc_wait_send(void) {
-    uint32_t i;
-
-    for (i = 0u; i < 1000000u; ++i) {
-        uint8_t msr = fs_inb(FDC_MSR);
-        if ((msr & 0x80u) != 0u && (msr & 0x40u) == 0u) {
-            return FS_OK;
-        }
-    }
-
-    return FS_ERR_READ_ONLY;
-}
-
-static int fs_fdc_wait_recv(void) {
-    uint32_t i;
-
-    for (i = 0u; i < 1000000u; ++i) {
-        uint8_t msr = fs_inb(FDC_MSR);
-        if ((msr & 0x80u) != 0u && (msr & 0x40u) != 0u) {
-            return FS_OK;
-        }
-    }
-
-    return FS_ERR_READ_ONLY;
-}
-
-static int fs_fdc_send(uint8_t value) {
-    int rc = fs_fdc_wait_send();
-    if (rc != FS_OK) {
-        return rc;
-    }
-    fs_outb(FDC_FIFO, value);
-    return FS_OK;
-}
-
-static int fs_fdc_recv(uint8_t* value) {
-    int rc;
-
-    if (value == 0) {
-        return FS_ERR_INVALID;
-    }
-
-    rc = fs_fdc_wait_recv();
-    if (rc != FS_OK) {
-        return rc;
-    }
-
-    *value = fs_inb(FDC_FIFO);
-    return FS_OK;
-}
-
-static int fs_fdc_sense_interrupt(uint8_t* st0, uint8_t* cyl) {
-    int rc;
-
-    rc = fs_fdc_send(0x08u);
-    if (rc != FS_OK) {
-        return rc;
-    }
-    rc = fs_fdc_recv(st0);
-    if (rc != FS_OK) {
-        return rc;
-    }
-    return fs_fdc_recv(cyl);
-}
-
-static int fs_fdc_reset(void) {
-    uint32_t i;
-    uint8_t st0 = 0u;
-    uint8_t cyl = 0u;
-    int rc;
-
-    fs_outb(FDC_DOR, 0x00u);
-    for (i = 0u; i < 10000u; ++i) {
-        fs_io_delay();
-    }
-    fs_outb(FDC_DOR, 0x1Cu);
-    fs_outb(FDC_CCR, 0x00u);
-    for (i = 0u; i < 10000u; ++i) {
-        fs_io_delay();
-    }
-
-    for (i = 0u; i < 4u; ++i) {
-        (void)fs_fdc_sense_interrupt(&st0, &cyl);
-    }
-
-    rc = fs_fdc_send(0x03u);
-    if (rc != FS_OK) {
-        return rc;
-    }
-    rc = fs_fdc_send(0xDFu);
-    if (rc != FS_OK) {
-        return rc;
-    }
-    return fs_fdc_send(0x02u);
-}
-
-static int fs_fdc_recalibrate(void) {
-    uint32_t i;
-    int rc;
-    uint8_t st0 = 0u;
-    uint8_t cyl = 0u;
-
-    rc = fs_fdc_send(0x07u);
-    if (rc != FS_OK) {
-        return rc;
-    }
-    rc = fs_fdc_send(0x00u);
-    if (rc != FS_OK) {
-        return rc;
-    }
-
-    for (i = 0u; i < 100000u; ++i) {
-        rc = fs_fdc_sense_interrupt(&st0, &cyl);
-        if (rc == FS_OK && (st0 & 0x20u) != 0u) {
-            return (cyl == 0u) ? FS_OK : FS_ERR_READ_ONLY;
-        }
-    }
-
-    return FS_ERR_READ_ONLY;
-}
-
-static int fs_fdc_prepare(void) {
-    int rc;
-
-    if (g_fdc_ready != 0u) {
-        return FS_OK;
-    }
-
-    rc = fs_fdc_reset();
-    if (rc != FS_OK) {
-        return rc;
-    }
-    rc = fs_fdc_recalibrate();
-    if (rc != FS_OK) {
-        return rc;
-    }
-
-    g_fdc_ready = 1u;
-    return FS_OK;
-}
-
-static int fs_fdc_seek(uint8_t cylinder, uint8_t head) {
-    uint32_t i;
-    int rc;
-    uint8_t st0 = 0u;
-    uint8_t cyl = 0u;
-
-    rc = fs_fdc_send(0x0Fu);
-    if (rc != FS_OK) {
-        return rc;
-    }
-    rc = fs_fdc_send((uint8_t)((head << 2) | 0u));
-    if (rc != FS_OK) {
-        return rc;
-    }
-    rc = fs_fdc_send(cylinder);
-    if (rc != FS_OK) {
-        return rc;
-    }
-
-    for (i = 0u; i < 100000u; ++i) {
-        rc = fs_fdc_sense_interrupt(&st0, &cyl);
-        if (rc == FS_OK && (st0 & 0x20u) != 0u) {
-            return (cyl == cylinder) ? FS_OK : FS_ERR_READ_ONLY;
-        }
-    }
-
-    return FS_ERR_READ_ONLY;
-}
-
-static void fs_dma2_setup_write(uint32_t addr, uint16_t count) {
-    fs_outb(0x0Au, 0x06u);
-    fs_outb(0x0Cu, 0xFFu);
-    fs_outb(0x04u, (uint8_t)(addr & 0xFFu));
-    fs_outb(0x04u, (uint8_t)((addr >> 8) & 0xFFu));
-    fs_outb(0x81u, (uint8_t)((addr >> 16) & 0xFFu));
-    fs_outb(0x0Cu, 0xFFu);
-    fs_outb(0x05u, (uint8_t)(count & 0xFFu));
-    fs_outb(0x05u, (uint8_t)((count >> 8) & 0xFFu));
-    fs_outb(0x0Bu, 0x4Au);
-    fs_outb(0x0Au, 0x02u);
-}
-
-static void fs_dma2_setup_read(uint32_t addr, uint16_t count) {
-    fs_outb(0x0Au, 0x06u);
-    fs_outb(0x0Cu, 0xFFu);
-    fs_outb(0x04u, (uint8_t)(addr & 0xFFu));
-    fs_outb(0x04u, (uint8_t)((addr >> 8) & 0xFFu));
-    fs_outb(0x81u, (uint8_t)((addr >> 16) & 0xFFu));
-    fs_outb(0x0Cu, 0xFFu);
-    fs_outb(0x05u, (uint8_t)(count & 0xFFu));
-    fs_outb(0x05u, (uint8_t)((count >> 8) & 0xFFu));
-    fs_outb(0x0Bu, 0x46u);
-    fs_outb(0x0Au, 0x02u);
-}
-
-static int fs_fdc_transfer_sector(void* sector_buffer, uint32_t lba, uint8_t write) {
-    uint32_t track_size = FDC_SECTORS_PER_TRACK * FDC_HEADS;
-    uint8_t cylinder = (uint8_t)(lba / track_size);
-    uint8_t temp = (uint8_t)(lba % track_size);
-    uint8_t head = (uint8_t)(temp / FDC_SECTORS_PER_TRACK);
-    uint8_t sector = (uint8_t)((temp % FDC_SECTORS_PER_TRACK) + 1u);
-    uint32_t addr = (uint32_t)(uintptr_t)sector_buffer;
-    uint8_t result[7];
-    uint32_t i;
-    int rc;
-
-    if (sector_buffer == 0) {
-        return FS_ERR_INVALID;
-    }
-
-    rc = fs_fdc_prepare();
-    if (rc != FS_OK) {
-        return rc;
-    }
-
-    if (((addr & 0xFFFFu) + 511u) > 0xFFFFu) {
-        return FS_ERR_INVALID;
-    }
-
-    rc = fs_fdc_seek(cylinder, head);
-    if (rc != FS_OK) {
-        return rc;
-    }
-
-    if (write != 0u) {
-        fs_dma2_setup_write(addr, 511u);
-    } else {
-        fs_dma2_setup_read(addr, 511u);
-    }
-
-    rc = fs_fdc_send((write != 0u) ? 0x45u : 0x46u);
-    if (rc != FS_OK) {
-        return rc;
-    }
-    rc = fs_fdc_send((uint8_t)((head << 2) | 0u));
-    if (rc != FS_OK) {
-        return rc;
-    }
-    rc = fs_fdc_send(cylinder);
-    if (rc != FS_OK) {
-        return rc;
-    }
-    rc = fs_fdc_send(head);
-    if (rc != FS_OK) {
-        return rc;
-    }
-    rc = fs_fdc_send(sector);
-    if (rc != FS_OK) {
-        return rc;
-    }
-    rc = fs_fdc_send(0x02u);
-    if (rc != FS_OK) {
-        return rc;
-    }
-    rc = fs_fdc_send(FDC_SECTORS_PER_TRACK);
-    if (rc != FS_OK) {
-        return rc;
-    }
-    rc = fs_fdc_send(0x1Bu);
-    if (rc != FS_OK) {
-        return rc;
-    }
-    rc = fs_fdc_send(0xFFu);
-    if (rc != FS_OK) {
-        return rc;
-    }
-
-    for (i = 0u; i < 7u; ++i) {
-        rc = fs_fdc_recv(&result[i]);
-        if (rc != FS_OK) {
-            return rc;
-        }
-    }
-
-    if ((result[0] & 0xC0u) != 0u || result[1] != 0u || result[2] != 0u) {
-        return FS_ERR_READ_ONLY;
-    }
-
-    return FS_OK;
-}
-
-static int fs_fdc_read_sector_buffer(void* sector_buffer, uint32_t lba) {
-    return fs_fdc_transfer_sector(sector_buffer, lba, 0u);
-}
-
-static int fs_fdc_write_sector_buffer(const void* sector_buffer, uint32_t lba) {
-    return fs_fdc_transfer_sector((void*)sector_buffer, lba, 1u);
-}
-
 static int fs_memory_module_read(block_device_t* dev, uint32_t lba, uint32_t count, void* buffer) {
     uint32_t offset;
     uint32_t len;
@@ -567,7 +253,7 @@ static void fs_install_bootmedia_device(void) {
     }
 
     g_boot_floppy_info = (fs_floppy_boot_info_t*)(uintptr_t)g_boot_info_ptr;
-    g_fdc_ready = 0u;
+    floppy_controller_reset();
     g_boot_floppy_device.sector_size = 512u;
     g_boot_floppy_device.sector_count = 2880u;
     g_boot_floppy_device.ctx = g_boot_floppy_info;

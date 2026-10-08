@@ -101,3 +101,18 @@ modules. ISO and floppy packaging copy only the selected module files,
 so stale artifacts such as the earlier demo `hello.mod` are never silently
 included by a wildcard. System Module API v1 objects are rejected by the
 new ABI v2 loader.
+
+## Platform isolation: floppy disk controller
+
+The PC floppy disk controller (FDC), channel-2 ISA DMA programming,
+seek/recalibration and sector commands now live in
+`src/kernel/drivers/pc/floppy_fdc.c`. The hardware-neutral
+`floppy_controller.h` interface lives in `src/kernel/core/fs/`.
+The common filesystem layer retains cached FAT/boot sector handling,
+VFS and generic block device logic, and **does not use x86 I/O ports**.
+
+The i386 floppy platform explicitly registers the PC FDC at boot, before
+the physical filesystem is mounted. This driver must currently be built
+into the **bootstrap kernel**: a module stored on the disk cannot be
+used to read the disk that contains it. Future platforms can register
+different controller ops and still reuse the FAT12 and VFS code.
