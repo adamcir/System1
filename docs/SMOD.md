@@ -29,7 +29,7 @@ is mounted. Invalid/unsupported modules are skipped without preventing boot.
 This **initial executable subset** is deliberately limited to
 self-contained position-independent images with **no unresolved relocations**.
 The compiler's ELF object files are only a build-time intermediate. Before
-shipping real VGA/PS2 drivers as SMOD, implement relocations, import/export
+shipping VGA/PS2 drivers as SMOD, implement relocations, import/export
 resolution, dependency order, integrity policy and a safe bootstrap path.
 Built-in PC console and keyboard drivers remain necessary for early boot.
 
@@ -40,9 +40,8 @@ make smod-32 smod-64 smod-check
 make iso-32 iso-64 img-32
 ```
 
-The first test module, `hello.mod`, calls the exported
-`report_ready` callback, proving that code from a native `.mod`
-was executed dynamically. The loader is common code under
+The initial test module was replaced in boot images by real PC hardware
+modules (`com1.mod` and `cmos.mod`). The loader is common code under
 `src/kernel/core/module/`. On C64 or MULTIPLAN/1 use this same header
 with a different CPU architecture ID and corresponding architecture-specific
 code generator/entry calling convention, **not an x86 binary**.

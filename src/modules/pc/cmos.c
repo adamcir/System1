@@ -10,7 +10,7 @@ static uint8_t cmos_in(uint16_t port) {
     return value;
 }
 static uint8_t cmos_reg(uint8_t index) {
-    cmos_out(0x70u, (uint8_t)(index | 0x80u));
+    cmos_out(0x70u, index); /* Keep NMIs enabled. */
     return cmos_in(0x71u);
 }
 static uint8_t cmos_decimal(uint8_t n) {
