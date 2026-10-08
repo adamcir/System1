@@ -1,6 +1,7 @@
 #include "types.h"
 #include "klog.h"
 #include "interrupts.h"
+#include "irq_chip.h"
 #include "input.h"
 #include "shell.h"
 #include "tty.h"
@@ -30,6 +31,7 @@ void kmain_floppy_i386(uint32_t magic, uint32_t boot_info_ptr) {
     }
     klog_info("usermode", "Initialized");
 
+    irq_chip_platform_init();
     interrupts_init();
     input_platform_init();
     input_init();

@@ -25,6 +25,9 @@ jobs:
           make modules-64
           make modules-img-32
 
+      - name: Validate native SMOD modules
+        run: make smod-check
+
       - name: Build boot images
         run: |
           make iso-32

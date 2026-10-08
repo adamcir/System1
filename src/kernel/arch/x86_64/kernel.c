@@ -1,6 +1,7 @@
 #include "types.h"
 #include "klog.h"
 #include "interrupts.h"
+#include "irq_chip.h"
 #include "input.h"
 #include "shell.h"
 #include "tty.h"
@@ -28,6 +29,7 @@ void kmain_x86_64(uint32_t magic, uint32_t info) {
         panic("Usermode_init failed");
     }
 
+    irq_chip_platform_init();
     interrupts_init();
     input_platform_init();
     input_init();

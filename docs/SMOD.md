@@ -46,3 +46,14 @@ was executed dynamically. The loader is common code under
 `src/kernel/core/module/`. On C64 or MULTIPLAN/1 use this same header
 with a different CPU architecture ID and corresponding architecture-specific
 code generator/entry calling convention, **not an x86 binary**.
+
+
+## Driver isolation: PC interrupt controllers
+
+System/1 generic interrupt dispatch now uses the `system_irq_chip_ops_t`
+registry. Hardware-specific 8259 PIC / 8253 PIT I/O lives in
+`src/kernel/drivers/pc/pic_pit.c`, not `interrupts_common.c`.
+The current x86 boot path registers this driver before initializing
+interrupts. TTY, POSIX, scheduling and generic IRQ dispatch remain kernel
+services. Runtime replacement of the interrupt controller is **not**
+supported yet; the initial driver is a built-in bootstrap driver.
