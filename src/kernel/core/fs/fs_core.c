@@ -1299,3 +1299,10 @@ void fs_core_get_stats(fs_core_stats_t* out_stats) {
         out_stats->largest_fs_scratch_bytes = fat12_core_buffer_bytes();
     }
 }
+
+
+uint8_t fs_core_is_writable(void) {
+    if (g_root_driver == 0) return 0u;
+    if (g_media_kind == FS_MEDIA_ISO9660) return 0u;
+    return 1u;
+}

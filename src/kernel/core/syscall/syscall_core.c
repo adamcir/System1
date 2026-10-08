@@ -1,10 +1,9 @@
 #include "syscall_core.h"
 #include "fs.h"
 #include "posix.h"
-#include "process.h"
 
 void syscall_core_init(void) {
-    process_init();
+    /* process_init() is performed once by bootstrap before syscall init. */
     posix_init();
 }
 
@@ -25,6 +24,10 @@ int syscall_core_dispatch(uint32_t nr, uint32_t a0, uint32_t a1, uint32_t a2, ui
 
     if (nr == SYS_CLOSE) {
         return posix_close((int)a0);
+    }
+
+    if (nr == SYS_FSTAT) {
+        return posix_fstat((int)a0, (fs_stat_t*)(uintptr_t)a1);
     }
 
     if (nr == SYS_LSEEK) {
@@ -77,8 +80,37 @@ int syscall_core_dispatch(uint32_t nr, uint32_t a0, uint32_t a1, uint32_t a2, ui
         return posix_ioctl((int)a0, a1, a2);
     }
 
+    if (nr == SYS_ACCESS) {
+        return posix_access((const char*)(uintptr_t)a0, a1);
+    }
+
+    if (nr == SYS_DUP) {
+        return posix_dup((int)a0);
+    }
+
+    if (nr == SYS_DUP2) {
+        return posix_dup2((int)a0, (int)a1);
+    }
+
+    if (nr == SYS_NANOSLEEP) {
+        return posix_nanosleep((const posix_timespec_t*)(uintptr_t)a0,
+                               (posix_timespec_t*)(uintptr_t)a1);
+    }
+
+    if (nr == SYS_GETPID) {
+        return posix_getpid();
+    }
+
     if (nr == SYS_REBOOT) {
         return posix_reboot(a0);
+    }
+
+    if (nr == SYS_ISATTY) {
+        return posix_isatty((int)a0);
+    }
+
+    if (nr == SYS_GETPPID) {
+        return posix_getppid();
     }
 
     if (nr == SYS_SYMLINK) {

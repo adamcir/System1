@@ -5,6 +5,7 @@
 #include "types.h"
 
 #define POSIX_FD_CAP 32u
+#define POSIX_OFD_CAP 32u
 #define POSIX_STDIN_FILENO 0
 #define POSIX_STDOUT_FILENO 1
 #define POSIX_STDERR_FILENO 2
@@ -18,10 +19,7 @@ typedef enum {
 
 typedef struct {
     uint8_t used;
-    fd_kind_t kind;
-    uint32_t node_id;
-    uint32_t offset;
-    uint32_t flags;
+    uint8_t description_index;
 } fd_entry_t;
 
 typedef struct {
@@ -30,7 +28,11 @@ typedef struct {
 } fd_table_t;
 
 void fd_core_init(void);
+void fd_core_table_reset(fd_table_t* table);
 void fd_core_table_init(fd_table_t* table);
+int fd_core_table_clone(fd_table_t* dst, const fd_table_t* src);
+void fd_core_table_destroy(fd_table_t* table);
+
 int fd_core_open(const char* path, uint32_t flags);
 int fd_core_close(int fd);
 int fd_core_read(int fd, void* buffer, uint32_t count);
@@ -38,5 +40,8 @@ int fd_core_write(int fd, const void* buffer, uint32_t count);
 int fd_core_lseek(int fd, int offset, uint32_t whence);
 int fd_core_fstat(int fd, fs_stat_t* out_stat);
 int fd_core_ioctl(int fd, uint32_t request, uint32_t arg);
+int fd_core_dup(int oldfd);
+int fd_core_dup2(int oldfd, int newfd);
+int fd_core_isatty(int fd);
 
 #endif

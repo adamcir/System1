@@ -259,3 +259,60 @@ from the active filesystem into the target userspace range.
 The file-size ceiling is now 64 KiB without reserving a 64 KiB kernel BSS
 buffer. The architecture-specific userspace memory slot remains the final
 authority for whether an image actually fits in memory.
+
+
+## Additional POSIX compatibility
+
+The userspace wrappers now follow the conventional POSIX error contract:
+public functions such as `open()`, `read()`, `write()`, `stat()` and
+`dup2()` return `-1` on failure and set the process-local userspace
+`errno`. The low-level `system1_syscall()` interface still exposes raw
+negative kernel error codes.
+
+The common userspace library provides:
+
+```text
+errno
+strerror()
+perror()
+fstat()
+dup()
+dup2()
+isatty()
+access()
+getpid()
+getppid()
+nanosleep()
+sleep()
+usleep()
+```
+
+File descriptors now refer to shared open-file descriptions. Duplicated
+descriptors therefore share the same file offset, and spawned userspace
+programs inherit the parent's open descriptors. This is required for future
+shell redirection and pipe support.
+
+`STDERR_FILENO` is descriptor 2 and is independent from stdout. It can be
+closed or redirected with `dup2()`. MultiShell's red error helper writes to
+descriptor 2; if stderr is redirected to a regular file, the TTY color ioctl
+naturally fails with `ENOTTY` while the error text is still written to the
+redirected descriptor.
+
+TTY descriptors report `S_IFCHR` through `fstat()`.
+
+System/1 does not yet implement UNIX permission bits. For `access()`,
+`F_OK`, `R_OK` and `X_OK` succeed for an existing object; `W_OK`
+additionally checks whether the active filesystem is writable.
+
+The additional syscall numbers are currently:
+
+```text
+5    fstat
+21   access
+32   dup
+33   dup2
+35   nanosleep
+39   getpid
+89   isatty
+110  getppid
+```

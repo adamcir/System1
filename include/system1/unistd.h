@@ -7,6 +7,7 @@
 #define SYS_WRITE  1u
 #define SYS_OPEN   2u
 #define SYS_CLOSE  3u
+#define SYS_FSTAT  5u
 #define SYS_LSEEK  8u
 #define SYS_STAT   9u
 #define SYS_GETCWD 10u
@@ -14,7 +15,14 @@
 #define SYS_MKDIR  12u
 #define SYS_UNLINK 13u
 #define SYS_IOCTL 16u
+#define SYS_ACCESS 21u
+#define SYS_DUP 32u
+#define SYS_DUP2 33u
+#define SYS_NANOSLEEP 35u
+#define SYS_GETPID 39u
 #define SYS_REBOOT 88u
+#define SYS_ISATTY 89u
+#define SYS_GETPPID 110u
 #define SYS_SYMLINK 83u
 #define SYS_READLINK 85u
 #define SYS_GETDENTS 141u
@@ -24,6 +32,11 @@
 #define STDIN_FILENO  0
 #define STDOUT_FILENO 1
 #define STDERR_FILENO 2
+
+#define F_OK 0
+#define X_OK 1
+#define W_OK 2
+#define R_OK 4
 
 #define SEEK_SET 0u
 #define SEEK_CUR 1u
@@ -39,6 +52,14 @@ int close(int fd);
 int read(int fd, void* buf, unsigned count);
 int write(int fd, const void* buf, unsigned count);
 int lseek(int fd, int offset, unsigned whence);
+int dup(int oldfd);
+int dup2(int oldfd, int newfd);
+int isatty(int fd);
+int access(const char* path, int mode);
+int getpid(void);
+int getppid(void);
+unsigned sleep(unsigned seconds);
+int usleep(unsigned usec);
 int chdir(const char* path);
 int mkdir(const char* path);
 int unlink(const char* path);

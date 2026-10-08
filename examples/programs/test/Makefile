@@ -10,8 +10,8 @@ CFLAGS_COMMON := -ffreestanding -fno-pic -fno-pie -nostdlib -nostdinc -Wall -Wex
 I386_CFLAGS := $(CFLAGS_COMMON) -m32
 X64_CFLAGS := $(CFLAGS_COMMON) -m64 -mno-red-zone
 
-I386_OBJS := $(BUILD_DIR)/test.i386.o $(BUILD_DIR)/unistd.i386.o $(BUILD_DIR)/syscall.i386.o
-X64_OBJS := $(BUILD_DIR)/test.x86_64.o $(BUILD_DIR)/unistd.x86_64.o $(BUILD_DIR)/syscall.x86_64.o
+I386_OBJS := $(BUILD_DIR)/test.i386.o $(BUILD_DIR)/unistd.i386.o $(BUILD_DIR)/syscall.i386.o $(BUILD_DIR)/errno.i386.o
+X64_OBJS := $(BUILD_DIR)/test.x86_64.o $(BUILD_DIR)/unistd.x86_64.o $(BUILD_DIR)/syscall.x86_64.o $(BUILD_DIR)/errno.x86_64.o
 
 I386_PRG := $(BUILD_DIR)/program-i386.prg
 X64_PRG := $(BUILD_DIR)/program-x86_64.prg
@@ -32,6 +32,9 @@ $(BUILD_DIR)/unistd.i386.o: $(ROOT_DIR)/src/lib/user/unistd.c | $(BUILD_DIR)
 $(BUILD_DIR)/syscall.i386.o: $(ROOT_DIR)/src/lib/user/syscall.c | $(BUILD_DIR)
 	$(I386_CC) $(I386_CFLAGS) -c $< -o $@
 
+$(BUILD_DIR)/errno.i386.o: $(ROOT_DIR)/src/lib/user/errno.c | $(BUILD_DIR)
+	$(I386_CC) $(I386_CFLAGS) -c $< -o $@
+
 $(BUILD_DIR)/test.x86_64.o: test.c | $(BUILD_DIR)
 	$(X64_CC) $(X64_CFLAGS) -c $< -o $@
 
@@ -39,6 +42,9 @@ $(BUILD_DIR)/unistd.x86_64.o: $(ROOT_DIR)/src/lib/user/unistd.c | $(BUILD_DIR)
 	$(X64_CC) $(X64_CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/syscall.x86_64.o: $(ROOT_DIR)/src/lib/user/syscall.c | $(BUILD_DIR)
+	$(X64_CC) $(X64_CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/errno.x86_64.o: $(ROOT_DIR)/src/lib/user/errno.c | $(BUILD_DIR)
 	$(X64_CC) $(X64_CFLAGS) -c $< -o $@
 
 $(I386_PRG): linker.i386.ld $(I386_OBJS)

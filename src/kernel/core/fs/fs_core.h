@@ -95,5 +95,6 @@ int fs_core_unlink(const char* path);
 int fs_core_symlink(const char* target, const char* linkpath);
 int fs_core_readlink(const char* path, char* buffer, uint32_t cap, uint32_t* out_size);
 void fs_core_get_stats(fs_core_stats_t* out_stats);
+uint8_t fs_core_is_writable(void);
 
 #endif

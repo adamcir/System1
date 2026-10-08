@@ -1,6 +1,7 @@
 #include "posix.h"
 #include "fd_core.h"
 #include "fs_core.h"
+#include "interrupts.h"
 #include "process_core.h"
 #include "signals.h"
 #include "system1_dirent.h"
@@ -56,6 +57,77 @@ int posix_stat(const char* path, fs_stat_t* out_stat) {
 
 int posix_fstat(int fd, fs_stat_t* out_stat) {
     return fd_core_fstat(fd, out_stat);
+}
+
+int posix_dup(int oldfd) {
+    return fd_core_dup(oldfd);
+}
+
+int posix_dup2(int oldfd, int newfd) {
+    return fd_core_dup2(oldfd, newfd);
+}
+
+int posix_isatty(int fd) {
+    return fd_core_isatty(fd);
+}
+
+int posix_access(const char* path, uint32_t mode) {
+    fs_stat_t st;
+    int rc;
+
+    if (path == 0 || (mode & ~7u) != 0u) return -POSIX_EINVAL;
+
+    rc = fs_core_stat(path, &st);
+    if (rc != FS_OK) return posix_fs_to_errno(rc);
+
+    if ((mode & 2u) != 0u && fs_core_is_writable() == 0u) {
+        return -POSIX_EACCES;
+    }
+
+    /*
+     * System/1 does not have per-file permission bits yet. Existing objects
+     * are therefore considered readable/searchable/executable; W_OK still
+     * reflects whether the active filesystem itself is writable.
+     */
+    (void)st;
+    return 0;
+}
+
+int posix_getpid(void) {
+    process_t* current = process_core_current();
+    return (current != 0) ? (int)current->pid : -POSIX_ESRCH;
+}
+
+int posix_getppid(void) {
+    process_t* current = process_core_current();
+    return (current != 0) ? (int)current->ppid : -POSIX_ESRCH;
+}
+
+int posix_nanosleep(const posix_timespec_t* req, posix_timespec_t* rem) {
+    uint64_t ticks;
+    uint64_t start;
+
+    if (req == 0 || req->tv_sec < 0 || req->tv_nsec < 0 ||
+        req->tv_nsec >= 1000000000) {
+        return -POSIX_EINVAL;
+    }
+
+    ticks = (uint64_t)(uint32_t)req->tv_sec * 100u;
+    ticks += ((uint64_t)(uint32_t)req->tv_nsec + 9999999u) / 10000000u;
+
+    if (rem != 0) {
+        rem->tv_sec = 0;
+        rem->tv_nsec = 0;
+    }
+
+    if (ticks == 0u) return 0;
+
+    start = timer_ticks_get();
+    while ((timer_ticks_get() - start) < ticks) {
+        __asm__ volatile ("hlt");
+    }
+
+    return 0;
 }
 
 int posix_ioctl(int fd, uint32_t request, uint32_t arg) {

@@ -3,7 +3,9 @@
 
 #define EPERM   1
 #define ENOENT  2
+#define ESRCH   3
 #define EIO     5
+#define E2BIG   7
 #define ENOEXEC 8
 #define EBADF   9
 #define EACCES  13
@@ -11,8 +13,14 @@
 #define ENOTDIR 20
 #define EISDIR  21
 #define EINVAL  22
+#define ENOTTY  25
 #define ENOSPC  28
 #define EROFS   30
 #define ENOSYS  38
+
+extern int errno;
+
+const char* strerror(int errnum);
+void perror(const char* prefix);
 
 #endif

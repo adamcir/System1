@@ -12,7 +12,8 @@ MSH_PRG := $(BUILD_DIR)/msh.prg
 COMMON_OBJS := \
 	$(BUILD_DIR)/crt0.o \
 	$(BUILD_DIR)/unistd.o \
-	$(BUILD_DIR)/syscall.o
+	$(BUILD_DIR)/syscall.o \
+	$(BUILD_DIR)/errno.o
 
 .PHONY: all check clean
 
@@ -28,6 +29,9 @@ $(BUILD_DIR)/unistd.o: $(ROOT_DIR)/src/lib/user/unistd.c | $(BUILD_DIR)
 	$(I386_CC) $(CFLAGS) -m32 -c $< -o $@
 
 $(BUILD_DIR)/syscall.o: $(ROOT_DIR)/src/lib/user/syscall.c | $(BUILD_DIR)
+	$(I386_CC) $(CFLAGS) -m32 -c $< -o $@
+
+$(BUILD_DIR)/errno.o: $(ROOT_DIR)/src/lib/user/errno.c | $(BUILD_DIR)
 	$(I386_CC) $(CFLAGS) -m32 -c $< -o $@
 
 $(BUILD_DIR)/msh.o: msh/msh.c | $(BUILD_DIR)

@@ -10,6 +10,11 @@
 #define POSIX_STDOUT_FILENO 1
 #define POSIX_STDERR_FILENO 2
 
+typedef struct {
+    int32_t tv_sec;
+    int32_t tv_nsec;
+} posix_timespec_t
+
 void posix_init(void);
 int posix_open(const char* path, uint32_t flags);
 int posix_close(int fd);
@@ -18,6 +23,13 @@ int posix_write(int fd, const void* buffer, uint32_t count);
 int posix_lseek(int fd, int offset, uint32_t whence);
 int posix_stat(const char* path, fs_stat_t* out_stat);
 int posix_fstat(int fd, fs_stat_t* out_stat);
+int posix_dup(int oldfd);
+int posix_dup2(int oldfd, int newfd);
+int posix_isatty(int fd);
+int posix_access(const char* path, uint32_t mode);
+int posix_getpid(void);
+int posix_getppid(void);
+int posix_nanosleep(const posix_timespec_t* req, posix_timespec_t* rem);
 int posix_unlink(const char* path);
 int posix_ioctl(int fd, uint32_t request, uint32_t arg);
 int posix_reboot(uint32_t how);

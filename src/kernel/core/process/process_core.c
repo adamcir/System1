@@ -25,7 +25,7 @@ static void process_clear(process_t* process) {
     process->state = PROCESS_STATE_UNUSED;
     process->exit_status = 0;
     process->cwd[0] = '\0';
-    fd_core_table_init(&process->fd_table);
+    fd_core_table_reset(&process->fd_table);
     process->address_space = 0u;
     process->entry_ip = 0u;
     process->user_sp = 0u;
@@ -122,7 +122,14 @@ process_t* process_core_spawn_exec(const char* path, uint32_t arch, uint32_t ent
         } else {
             process_copy_string(child->cwd, FS_PATH_CAP, "/");
         }
-        fd_core_table_init(&child->fd_table);
+        if (parent != 0) {
+            if (fd_core_table_clone(&child->fd_table, &parent->fd_table) < 0) {
+                process_clear(child);
+                return 0;
+            }
+        } else {
+            fd_core_table_init(&child->fd_table);
+        }
         process_core_record_exec_image(child, path, arch, entry, segment_count, file_size);
         g_current_process = child;
         return child;
@@ -154,5 +161,6 @@ void process_core_reap(process_t* process) {
         return;
     }
 
+    fd_core_table_destroy(&process->fd_table);
     process_clear(process);
 }
