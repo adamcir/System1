@@ -55,8 +55,8 @@ X64_MODULE_INCLUDES := $(foreach m,$(MODULES),-I$(KDIR_X64)/modules/$(m))
 FLP_MODULE_INCLUDES := $(foreach m,$(MODULES),-I$(KDIR_FLP)/modules/$(m))
 
 I386_INCLUDES := -Iinclude $(PC_DRIVER_INCLUDES) $(COMMON_MODULE_INCLUDES) $(I386_MODULE_INCLUDES)
-X64_INCLUDES  := -Iinclude $(COMMON_MODULE_INCLUDES) $(X64_MODULE_INCLUDES)
-FLP_INCLUDES  := -Iinclude $(COMMON_MODULE_INCLUDES) $(FLP_MODULE_INCLUDES)
+X64_INCLUDES := -Iinclude $(PC_DRIVER_INCLUDES) $(COMMON_MODULE_INCLUDES) $(X64_MODULE_INCLUDES)
+FLP_INCLUDES := -Iinclude $(PC_DRIVER_INCLUDES) $(COMMON_MODULE_INCLUDES) $(FLP_MODULE_INCLUDES)
 
 define module_wrapper_src
 $(if $(wildcard $(1)/modules/$(2)/$(2).c),$(1)/modules/$(2)/$(2).c,$(COMMON_MODULE_DIR)/$(2)/$(2).c)
@@ -74,8 +74,8 @@ $(foreach m,$(MODULES),$(call module_wrapper_src,$(1),$(m)) $(call module_core_s
 endef
 
 I386_MODULE_SRCS := $(call module_all_srcs,$(KDIR_I386)) $(PC_DRIVER_SRCS)
-X64_MODULE_SRCS  := $(call module_all_srcs,$(KDIR_X64))
-FLP_MODULE_SRCS  := $(call module_all_srcs,$(KDIR_FLP))
+X64_MODULE_SRCS := $(call module_all_srcs,$(KDIR_X64)) $(PC_DRIVER_SRCS)
+FLP_MODULE_SRCS := $(call module_all_srcs,$(KDIR_FLP)) $(PC_DRIVER_SRCS)
 
 I386_MODULE_OBJS := $(patsubst %.c,$(BUILD_OBJ)/i386/%.o,$(I386_MODULE_SRCS))
 X64_MODULE_OBJS  := $(patsubst %.c,$(BUILD_OBJ)/x86_64/%.o,$(X64_MODULE_SRCS))
