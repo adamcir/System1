@@ -4,12 +4,14 @@
 #include "keyboard.h"
 #include "shell.h"
 #include "tty.h"
+#include "display.h"
 #include "paging.h"
 #include "mm.h"
 #include "bootstrap.h"
 #include "usermode.h"
 
 void kmain_x86_64(uint32_t magic, uint32_t info) {
+    display_platform_init();
     tty_init();
 
     if (paging_init(magic, info) != 0) {

@@ -1,6 +1,7 @@
 #include "types.h"
 #include "vga.h"
 #include "vga_core.h"
+#include "display.h"
 
 void vga_init(void) {
     vga_core_init();
@@ -64,4 +65,32 @@ void vga_text_delete(void) {
 
 void vga_text_toggle_insert(void) {
     vga_core_text_toggle_insert();
+}
+
+/* Built-in bootstrap adapter until SMOD disk loading is available.
+ * VGA is registered via the same interface that future .mod drivers use. */
+static void adapter_set_color(uint8_t value) { vga_core_set_color(value); }
+static void adapter_get_cursor(uint16_t* row, uint16_t* col) { vga_core_get_cursor(row,col); }
+static void adapter_text_begin(uint16_t row, uint16_t col) { vga_core_text_begin(row,col); }
+static void adapter_hex(uint32_t value) { vga_core_hex_u32(value); }
+
+static const system_display_ops_t vga_display_ops = {
+    SYSTEM_DISPLAY_ABI,
+    vga_core_init,
+    adapter_set_color,
+    vga_core_set_cursor,
+    adapter_get_cursor,
+    vga_core_putc,
+    vga_core_puts,
+    adapter_hex,
+    adapter_text_begin,
+    vga_core_text_putc,
+    vga_core_text_backspace,
+    vga_core_text_left,
+    vga_core_text_right,
+    vga_core_text_delete,
+    vga_core_text_toggle_insert
+};
+void display_platform_init(void) {
+    (void)display_register(&vga_display_ops);
 }
