@@ -57,3 +57,15 @@ The current x86 boot path registers this driver before initializing
 interrupts. TTY, POSIX, scheduling and generic IRQ dispatch remain kernel
 services. Runtime replacement of the interrupt controller is **not**
 supported yet; the initial driver is a built-in bootstrap driver.
+
+
+## 1 MiB floppy bootstrap memory
+
+The floppy boot profile has only 1 MiB of installed physical RAM. The
+current MM fallback marks memory beginning at 1 MiB as available; it must
+not be used to allocate executable boot modules on this profile. The SMOD
+loader therefore uses a **single statically reserved 4096-byte resident
+arena** for the first module and refuses additional resident modules rather
+than allocating nonexistent physical memory. This is a compatibility measure
+until the floppy physical-memory map is provided to the page allocator.
+The full i386/x86_64 boot profiles continue to use `kmalloc`.

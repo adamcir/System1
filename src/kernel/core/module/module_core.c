@@ -15,6 +15,13 @@
 static void* smod_images[SMOD_MAX_LOADED];
 static uint32_t smod_loaded_count;
 
+/* The floppy profile has only 1 MiB RAM. Its legacy MM fallback can hand
+ * kmalloc() physical addresses above installed RAM. Execute a small boot
+ * module from a resident kernel arena instead of touching those pages. */
+#define SMOD_FLOPPY_MAGIC 0x53314D47u
+static uint8_t smod_floppy_image[SMOD_IMAGE_LIMIT] __attribute__((aligned(16)));
+static uint8_t smod_floppy_image_in_use;
+
 static uint16_t smod_u16(const uint8_t* p) {
     return (uint16_t)((uint16_t)p[0] | ((uint16_t)p[1] << 8));
 }
@@ -58,7 +65,7 @@ static const smod_api_v1_t smod_api = { SMOD_API_VERSION, smod_report_ready };
 /* Native v1: code+optional BSS, absolute entry offset and no relocations yet.
  * The .mod image must be self-contained position-independent machine code.
  */
-static int smod_core_load_file(const char* path) {
+static int smod_core_load_file(const char* path, uint32_t boot_magic) {
     uint8_t hdr[SMOD_HEADER_SIZE];
     fs_stat_t st;
     uint32_t id = 0u;
@@ -68,6 +75,7 @@ static int smod_core_load_file(const char* path) {
     uint32_t i;
     void* image;
     int rc;
+    uint8_t lowmem_arena = 0u;
 
     if (smod_loaded_count >= SMOD_MAX_LOADED) return -1;
     if (fs_core_open(path, FS_O_RDONLY, &id) != FS_OK) return -1;
@@ -99,16 +107,30 @@ static int smod_core_load_file(const char* path) {
         return -1;
     }
 
-    image = kmalloc(memory_size);
-    if (image == 0) {
-        (void)fs_core_close(id);
-        return -1;
+    if (boot_magic == SMOD_FLOPPY_MAGIC) {
+        /* Only one resident module fits in the fixed floppy boot arena.
+         * Do not fall back to kmalloc beyond the installed 1 MiB RAM. */
+        if (smod_floppy_image_in_use != 0u) {
+            (void)fs_core_close(id);
+            klog_info("smod", "Floppy module arena full");
+            return -1;
+        }
+        image = smod_floppy_image;
+        smod_floppy_image_in_use = 1u;
+        lowmem_arena = 1u;
+    } else {
+        image = kmalloc(memory_size);
+        if (image == 0) {
+            (void)fs_core_close(id);
+            return -1;
+        }
     }
 
     rc = smod_read_exact(id, SMOD_HEADER_SIZE, (uint8_t*)image, image_size);
     (void)fs_core_close(id);
     if (rc != 0) {
-        kfree(image);
+        if (lowmem_arena != 0u) smod_floppy_image_in_use = 0u;
+        else kfree(image);
         return -1;
     }
     for (i = image_size; i < memory_size; ++i) ((uint8_t*)image)[i] = 0u;
@@ -119,7 +141,8 @@ static int smod_core_load_file(const char* path) {
     {
         smod_entry_fn_t entry = (smod_entry_fn_t)((uint8_t*)image + entry_offset);
         if (entry(&smod_api) != 0) {
-            kfree(image);
+            if (lowmem_arena != 0u) smod_floppy_image_in_use = 0u;
+            else kfree(image);
             return -1;
         }
     }
@@ -138,13 +161,14 @@ static int smod_has_extension(const char* name) {
         (name[len-1u] == 'd' || name[len-1u] == 'D');
 }
 
-int smod_core_boot_load_all(void) {
+int smod_core_boot_load_all(uint32_t boot_magic) {
     fs_dirent_t entries[SMOD_MAX_DIRECTORY_ENTRIES];
     uint32_t count = 0u;
     uint32_t i;
     int rc;
     int loaded = 0;
 
+    klog_info("smod", "Scanning /boot/modules");
     rc = fs_core_list_dir("/boot/modules", entries, SMOD_MAX_DIRECTORY_ENTRIES, &count);
     if (rc != FS_OK) return 0; /* Boot must work without optional modules. */
 
@@ -173,7 +197,7 @@ int smod_core_boot_load_all(void) {
         }
         path[j] = '\0';
 
-        if (smod_core_load_file(path) == 0) {
+        if (smod_core_load_file(path, boot_magic) == 0) {
             ++loaded;
             klog_info("smod", path);
         } else {

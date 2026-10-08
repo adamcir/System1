@@ -33,7 +33,7 @@ int bootstrap_init(uint32_t boot_magic, uint32_t boot_info_ptr) {
     }
 
     syscall_init();
-    (void)smod_boot_load_all();
+    (void)smod_boot_load_all(boot_magic);
     return 0;
 }
 
