@@ -158,6 +158,10 @@ int usleep(unsigned usec) {
     return nanosleep(&req, 0);
 }
 
+void sync(void) {
+    (void)system1_syscall(SYS_SYNC, 0u, 0u, 0u, 0u);
+}
+
 void _exit(int status) {
     (void)system1_syscall(SYS_EXIT, (uint32_t)status, 0u, 0u, 0u);
     for (;;) {

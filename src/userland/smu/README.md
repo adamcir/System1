@@ -40,3 +40,20 @@ separate SPRG executable at `/bin/adatext.prg`, not part of MSh itself.
 
 The first version is line-oriented so it works reliably with the current
 System/1 TTY ABI and low-memory floppy profile.
+
+
+## Utility groups
+
+The standard set now also includes:
+
+```text
+clear       clear the active TTY
+write       create/overwrite/append text to a file
+stat        show basic file metadata
+sleep       delay execution by whole seconds
+sync        synchronize filesystem state
+true/false  return success/failure for shell conditionals
+```
+
+The Kernel Shell exposes a compact recovery subset of filesystem and
+diagnostic operations, while normal interactive work should use MSh + SMU.

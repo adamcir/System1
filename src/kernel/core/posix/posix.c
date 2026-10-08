@@ -134,6 +134,16 @@ int posix_ioctl(int fd, uint32_t request, uint32_t arg) {
     return fd_core_ioctl(fd, request, arg);
 }
 
+int posix_sync(void) {
+    /*
+     * Current System/1 backends are already synchronous:
+     * FAT12 commits writes immediately, RAMFS has no backing store,
+     * and ISO9660 is read-only. Keep the syscall as the stable API for
+     * future block caches/writeback.
+     */
+    return 0;
+}
+
 int posix_reboot(uint32_t how) {
     if (how == 0u) {
         signal_raise(HW_RESET);

@@ -19,6 +19,7 @@
 #define SYS_DUP 32u
 #define SYS_DUP2 33u
 #define SYS_NANOSLEEP 35u
+#define SYS_SYNC 36u
 #define SYS_GETPID 39u
 #define SYS_REBOOT 88u
 #define SYS_ISATTY 89u
@@ -60,6 +61,7 @@ int getpid(void);
 int getppid(void);
 unsigned sleep(unsigned seconds);
 int usleep(unsigned usec);
+void sync(void);
 int chdir(const char* path);
 int mkdir(const char* path);
 int unlink(const char* path);

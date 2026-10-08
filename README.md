@@ -59,10 +59,25 @@ Examples:
 /bin/ls.prg
 /bin/cat.prg
 /bin/echo.prg
+/bin/clear.prg
+/bin/write.prg
+/bin/stat.prg
+/bin/sleep.prg
 /bin/adatext.prg
 /bin/kconfig.prg
 /bin/reboot.prg
 /bin/shutdown.prg
+```
+
+Useful SMU examples:
+
+```sh
+clear
+write /root/notes.txt "Hello System/1"
+write -a /root/notes.txt "Another line"
+stat /root/notes.txt
+sleep 1
+sync
 ```
 
 AdaText can open an existing file or start a new one:
@@ -108,3 +123,10 @@ The floppy target keeps the 1 MiB low-memory profile and uses a writable FAT12 r
 
 ---
 *System/1 - by Adam Cir (Adava), Adava Software / Adava Development in 2026. The OS is under license GPLv3.*
+
+
+The built-in Kernel Shell is a recovery environment. It provides filesystem
+recovery commands such as `pwd`, `cd`, `ls`, `cat`, `stat`,
+`mkdir`, `touch`, `write`, `rm`, and `sync`, plus diagnostic commands
+such as `history`, `ticks`, `fsstat`, and `mmstat`. Use `shell` to
+attempt to start the configured userspace shell again.

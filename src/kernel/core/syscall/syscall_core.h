@@ -19,6 +19,7 @@
 #define SYS_DUP 32u
 #define SYS_DUP2 33u
 #define SYS_NANOSLEEP 35u
+#define SYS_SYNC 36u
 #define SYS_GETPID 39u
 #define SYS_REBOOT 88u
 #define SYS_ISATTY 89u

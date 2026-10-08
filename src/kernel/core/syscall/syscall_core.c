@@ -97,6 +97,10 @@ int syscall_core_dispatch(uint32_t nr, uint32_t a0, uint32_t a1, uint32_t a2, ui
                                (posix_timespec_t*)(uintptr_t)a1);
     }
 
+    if (nr == SYS_SYNC) {
+        return posix_sync();
+    }
+
     if (nr == SYS_GETPID) {
         return posix_getpid();
     }

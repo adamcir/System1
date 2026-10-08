@@ -6,9 +6,9 @@ BUILD_DIR := build/i386
 SMU_DIR := smu
 CFLAGS := -ffreestanding -fno-pic -fno-pie -fno-stack-protector -nostdlib -nostdinc -Os -Wall -Wextra -I$(ROOT_DIR)/include
 
-SMU_FS_COMMANDS := cat ls mkdir pwd rm touch ln readlink
-SMU_CORE_COMMANDS := echo help history
-SMU_SYSTEM_COMMANDS := kconfig reboot shutdown
+SMU_FS_COMMANDS := cat ls mkdir pwd rm touch ln readlink write stat
+SMU_CORE_COMMANDS := echo help history clear sleep true false
+SMU_SYSTEM_COMMANDS := kconfig reboot shutdown sync
 SMU_EDITOR_COMMANDS := adatext
 SMU_COMMANDS := $(SMU_FS_COMMANDS) $(SMU_CORE_COMMANDS) $(SMU_SYSTEM_COMMANDS) $(SMU_EDITOR_COMMANDS)
 

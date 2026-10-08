@@ -510,5 +510,12 @@ int fd_core_ioctl(int fd, uint32_t request, uint32_t arg) {
         return 0;
     }
 
+    if (request == 0x5305u) {
+        if (desc->kind != FD_KIND_TTY_OUT) return -POSIX_ENOTTY;
+        tty_clear();
+        tty_set_color(TTY_WHITE);
+        return 0;
+    }
+
     return -POSIX_ENOTTY;
 }

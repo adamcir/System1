@@ -16,8 +16,9 @@
 #define SHELL_CAT_BUF_CAP 4096u
 
 static const char* g_shell_commands[] = {
-    "help", "clear", "echo", "reboot", "shutdown",
-    "version", "ls", "cat", "exec", "fsstat", "mmstat"
+    "help", "clear", "echo", "version", "reboot", "shutdown", "shell",
+    "pwd", "cd", "ls", "cat", "stat", "mkdir", "touch", "write", "rm", "sync",
+    "history", "ticks", "exec", "fsstat", "mmstat"
 };
 
 static char g_shell_history[SHELL_HISTORY_CAP][SHELL_LINE_CAP];
@@ -505,9 +506,12 @@ static void shell_put_u32_dec(uint32_t value) {
 }
 
 static void shell_cmd_help(void) {
-    tty_puts("Kernel Shell builtins:\n");
-    tty_puts("help clear echo reboot shutdown version ls cat exec fsstat mmstat\n");
-    tty_puts("Normal System/1 commands live in /bin and are run by MultiShell.\n");
+    tty_puts("System/1 Kernel Shell - recovery environment\n");
+    tty_puts("System:      help clear version reboot shutdown shell\n");
+    tty_puts("Filesystem:  pwd cd ls cat stat mkdir touch write rm sync\n");
+    tty_puts("Diagnostics: history ticks fsstat mmstat exec\n");
+    tty_puts("Utility:     echo\n");
+    tty_puts("Normal System/1 commands are separate SMU programs in /bin.\n");
 }
 
 static void shell_cmd_clear(void) {
@@ -576,7 +580,52 @@ static void shell_cmd_ticks(void) {
 
     tty_puts("ticks ");
     shell_put_u64_hex(ticks);
-    tty_putc('\n');
+    tty_puts(" (");
+    shell_put_u32_dec((uint32_t)ticks / 100u);
+    tty_puts(" s)\n");
+}
+
+static void shell_cmd_history(void) {
+    uint32_t count = g_shell_history_count;
+    uint32_t oldest;
+    uint32_t i;
+
+    if (count == 0u) {
+        tty_puts("history: empty\n");
+        return;
+    }
+
+    oldest = (g_shell_history_head + SHELL_HISTORY_CAP - count) % SHELL_HISTORY_CAP;
+    for (i = 0u; i < count; ++i) {
+        uint32_t slot = (oldest + i) % SHELL_HISTORY_CAP;
+        shell_put_u32_dec(i + 1u);
+        tty_puts("  ");
+        tty_puts(g_shell_history[slot]);
+        tty_putc('\n');
+    }
+}
+
+static void shell_cmd_sync(void) {
+    int rc = posix_sync();
+    if (rc < 0) {
+        shell_print_posix_path_error("sync", "", rc);
+        return;
+    }
+    tty_puts("sync: filesystem state committed\n");
+}
+
+static void shell_cmd_shell(void) {
+    char* argv[2];
+    int rc;
+
+    argv[0] = "/bin/sh.prg";
+    argv[1] = 0;
+
+    tty_puts("Starting /bin/sh.prg...\n");
+    rc = posix_execve("/bin/sh.prg", argv, 0);
+    if (rc < 0) {
+        shell_print_posix_path_error("shell", "/bin/sh.prg", rc);
+    }
 }
 
 static void shell_cmd_mmstat(void) {
@@ -1203,7 +1252,10 @@ static void shell_cmd_exec(char** argv, uint32_t argc) {
 }
 
 static void shell_print_prompt(void) {
-    tty_puts("kernel> ");
+    tty_set_color(TTY_WHITE);
+    tty_puts("kernel:");
+    tty_puts(fs_get_cwd_path());
+    tty_puts("> ");
 }
 
 void shell_core_run(void) {
@@ -1238,12 +1290,16 @@ void shell_core_run(void) {
         tokenize_rc = shell_tokenize(line, argv, SHELL_ARGV_MAX, &argc);
 
         if (tokenize_rc == -1) {
-            tty_puts("syntax error: unterminated quote or escape\n");
+            tty_set_color(TTY_RED);
+            tty_puts("kernel: syntax error: unterminated quote or escape\n");
+            tty_set_color(TTY_WHITE);
             continue;
         }
 
         if (tokenize_rc == -2) {
-            tty_puts("too many arguments\n");
+            tty_set_color(TTY_RED);
+            tty_puts("kernel: too many arguments\n");
+            tty_set_color(TTY_WHITE);
             continue;
         }
 
@@ -1265,6 +1321,10 @@ void shell_core_run(void) {
             shell_cmd_echo(argv, argc);
             continue;
         }
+        if (shell_streq(argv[0], "version")) {
+            shell_version();
+            continue;
+        }
         if (shell_streq(argv[0], "reboot")) {
             shell_cmd_reboot();
             continue;
@@ -1273,8 +1333,16 @@ void shell_core_run(void) {
             shell_cmd_shutdown();
             continue;
         }
-        if (shell_streq(argv[0], "version")) {
-            shell_version();
+        if (shell_streq(argv[0], "shell")) {
+            shell_cmd_shell();
+            continue;
+        }
+        if (shell_streq(argv[0], "pwd")) {
+            shell_cmd_pwd(argv, argc);
+            continue;
+        }
+        if (shell_streq(argv[0], "cd")) {
+            shell_cmd_cd(argv, argc);
             continue;
         }
         if (shell_streq(argv[0], "ls")) {
@@ -1283,6 +1351,38 @@ void shell_core_run(void) {
         }
         if (shell_streq(argv[0], "cat")) {
             shell_cmd_cat(argv, argc);
+            continue;
+        }
+        if (shell_streq(argv[0], "stat")) {
+            shell_cmd_stat(argv, argc);
+            continue;
+        }
+        if (shell_streq(argv[0], "mkdir")) {
+            shell_cmd_mkdir(argv, argc);
+            continue;
+        }
+        if (shell_streq(argv[0], "touch")) {
+            shell_cmd_touch(argv, argc);
+            continue;
+        }
+        if (shell_streq(argv[0], "write")) {
+            shell_cmd_write(argv, argc);
+            continue;
+        }
+        if (shell_streq(argv[0], "rm")) {
+            shell_cmd_rm(argv, argc);
+            continue;
+        }
+        if (shell_streq(argv[0], "sync")) {
+            shell_cmd_sync();
+            continue;
+        }
+        if (shell_streq(argv[0], "history")) {
+            shell_cmd_history();
+            continue;
+        }
+        if (shell_streq(argv[0], "ticks")) {
+            shell_cmd_ticks();
             continue;
         }
         if (shell_streq(argv[0], "exec")) {
@@ -1298,10 +1398,10 @@ void shell_core_run(void) {
             continue;
         }
 
-		tty_set_color(TTY_RED);
-        tty_puts("unknown command: ");
-        tty_set_color(TTY_WHITE);
+        tty_set_color(TTY_RED);
+        tty_puts("kernel: command not found: ");
         tty_puts(argv[0]);
-        tty_puts("\n");
+        tty_putc('\n');
+        tty_set_color(TTY_WHITE);
     }
 }

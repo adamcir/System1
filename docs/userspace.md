@@ -370,3 +370,14 @@ h           help
 
 The editor uses a 3072-byte working buffer so saving stays below the current
 small-file constraints of the writable FAT12 profile.
+
+
+## Terminal clear and sync
+
+`TIOCCLEAR` clears a TTY and restores the default white foreground color.
+SMU `clear.prg` uses this request instead of assuming an ANSI terminal.
+
+System/1 also exposes `sync()`. Current storage backends are synchronous:
+FAT12 commits each mutation immediately, RAMFS has no backing store, and
+ISO9660 is read-only. The syscall is kept as the stable POSIX-facing API for
+future writeback caches.

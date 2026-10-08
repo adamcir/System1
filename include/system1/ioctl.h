@@ -5,6 +5,7 @@
 #define TIOCGETKEY      0x5302u
 #define TIOCLINEBEGIN   0x5303u
 #define TIOCLINEREDRAW  0x5304u
+#define TIOCCLEAR       0x5305u
 
 #define TTY_COLOR_BLACK 0u
 #define TTY_COLOR_BLUE 1u
