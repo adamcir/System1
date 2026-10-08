@@ -13,7 +13,7 @@
 typedef struct {
     int32_t tv_sec;
     int32_t tv_nsec;
-} posix_timespec_t
+} posix_timespec_t;
 
 void posix_init(void);
 int posix_open(const char* path, uint32_t flags);
