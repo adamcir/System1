@@ -20,7 +20,48 @@ static uint32_t smod_loaded_count;
  * module from a resident kernel arena instead of touching those pages. */
 #define SMOD_FLOPPY_MAGIC 0x53314D47u
 static uint8_t smod_floppy_image[SMOD_IMAGE_LIMIT] __attribute__((aligned(16)));
-static uint8_t smod_floppy_image_in_use;
+static uint32_t smod_floppy_used;
+
+/* Modules register services transactionally: failed init leaves no hooks. */
+static smod_uart_write_t active_uart;
+static smod_rtc_read_t active_rtc;
+static smod_uart_write_t pending_uart;
+static smod_rtc_read_t pending_rtc;
+static uint8_t smod_in_entry;
+
+static int smod_register_uart(smod_uart_write_t write_byte) {
+    if (!smod_in_entry || !write_byte || active_uart || pending_uart) return -1;
+    pending_uart = write_byte;
+    return 0;
+}
+static int smod_register_rtc(smod_rtc_read_t read_time) {
+    if (!smod_in_entry || !read_time || active_rtc || pending_rtc) return -1;
+    pending_rtc = read_time;
+    return 0;
+}
+void smod_serial_write(char value) {
+    if (active_uart) active_uart(value);
+}
+int smod_rtc_read(smod_clock_time_t* time) {
+    return active_rtc ? active_rtc(time) : -1;
+}
+static void smod_format_two(char* dest, uint32_t value) {
+    dest[0] = (char)('0' + (value / 10u) % 10u);
+    dest[1] = (char)('0' + value % 10u);
+}
+static void smod_report_clock(void) {
+    smod_clock_time_t now;
+    char buf[] = "0000-00-00 00:00:00";
+    if (smod_rtc_read(&now) != 0) return;
+    smod_format_two(buf, (uint32_t)now.year / 100u);
+    smod_format_two(buf + 2, (uint32_t)now.year % 100u);
+    smod_format_two(buf + 5, now.month);
+    smod_format_two(buf + 8, now.day);
+    smod_format_two(buf + 11, now.hour);
+    smod_format_two(buf + 14, now.minute);
+    smod_format_two(buf + 17, now.second);
+    klog_info("rtc", buf);
+}
 
 static uint16_t smod_u16(const uint8_t* p) {
     return (uint16_t)((uint16_t)p[0] | ((uint16_t)p[1] << 8));
@@ -60,7 +101,9 @@ static void smod_report_ready(void) {
     klog_info("smod", "Module successfully called System Module API");
 }
 
-static const smod_api_v1_t smod_api = { SMOD_API_VERSION, smod_report_ready };
+static const smod_api_v2_t smod_api = {
+    SMOD_API_VERSION, smod_report_ready, smod_register_uart, smod_register_rtc
+};
 
 /* Native v1: code+optional BSS, absolute entry offset and no relocations yet.
  * The .mod image must be self-contained position-independent machine code.
@@ -76,6 +119,7 @@ static int smod_core_load_file(const char* path, uint32_t boot_magic) {
     void* image;
     int rc;
     uint8_t lowmem_arena = 0u;
+    uint32_t aligned_size = 0u;
 
     if (smod_loaded_count >= SMOD_MAX_LOADED) return -1;
     if (fs_core_open(path, FS_O_RDONLY, &id) != FS_OK) return -1;
@@ -108,19 +152,17 @@ static int smod_core_load_file(const char* path, uint32_t boot_magic) {
     }
 
     if (boot_magic == SMOD_FLOPPY_MAGIC) {
-        /* Only one resident module fits in the fixed floppy boot arena.
-         * Do not fall back to kmalloc beyond the installed 1 MiB RAM. */
-        if (smod_floppy_image_in_use != 0u) {
+        aligned_size = (memory_size + 15u) & ~15u;
+        if (aligned_size > SMOD_IMAGE_LIMIT - smod_floppy_used) {
             (void)fs_core_close(id);
             klog_info("smod", "Floppy module arena full");
             return -1;
         }
-        image = smod_floppy_image;
-        smod_floppy_image_in_use = 1u;
+        image = smod_floppy_image + smod_floppy_used;
         lowmem_arena = 1u;
     } else {
         image = kmalloc(memory_size);
-        if (image == 0) {
+        if (!image) {
             (void)fs_core_close(id);
             return -1;
         }
@@ -129,22 +171,30 @@ static int smod_core_load_file(const char* path, uint32_t boot_magic) {
     rc = smod_read_exact(id, SMOD_HEADER_SIZE, (uint8_t*)image, image_size);
     (void)fs_core_close(id);
     if (rc != 0) {
-        if (lowmem_arena != 0u) smod_floppy_image_in_use = 0u;
-        else kfree(image);
+        if (!lowmem_arena) kfree(image);
         return -1;
     }
     for (i = image_size; i < memory_size; ++i) ((uint8_t*)image)[i] = 0u;
 
-    /* Keep the image alive through initialization. Function pointer conversion
-     * is valid on supported PC targets with identity-mapped executable heap.
-     */
+    /* Commit driver hooks only after successful module initialization. */
     {
         smod_entry_fn_t entry = (smod_entry_fn_t)((uint8_t*)image + entry_offset);
-        if (entry(&smod_api) != 0) {
-            if (lowmem_arena != 0u) smod_floppy_image_in_use = 0u;
-            else kfree(image);
+        pending_uart = 0;
+        pending_rtc = 0;
+        smod_in_entry = 1u;
+        rc = entry(&smod_api);
+        smod_in_entry = 0u;
+        if (rc != 0) {
+            pending_uart = 0;
+            pending_rtc = 0;
+            if (!lowmem_arena) kfree(image);
             return -1;
         }
+        if (lowmem_arena) smod_floppy_used += aligned_size;
+        if (pending_uart) active_uart = pending_uart;
+        if (pending_rtc) active_rtc = pending_rtc;
+        pending_uart = 0;
+        pending_rtc = 0;
     }
 
     smod_images[smod_loaded_count++] = image;
@@ -204,5 +254,6 @@ int smod_core_boot_load_all(uint32_t boot_magic) {
             klog_info("smod", "Invalid or unsupported .mod file");
         }
     }
+    if (active_rtc) smod_report_clock();
     return loaded;
 }

@@ -71,7 +71,7 @@ fi
 cp -a "$ROOTFS_SRC_DIR" "$ROOTFS_BUILD_DIR"
 find "$ROOTFS_BUILD_DIR" -type f -name '.gitkeep' -delete
 mkdir -p "$ROOTFS_BUILD_DIR/bin" "$ROOTFS_BUILD_DIR/boot/modules"
-cp "$ARTIFACT_DIR/modules/i386/hello.mod" "$ROOTFS_BUILD_DIR/boot/modules/"
+cp "$ARTIFACT_DIR/modules/i386/"*.mod "$ROOTFS_BUILD_DIR/boot/modules/"
 cp "$USERLAND_DIR"/*.prg "$ROOTFS_BUILD_DIR/bin/"
 if [[ -d "$ROOTFS_BUILD_DIR/boot" ]]; then
   cp "$KERNEL_RAW" "$ROOTFS_BUILD_DIR/boot/KERNEL.BIN"

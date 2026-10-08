@@ -1,4 +1,5 @@
 #include "display.h"
+#include "module.h"
 
 static const system_display_ops_t* active_display;
 
@@ -19,9 +20,20 @@ void display_get_cursor(uint16_t* r, uint16_t* c) {
     if (active_display) active_display->get_cursor(r,c);
     else { if (r) *r=0; if (c) *c=0; }
 }
-void display_putc(char c) { if (active_display) active_display->putc(c); }
-void display_puts(const char* s) { if (active_display) active_display->puts(s); }
-void display_hex_u32(uint32_t n) { if (active_display) active_display->hex_u32(n); }
+void display_putc(char c) {
+    if (active_display) active_display->putc(c);
+    smod_serial_write(c);
+}
+void display_puts(const char* s) {
+    if (!s) return;
+    while (*s) display_putc(*s++);
+}
+void display_hex_u32(uint32_t n) {
+    static const char digits[] = "0123456789ABCDEF";
+    int i;
+    display_puts("0x");
+    for (i = 7; i >= 0; --i) display_putc(digits[(n >> (i * 4)) & 15u]);
+}
 void display_text_begin(uint16_t r,uint16_t c) { if (active_display) active_display->text_begin(r,c); }
 void display_text_putc(char c) { if (active_display) active_display->text_putc(c); }
 void display_text_backspace(void) { if (active_display) active_display->text_backspace(); }

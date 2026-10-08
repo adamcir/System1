@@ -46,10 +46,9 @@ KERNEL32_ELF  := $(I386_OUT_DIR)/kernel.elf
 KERNEL64_ELF  := $(X64_OUT_DIR)/kernel.elf
 KERNELFLP_ELF := $(FLP_OUT_DIR)/kernel.elf
 
-SMOD_I386 := $(BUILD_OUT)/modules/i386/hello.mod
-SMOD_X64 := $(BUILD_OUT)/modules/x86_64/hello.mod
-SMOD_I386_OBJ := $(BUILD_OBJ)/smod/i386/hello.o
-SMOD_X64_OBJ := $(BUILD_OBJ)/smod/x86_64/hello.o
+SMOD_DRIVERS := com1 cmos
+SMOD_I386_FILES := $(addprefix $(BUILD_OUT)/modules/i386/,$(addsuffix .mod,$(SMOD_DRIVERS)))
+SMOD_X64_FILES := $(addprefix $(BUILD_OUT)/modules/x86_64/,$(addsuffix .mod,$(SMOD_DRIVERS)))
 
 ISO32 := $(IMAGE_OUT_DIR)/system1-iso-32.iso
 ISO64 := $(IMAGE_OUT_DIR)/system1-iso-x86_64.iso
@@ -91,28 +90,34 @@ FLP_MODULE_OBJS  := $(patsubst %.c,$(BUILD_OBJ)/i386-floppy/%.o,$(FLP_MODULE_SRC
 
 all: iso-32 iso-64 img-32
 
-$(SMOD_I386_OBJ): src/modules/hello.c include/smod.h | $(BUILD_OBJ)
+$(BUILD_OBJ)/smod/i386/%.o: src/modules/pc/%.c include/smod.h | $(BUILD_OBJ)
 	mkdir -p $(dir $@)
-	$(I386_CC) $(CFLAGS_COMMON) -Iinclude -m32 -O2 -fno-builtin -fno-asynchronous-unwind-tables -c $< -o $@
+	$(I386_CC) $(CFLAGS_COMMON) -Iinclude -m32 -O2 -fpie -ffunction-sections -fno-builtin -fno-asynchronous-unwind-tables -c $< -o $@
 
-$(SMOD_X64_OBJ): src/modules/hello.c include/smod.h | $(BUILD_OBJ)
+$(BUILD_OBJ)/smod/x86_64/%.o: src/modules/pc/%.c include/smod.h | $(BUILD_OBJ)
 	mkdir -p $(dir $@)
-	$(X64_CC) $(CFLAGS_COMMON) -Iinclude -m64 -mno-red-zone -O2 -fno-builtin -fno-asynchronous-unwind-tables -c $< -o $@
+	$(X64_CC) $(CFLAGS_COMMON) -Iinclude -m64 -mno-red-zone -O2 -fpie -ffunction-sections -fno-builtin -fno-asynchronous-unwind-tables -c $< -o $@
 
-$(SMOD_I386): $(SMOD_I386_OBJ) tools/mksmod.py
+$(BUILD_OBJ)/smod/i386/%.elf: $(BUILD_OBJ)/smod/i386/%.o tools/linker/linker.smod.ld
+	$(I386_LD) -m elf_i386 -nostdlib -T tools/linker/linker.smod.ld -o $@ $<
+
+$(BUILD_OBJ)/smod/x86_64/%.elf: $(BUILD_OBJ)/smod/x86_64/%.o tools/linker/linker.smod.ld
+	$(X64_LD) -m elf_x86_64 -nostdlib -T tools/linker/linker.smod.ld -o $@ $<
+
+$(BUILD_OUT)/modules/i386/%.mod: $(BUILD_OBJ)/smod/i386/%.elf tools/mksmod.py
 	mkdir -p $(dir $@)
-	$(I386_OBJCOPY) -j .text -O binary $(SMOD_I386_OBJ) $(BUILD_OBJ)/smod/i386/hello.bin
-	python3 tools/mksmod.py pack --arch i386 $(BUILD_OBJ)/smod/i386/hello.bin $@
+	$(I386_OBJCOPY) -O binary $< $(BUILD_OBJ)/smod/i386/$*.bin
+	python3 tools/mksmod.py pack --arch i386 $(BUILD_OBJ)/smod/i386/$*.bin $@
 	python3 tools/mksmod.py check --arch i386 $@
 
-$(SMOD_X64): $(SMOD_X64_OBJ) tools/mksmod.py
+$(BUILD_OUT)/modules/x86_64/%.mod: $(BUILD_OBJ)/smod/x86_64/%.elf tools/mksmod.py
 	mkdir -p $(dir $@)
-	$(X64_OBJCOPY) -j .text -O binary $(SMOD_X64_OBJ) $(BUILD_OBJ)/smod/x86_64/hello.bin
-	python3 tools/mksmod.py pack --arch x86_64 $(BUILD_OBJ)/smod/x86_64/hello.bin $@
+	$(X64_OBJCOPY) -O binary $< $(BUILD_OBJ)/smod/x86_64/$*.bin
+	python3 tools/mksmod.py pack --arch x86_64 $(BUILD_OBJ)/smod/x86_64/$*.bin $@
 	python3 tools/mksmod.py check --arch x86_64 $@
 
-smod-32: $(SMOD_I386)
-smod-64: $(SMOD_X64)
+smod-32: $(SMOD_I386_FILES)
+smod-64: $(SMOD_X64_FILES)
 smod-check: smod-32 smod-64
 	python3 -m unittest discover -s tools/tests -p 'test_smod.py'
 
@@ -210,15 +215,15 @@ $(KERNELFLP_ELF): $(LDSFLP) $(BUILD_OBJ)/entry_floppy_i386.o $(BUILD_OBJ)/isr_fl
 user-programs:
 	$(MAKE) -C src/userland all
 
-$(ISO32): user-programs $(SMOD_I386) $(KERNEL32_ELF) tools/mkiso-i386.sh | $(IMAGE_OUT_DIR)
+$(ISO32): user-programs $(SMOD_I386_FILES) $(KERNEL32_ELF) tools/mkiso-i386.sh | $(IMAGE_OUT_DIR)
 	chmod +x tools/mkiso-i386.sh
 	./tools/mkiso-i386.sh
 
-$(ISO64): user-programs $(SMOD_X64) $(KERNEL64_ELF) tools/mkiso-x86_64.sh | $(IMAGE_OUT_DIR)
+$(ISO64): user-programs $(SMOD_X64_FILES) $(KERNEL64_ELF) tools/mkiso-x86_64.sh | $(IMAGE_OUT_DIR)
 	chmod +x tools/mkiso-x86_64.sh
 	./tools/mkiso-x86_64.sh
 
-$(IMG32): user-programs $(SMOD_I386) $(KERNELFLP_ELF) tools/mkimg-32.sh src/boot/simple32/stage1.asm src/boot/simple32/stage2.asm | $(IMAGE_OUT_DIR)
+$(IMG32): user-programs $(SMOD_I386_FILES) $(KERNELFLP_ELF) tools/mkimg-32.sh src/boot/simple32/stage1.asm src/boot/simple32/stage2.asm | $(IMAGE_OUT_DIR)
 	chmod +x tools/mkimg-32.sh
 	./tools/mkimg-32.sh
 

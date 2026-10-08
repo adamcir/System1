@@ -6,7 +6,7 @@ import struct
 
 MAGIC = b"SMOD"
 FMT_VERSION = 1
-API_VERSION = 1
+API_VERSION = 2
 ARCH = {"i386": 1, "x86_64": 2}
 HEADER = struct.Struct("<4sHHHHIIIII")
 LIMIT = 4096

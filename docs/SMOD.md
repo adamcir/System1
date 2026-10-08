@@ -69,3 +69,28 @@ arena** for the first module and refuses additional resident modules rather
 than allocating nonexistent physical memory. This is a compatibility measure
 until the floppy physical-memory map is provided to the page allocator.
 The full i386/x86_64 boot profiles continue to use `kmalloc`.
+
+## First real dynamically loaded PC drivers (ABI revision 2)
+
+Native modules are now compiled as freestanding position-independent code
+and linked at image address zero with `tools/linker/linker.smod.ld` (a
+temporary **build-time** ELF; installed `.mod` files are fully native).
+
+- `com1.mod`: probes and initializes the 16550 COM1 UART at 0x3F8
+  (38400 baud, 8N1) and registers a kernel console serial mirror.
+  On machines without a working compatible UART the module is skipped.
+- `cmos.mod`: reads PC AT CMOS RTC with BCD/binary and 12/24-hour handling,
+  registers a clock callback and logs the actual clock value at boot.
+
+The System Module API has been extended from revision 1 to **revision 2**,
+retaining the 32-byte container header (format revision 1). The callbacks
+are installed only after a successful module entrypoint. Boot includes
+`/boot/modules/com1.mod` and `/boot/modules/cmos.mod`. The 1 MiB floppy
+uses a bounded 4 KiB **shared resident arena** so both modules fit if their
+combined aligned images fit.
+
+TTY and the early VGA/PS2 console remain built-in: they are needed before
+boot media can be mounted. This implementation loads actual independent PC
+peripheral code, rather than wrapping existing kernel hardware functions.
+VGA and PS/2 can be moved later after a suitable hot-swap procedure, IRQ
+handoff, and an extended SMOD image format for larger code/data.
