@@ -11,7 +11,7 @@ int bootstrap_init(uint32_t boot_magic, uint32_t boot_info_ptr) {
     int rc;
 
     process_init();
-    klog_info("system", "Copyright (c) 2026 Adam Cír (Adava), Adava Software, Adava Development.");
+    klog_info("system", "Copyright (c) 2026 Adam Cir (Adava), Adava Software, Adava Development.");
     fs_core_set_boot_context(boot_magic, boot_info_ptr);
 
     rc = fs_core_init_ramfs();

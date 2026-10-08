@@ -14,9 +14,9 @@ The current system images use:
 └── root/       persistent root-user files
 ```
 
-The first installed test program is `/bin/test.prg`. Its source is kept in
-`examples/programs/test/test.c`; image builders compile the matching SPRG and
-install it into `/bin`.
+The standard installed userspace comes from System Multi Utils (SMU).
+Programs under `examples/` are optional examples and are not part of the
+normal build or boot images.
 
 ## Process model
 
@@ -24,13 +24,13 @@ The i386 implementation executes SPRG code in CPU ring 3. The first process
 model is intentionally synchronous:
 
 ```text
-kernel shell
-   -> execve("/bin/test.prg")
+parent shell
+   -> execve("/bin/echo.prg")
    -> child process RUNNING in ring 3
    -> _exit(status)
    -> child ZOMBIE
    -> parent reaps child
-   -> kernel shell continues
+   -> shell continues
 ```
 
 This keeps the UNIX process lifecycle without adding `fork()`, `waitpid()` or
@@ -81,21 +81,20 @@ Current System/1 syscall numbers:
 These resemble common UNIX/Linux numbering where practical, but they are
 System/1 ABI values rather than a Linux binary-compatibility promise.
 
-## Test
+## Running userspace
 
-On i386 CD or floppy:
+On i386 CD or floppy, normal SMU programs run from MultiShell:
 
 ```text
-/ > ls /bin
-test.prg
+/ > echo Hello from System/1
+Hello from System/1
 
-/ > exec /bin/test.prg
-Hello from /bin/test.prg - System/1 userspace!
-/ >
+/ > adatext /root/notes.txt
+AdaText 0.1.0 - System Multi Utils
 ```
 
-The message comes from ring 3 through the System/1 `write()` syscall and the
-program returns through POSIX `_exit()`.
+These programs execute in ring 3, use the System/1 syscall ABI, and return
+through POSIX `_exit()`.
 
 ## x86-64
 
@@ -341,3 +340,33 @@ src/userland/smu/
 
 This preserves the UNIX-style one-program-per-executable model while keeping
 the base shell and utilities as one maintained System/1 component.
+
+
+## AdaText
+
+AdaText is the standard lightweight text editor in System Multi Utils. It is
+installed as `/bin/adatext.prg`.
+
+The current version is deliberately line-oriented because the System/1 TTY ABI
+does not yet expose a complete fullscreen terminal/cursor API. This keeps the
+editor reliable on both the normal i386 target and the 1 MiB floppy profile.
+
+Basic commands:
+
+```text
+p [N]       print all text or line N
+a TEXT      append a line
+i N TEXT    insert before line N
+r N TEXT    replace line N
+d N         delete line N
+e PATH      open another file
+w [PATH]    save / save as
+wq [PATH]   save and quit
+s           status
+q           quit if saved
+q!          quit without saving
+h           help
+```
+
+The editor uses a 3072-byte working buffer so saving stays below the current
+small-file constraints of the writable FAT12 profile.

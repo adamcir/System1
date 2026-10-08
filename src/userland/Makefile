@@ -9,11 +9,13 @@ CFLAGS := -ffreestanding -fno-pic -fno-pie -fno-stack-protector -nostdlib -nostd
 SMU_FS_COMMANDS := cat ls mkdir pwd rm touch ln readlink
 SMU_CORE_COMMANDS := echo help history
 SMU_SYSTEM_COMMANDS := kconfig reboot shutdown
-SMU_COMMANDS := $(SMU_FS_COMMANDS) $(SMU_CORE_COMMANDS) $(SMU_SYSTEM_COMMANDS)
+SMU_EDITOR_COMMANDS := adatext
+SMU_COMMANDS := $(SMU_FS_COMMANDS) $(SMU_CORE_COMMANDS) $(SMU_SYSTEM_COMMANDS) $(SMU_EDITOR_COMMANDS)
 
 SMU_FS_OBJS := $(addprefix $(BUILD_DIR)/,$(addsuffix .o,$(SMU_FS_COMMANDS)))
 SMU_CORE_OBJS := $(addprefix $(BUILD_DIR)/,$(addsuffix .o,$(SMU_CORE_COMMANDS)))
 SMU_SYSTEM_OBJS := $(addprefix $(BUILD_DIR)/,$(addsuffix .o,$(SMU_SYSTEM_COMMANDS)))
+SMU_EDITOR_OBJS := $(addprefix $(BUILD_DIR)/,$(addsuffix .o,$(SMU_EDITOR_COMMANDS)))
 COMMAND_PRGS := $(addprefix $(BUILD_DIR)/,$(addsuffix .prg,$(SMU_COMMANDS)))
 MSH_PRG := $(BUILD_DIR)/msh.prg
 
@@ -52,6 +54,9 @@ $(SMU_CORE_OBJS): $(BUILD_DIR)/%.o: $(SMU_DIR)/core/%.c | $(BUILD_DIR)
 	$(I386_CC) $(CFLAGS) -m32 -c $< -o $@
 
 $(SMU_SYSTEM_OBJS): $(BUILD_DIR)/%.o: $(SMU_DIR)/system/%.c | $(BUILD_DIR)
+	$(I386_CC) $(CFLAGS) -m32 -c $< -o $@
+
+$(SMU_EDITOR_OBJS): $(BUILD_DIR)/%.o: $(SMU_DIR)/editor/%.c | $(BUILD_DIR)
 	$(I386_CC) $(CFLAGS) -m32 -c $< -o $@
 
 $(MSH_PRG): linker.shell.i386.ld $(BUILD_DIR)/msh.o $(COMMON_OBJS)

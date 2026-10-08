@@ -12,7 +12,6 @@ STAGE1="$STAGING_DIR/stage1.bin"
 STAGE2="$STAGING_DIR/stage2.bin"
 KERNEL_ELF="$ARTIFACT_DIR/i386-floppy/kernel.elf"
 KERNEL_RAW="$STAGING_DIR/kernel.bin"
-TEST_PRG="$ROOT_DIR/examples/programs/test/build/program-i386.prg"
 USERLAND_DIR="$ROOT_DIR/src/userland/build/i386"
 
 NASM_BIN="${NASM:-nasm}"
@@ -72,7 +71,6 @@ fi
 cp -a "$ROOTFS_SRC_DIR" "$ROOTFS_BUILD_DIR"
 find "$ROOTFS_BUILD_DIR" -type f -name '.gitkeep' -delete
 mkdir -p "$ROOTFS_BUILD_DIR/bin"
-cp "$TEST_PRG" "$ROOTFS_BUILD_DIR/bin/test.prg"
 cp "$USERLAND_DIR"/*.prg "$ROOTFS_BUILD_DIR/bin/"
 if [[ -d "$ROOTFS_BUILD_DIR/boot" ]]; then
   cp "$KERNEL_RAW" "$ROOTFS_BUILD_DIR/boot/KERNEL.BIN"
@@ -126,10 +124,10 @@ shopt -u nullglob dotglob
 "$MDIR_BIN" -i "$IMG" ::/boot >/dev/null
 "$MDIR_BIN" -i "$IMG" ::/root >/dev/null
 "$MDIR_BIN" -i "$IMG" ::/boot/KERNEL.BIN >/dev/null
-"$MDIR_BIN" -i "$IMG" ::/bin/test.prg >/dev/null
 "$MDIR_BIN" -i "$IMG" ::/bin/msh.prg >/dev/null
 "$MDIR_BIN" -i "$IMG" ::/bin/sh.prg >/dev/null
 "$MDIR_BIN" -i "$IMG" ::/bin/history.prg >/dev/null
+"$MDIR_BIN" -i "$IMG" ::/bin/adatext.prg >/dev/null
 "$MDIR_BIN" -i "$IMG" ::/etc/kernel.cfg >/dev/null
 "$MDIR_BIN" -i "$IMG" ::/etc/msh.cfg >/dev/null
 "$MDIR_BIN" -i "$IMG" ::/etc/shells >/dev/null

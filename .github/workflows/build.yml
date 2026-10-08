@@ -32,6 +32,4 @@ jobs:
           make img-32
 
       - name: Check userspace programs
-        run: |
-          make -C examples/programs/test check
-          make -C src/userland check
+        run: make -C src/userland check

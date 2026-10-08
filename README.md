@@ -1,53 +1,79 @@
 # System/1
 
-System/1 is a small educational hobby operating system written mainly in C and assembly. It currently targets i386, x86-64 and a custom i386 floppy boot path.
+System/1 is a small educational operating system written mainly in C and assembly. It uses a custom kernel, its own SPRG executable format, and the System Multi Utils userspace with MultiShell (MSh) and AdaText.
 
-The kernel uses a RAMFS-first bootstrap: RAMFS is created as the initial fallback root, then FAT12 or ISO9660 boot media is detected. When physical media is available, that filesystem becomes `/` directly. A writable FAT12 floppy is modified immediately by create, write, mkdir and unlink operations; there is no shutdown-time writeback queue. If no physical filesystem is available, System/1 continues on an empty RAMFS and starts the built-in kernel shell.
+The main working target is i386, including a low-memory 1 MiB floppy profile. An x86-64 kernel target is also built. FAT12 is used for writable floppy media and ISO9660 for CD images. QEMU is the recommended environment for testing.
 
-## Repository layout
+## Requirements on x86_64 Hosts
 
-```text
-src/
-  boot/                    boot sources
-  kernel/core/             shared kernel modules
-  kernel/arch/             architecture-specific kernel code
-  lib/user/                userspace support library
-include/system1/           public System/1 headers
-rootfs/                    filesystem source trees for boot images
-tools/                     image builders and linker scripts
-docs/                      architecture notes and development plans
-examples/                  example System/1 programs
-```
-
-See `docs/architecture.md` for the detailed layout and bootstrap flow, and `docs/userspace.md` for the SPRG/process/syscall ABI.
-
-## Requirements on x86_64 hosts
+Install the tools required for building the kernel, System Multi Utils, floppy images, and GRUB-based ISO outputs:
 
 ```sh
 sudo apt update
 sudo apt install -y \
-  build-essential nasm xorriso mtools dosfstools perl \
-  qemu-system-x86
+  build-essential gcc-multilib nasm xorriso mtools dosfstools perl \
+  grub-pc-bin grub-common qemu-system-x86
+```
+
+## Download the Sources
+
+Clone this repository:
+
+```sh
+git clone https://github.com/adamcir/System1
+cd System1
 ```
 
 ## Build
 
+Build all current System/1 images:
+
 ```sh
-make clean
 make all
 ```
 
-Individual targets:
+The build can also be run step by step:
 
 ```sh
+make modules-32
+make modules-64
+make modules-img-32
+make user-programs
 make iso-32
 make iso-64
 make img-32
 ```
 
-## Output files
+`make user-programs` builds the standard System Multi Utils programs. Example and test programs under `examples/` are not built automatically.
 
-Build artifacts are written to `build/artifacts/`:
+## System Multi Utils
+
+System Multi Utils (SMU) is the standard userspace utility set for System/1. It is not a multicall binary: every utility is compiled as its own SPRG executable in `/bin`.
+
+The standard set includes MultiShell (MSh), filesystem utilities, system administration commands, and AdaText.
+
+Examples:
+
+```text
+/bin/msh.prg
+/bin/ls.prg
+/bin/cat.prg
+/bin/echo.prg
+/bin/adatext.prg
+/bin/kconfig.prg
+/bin/reboot.prg
+/bin/shutdown.prg
+```
+
+AdaText can open an existing file or start a new one:
+
+```sh
+adatext /root/notes.txt
+```
+
+## Output Files
+
+After a successful build, the main artifacts are written to `build/artifacts/`:
 
 - `build/artifacts/images/system1-iso-32.iso`
 - `build/artifacts/images/system1-iso-x86_64.iso`
@@ -58,14 +84,27 @@ Build artifacts are written to `build/artifacts/`:
 
 ## Run in QEMU
 
+### i386 ISO
+
 ```sh
 make run-32
+```
+
+### x86-64 ISO
+
+```sh
 make run-64
+```
+
+The x86-64 kernel target is built and bootable, but the complete ring-3 userspace execution path is still focused on i386.
+
+### i386 Floppy
+
+```sh
 make run-img-32
 ```
 
-The ISO targets use more RAM for GRUB and CD boot. The floppy target keeps the 1 MiB low-memory profile.
+The floppy target keeps the 1 MiB low-memory profile and uses a writable FAT12 root filesystem.
 
 ---
-
-System/1 — Adam Cír (Adava / Adava Software), 2026. Licensed under GPLv3.
+*System/1 - by Adam Cir (Adava), Adava Software / Adava Development in 2026. The OS is under license GPLv3.*

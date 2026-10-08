@@ -630,7 +630,7 @@ static void shell_cmd_fsstat(void) {
 
 static void shell_version(void) {
     tty_puts("System/1\n");
-    tty_puts("Copyright (c) 2026 Adam Cír (Adava), Adava Software, Adava Development.\n");
+    tty_puts("Copyright (c) 2026 Adam Cir (Adava), Adava Software, Adava Development.\n");
 }
 
 static void shell_print_fs_error(const char* cmd, int rc) {
