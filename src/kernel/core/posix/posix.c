@@ -113,7 +113,7 @@ int posix_nanosleep(const posix_timespec_t* req, posix_timespec_t* rem) {
     }
 
     ticks = (uint64_t)(uint32_t)req->tv_sec * 100u;
-    ticks += ((uint64_t)(uint32_t)req->tv_nsec + 9999999u) / 10000000u;
+    ticks += (uint64_t)(((uint32_t)req->tv_nsec + 9999999u) / 10000000u);
 
     if (rem != 0) {
         rem->tv_sec = 0;
