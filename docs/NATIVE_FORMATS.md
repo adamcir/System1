@@ -80,3 +80,17 @@ Generic services (`klog`, TTY, POSIX, signals) do not execute PC-specific
 is an essential **built-in boot platform ABI**; it cannot be replaced by a
 late SMOD module for early panic and reset operations. Hardware/device
 drivers continue to use `.mod` once the disk is mounted.
+
+
+## CPU architecture: x86 memory management
+
+The machine-specific paging implementation (`CR0`, `CR2`,
+`CR3`, `invlpg`, and the x86 page-table layouts) is now in
+`src/kernel/arch/x86/paging_x86.c`, shared by i386, i386-floppy
+and x86_64 target builds. Generic paging callers stay behind the
+`paging.h` and `paging_core.h` interfaces in `src/kernel/core/paging/`.
+
+A non-x86 System/1 port can supply a separate paging/MPU implementation
+without inheriting x86 privileged instructions. Paging and the basic CPU
+bootstrap **cannot be late-loaded from .mod**, since both are required
+before module files can be read into usable kernel memory.

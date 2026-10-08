@@ -1,3 +1,7 @@
+/* x86-specific paging tables, CR0/CR2/CR3 and TLB handling.
+ * Kept in the x86 architecture layer instead of the portable kernel core.
+ * Required before filesystem and native SMOD loading; built into the kernel.
+ */
 #include "paging_core.h"
 #include "klog.h"
 #include "tty.h"

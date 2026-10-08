@@ -25,6 +25,10 @@ KDIR_FLP  := $(KERNEL_SRC)/arch/i386-floppy
 COMMON_MODULE_DIR := $(KERNEL_SRC)/core
 PC_DRIVER_DIR := $(KERNEL_SRC)/drivers/pc
 PC_DRIVER_SRCS := $(wildcard $(PC_DRIVER_DIR)/*.c)
+
+# x86 CPU/MMU implementation shared by PC i386, floppy and x86_64.
+X86_ARCH_DIR := $(KERNEL_SRC)/arch/x86
+X86_ARCH_SRCS := $(wildcard $(X86_ARCH_DIR)/*.c)
 PC_DRIVER_INCLUDES := -I$(PC_DRIVER_DIR)
 
 MODULES ?= $(sort $(notdir $(wildcard $(COMMON_MODULE_DIR)/*)))
@@ -78,9 +82,9 @@ define module_all_srcs
 $(foreach m,$(MODULES),$(call module_wrapper_src,$(1),$(m)) $(call module_core_src,$(m)))
 endef
 
-I386_MODULE_SRCS := $(call module_all_srcs,$(KDIR_I386)) $(PC_DRIVER_SRCS)
-X64_MODULE_SRCS := $(call module_all_srcs,$(KDIR_X64)) $(PC_DRIVER_SRCS)
-FLP_MODULE_SRCS := $(call module_all_srcs,$(KDIR_FLP)) $(PC_DRIVER_SRCS)
+I386_MODULE_SRCS := $(call module_all_srcs,$(KDIR_I386)) $(PC_DRIVER_SRCS) $(X86_ARCH_SRCS)
+X64_MODULE_SRCS := $(call module_all_srcs,$(KDIR_X64)) $(PC_DRIVER_SRCS) $(X86_ARCH_SRCS)
+FLP_MODULE_SRCS := $(call module_all_srcs,$(KDIR_FLP)) $(PC_DRIVER_SRCS) $(X86_ARCH_SRCS)
 
 I386_MODULE_OBJS := $(patsubst %.c,$(BUILD_OBJ)/i386/%.o,$(I386_MODULE_SRCS))
 X64_MODULE_OBJS  := $(patsubst %.c,$(BUILD_OBJ)/x86_64/%.o,$(X64_MODULE_SRCS))
