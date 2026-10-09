@@ -22,19 +22,7 @@ __smod_floppy_picpit_begin:
 .incbin "build/artifacts/modules/i386/picpit.mod"
 __smod_floppy_picpit_end:
 
-.balign 16
-.globl __smod_floppy_vga_begin
-.globl __smod_floppy_vga_end
-__smod_floppy_vga_begin:
-.incbin "build/artifacts/modules/i386/vga.mod"
-__smod_floppy_vga_end:
 
-.balign 16
-.globl __smod_floppy_ps2_begin
-.globl __smod_floppy_ps2_end
-__smod_floppy_ps2_begin:
-.incbin "build/artifacts/modules/i386/ps2.mod"
-__smod_floppy_ps2_end:
 
 .balign 16
 .globl __smod_floppy_fdc_begin

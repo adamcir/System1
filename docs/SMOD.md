@@ -180,3 +180,22 @@ mounts, and boot continues to the configured user shell. This tests
 module activation, not every individual hardware operation (such as
 keyboard input or editing a text line); interactive device behavior
 must also be tested on the target hardware.
+
+## VFS, /dev and /proc and optional display
+
+The kernel provides live `devfs` and `procfs` virtual mounts at
+`/dev` and `/proc` across FAT12, ISO9660 and RAMFS. Their entries are
+not stored on the physical volume. Special device file handles are
+dispatched through the VFS; `/dev/null`, `/dev/zero`, `/dev/tty`,
+`/dev/console`, `/proc/version`, `/proc/uptime`,
+`/proc/meminfo` and `/proc/modules` provide actual generated data.
+
+VGA and PS/2 now deliberately have **no automatic PC driver fallback**.
+On the floppy profile these are not embedded into the kernel boot image;
+they are loaded from `/boot/modules/` after FAT12 is mounted. If
+`vga.mod` is missing at the next boot, no display driver is registered
+and the screen remains blank (the COM1 serial recovery console can still
+emit diagnostics). Removing `ps2.mod` disables keyboard input. On GRUB
+systems these drivers are added conditionally as modules only if their
+files exist. Deleting a module file does not unload code already resident
+in RAM: reboot to apply the change.

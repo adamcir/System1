@@ -15,7 +15,6 @@
 
 void kmain_i386(uint32_t magic, uint32_t info) {
     platform_early_init();
-    display_platform_init();
     tty_init();
 
     if (paging_init(magic, info) != 0) {
@@ -37,7 +36,6 @@ void kmain_i386(uint32_t magic, uint32_t info) {
 
     irq_chip_platform_init();
     interrupts_init();
-    input_platform_init();
     input_init();
     irq_register_handler(1, input_irq_handler);
     interrupts_enable();

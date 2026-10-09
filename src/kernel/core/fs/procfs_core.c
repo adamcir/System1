@@ -29,7 +29,7 @@ static uint32_t proc_build(uint32_t which, char* buf, uint32_t cap) {
     if (which == 0u) {
         proc_text(&w, "System/1 (Adava Software) SMOD ABI 3\n");
     } else if (which == 1u) {
-        uint64_t ticks = timer_ticks_get();
+        uint32_t ticks = (uint32_t)timer_ticks_get();
         proc_num(&w, (uint32_t)(ticks / 100u));
         proc_char(&w, '.');
         proc_char(&w, (char)('0' + (ticks % 100u) / 10u));
