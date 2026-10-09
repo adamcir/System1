@@ -361,7 +361,8 @@ static void complete_path(char* line, unsigned cap, unsigned* len,
         ++matches;
     }
 
-    if (matches > 0u && common > u_strlen(prefix)) {
+    if (matches > 0u && (common > u_strlen(prefix) ||
+                         (matches == 1u && unique_type == DT_DIR))) {
         char replacement[PATH_CAP];
         if (u_join3(replacement, sizeof(replacement), base, best, "") == 0) {
             unsigned rl = u_strlen(replacement);

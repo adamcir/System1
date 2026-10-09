@@ -54,6 +54,7 @@ static int rm_recursive(const char* path, unsigned depth, int recursive, int for
 
 static int unsafe_target(const char* p) {
     unsigned i = 0u;
+    while (p && p[0] == '.' && p[1] == '/') p += 2;
     if (!p || !p[0] || u_streq(p, "/") || u_streq(p, ".") || u_streq(p, ".."))
         return 1;
     /* Protect the current directory, root and parent traversals.
@@ -95,12 +96,19 @@ int main(int argc, char** argv, char** envp) {
         u_err("rm: missing operand\n"); return 1;
     }
     for (i = first; i < argc; ++i) {
-        if (unsafe_target(argv[i])) {
+        char path[RM_PATH];
+        unsigned n;
+        if (u_copy(path, sizeof(path), argv[i]) != 0) {
+            u_err("rm: path too long\n"); rc = 1; continue;
+        }
+        n = u_strlen(path);
+        while (n > 1u && path[n - 1u] == '/') path[--n] = '\0';
+        if (unsafe_target(path)) {
             u_err("rm: refusing unsafe path: "); u_err(argv[i]); u_err("\n");
             rc = 1;
             continue;
         }
-        if (rm_recursive(argv[i], 0u, recursive, force) != 0) rc = 1;
+        if (rm_recursive(path, 0u, recursive, force) != 0) rc = 1;
     }
     return rc;
 }

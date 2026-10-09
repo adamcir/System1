@@ -1188,39 +1188,76 @@ static void shell_cmd_write(char** argv, uint32_t argc) {
     }
 }
 
-static void shell_cmd_rm(char** argv, uint32_t argc) {
-    uint8_t force = 0u;
-    uint32_t first = 1u;
-    uint32_t i;
-
-    while (first < argc) {
-        if (shell_streq(argv[first], "--")) {
-            ++first;
-            break;
-        }
-
-        if (shell_streq(argv[first], "-f")) {
-            force = 1u;
-            ++first;
-            continue;
-        }
-
-        break;
+/* Kernel recovery shell uses the same VFS deletion rules as userland SMU. */
+static int shell_rm_recursive(const char* target, uint32_t depth, uint8_t recursive, uint8_t force) {
+    fs_stat_t st;
+    int rc = fs_core_stat(target, &st);
+    if (rc != FS_OK) {
+        if (force && rc == FS_ERR_NOT_FOUND) return 0;
+        shell_print_fs_error("rm", rc); return 1;
     }
-
+    if (shell_is_directory_mode(st.mode)) {
+        fs_dirent_t ents[SHELL_LIST_CAP];
+        uint32_t count = 0u, i;
+        uint8_t fail = 0u;
+        if (!recursive) { tty_puts("rm: is a directory (use -r)\n"); return 1; }
+        if (depth >= 16u) { tty_puts("rm: depth limit exceeded\n"); return 1; }
+        rc = fs_core_list_dir(target, ents, SHELL_LIST_CAP, &count);
+        if (rc != FS_OK) { shell_print_fs_error("rm", rc); return 1; }
+        for (i = 0u; i < count; ++i) {
+            char child[FS_PATH_CAP];
+            uint32_t j = 0u, p = 0u;
+            if (shell_streq(ents[i].name, ".") || shell_streq(ents[i].name, "..")) continue;
+            while (target[j] && p + 1u < FS_PATH_CAP) child[p++] = target[j++];
+            if (p == 0u || p + 2u >= FS_PATH_CAP) { fail = 1u; continue; }
+            if (child[p - 1u] != '/') child[p++] = '/';
+            j = 0u;
+            while (ents[i].name[j] && p + 1u < FS_PATH_CAP)
+                child[p++] = ents[i].name[j++];
+            if (ents[i].name[j]) { fail = 1u; continue; }
+            child[p] = '\0';
+            if (shell_rm_recursive(child, depth + 1u, 1u, force)) fail = 1u;
+        }
+        if (fail) return 1;
+        rc = fs_core_rmdir(target);
+    } else {
+        rc = fs_core_unlink(target);
+    }
+    if (rc != FS_OK && !(force && rc == FS_ERR_NOT_FOUND)) {
+        shell_print_fs_error("rm", rc); return 1;
+    }
+    return 0;
+}
+static void shell_cmd_rm(char** argv, uint32_t argc) {
+    uint8_t force = 0u, recursive = 0u;
+    uint32_t first = 1u, i;
+    while (first < argc) {
+        const char* arg = argv[first];
+        uint32_t j;
+        if (shell_streq(arg, "--")) { ++first; break; }
+        if (arg[0] != '-' || !arg[1]) break;
+        for (j = 1u; arg[j]; ++j) {
+            if (arg[j] == 'f') force = 1u;
+            else if (arg[j] == 'r' || arg[j] == 'R') recursive = 1u;
+            else { shell_print_usage("rm", "usage: rm [-rf] path ..."); return; }
+        }
+        ++first;
+    }
     if (first >= argc) {
-        shell_print_usage("rm", "usage: rm [-f] file ...");
+        if (!force) shell_print_usage("rm", "usage: rm [-rf] path ...");
         return;
     }
-
     for (i = first; i < argc; ++i) {
-        int rc = posix_unlink(argv[i]);
-        if (rc < 0) {
-            if (force != 0u && -rc == POSIX_ENOENT) {
-                continue;
-            }
-            shell_print_posix_path_error("rm", argv[i], rc);
+        char target[FS_PATH_CAP];
+        uint32_t len;
+        int rc = fs_core_normalize_path(fs_get_cwd_path(), argv[i], target, FS_PATH_CAP);
+        if (rc != FS_OK) { shell_print_fs_error("rm", rc); continue; }
+        len = shell_strlen(target);
+        if (len <= 1u || shell_streq(target, fs_get_cwd_path())) {
+            tty_puts("rm: refusing to remove root or current directory\n");
+            continue;
         }
+        (void)shell_rm_recursive(target, 0u, recursive, force);
     }
 }
 
