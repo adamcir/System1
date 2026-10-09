@@ -199,3 +199,13 @@ emit diagnostics). Removing `ps2.mod` disables keyboard input. On GRUB
 systems these drivers are added conditionally as modules only if their
 files exist. Deleting a module file does not unload code already resident
 in RAM: reboot to apply the change.
+
+## Device files
+
+The kernel exposes active virtual character devices through VFS:
+`/dev/null`, `/dev/zero`, `/dev/tty`, `/dev/console`,
+`/dev/ttyS0` (COM1 output via the native SMOD) and `/dev/kmsg`
+(kernel logger output). `write()`, `read()` and `isatty()` operate
+on actual device callbacks; these nodes are never stored on physical
+disk. The serial device currently supports transmission only.
+

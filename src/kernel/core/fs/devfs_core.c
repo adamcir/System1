@@ -1,5 +1,7 @@
 #include "devfs.h"
 #include "tty.h"
+#include "module.h"
+#include "klog.h"
 
 /* Character devices use VFS descriptors; nothing persists to the disk. */
 int devfs_read(uint32_t which, uint32_t offset, char* out, uint32_t cap, uint32_t* read) {
@@ -19,6 +21,7 @@ int devfs_read(uint32_t which, uint32_t offset, char* out, uint32_t cap, uint32_
         *read = (uint32_t)rc;
         return FS_OK;
     }
+    if (which == 4u || which == 5u) return FS_OK; /* serial TX / kernel log RX unsupported */
     return FS_ERR_NOT_FOUND;
 }
 
@@ -32,6 +35,27 @@ int devfs_write(uint32_t which, const char* data, uint32_t len, uint32_t* writte
     }
     if (which == 2u || which == 3u) {
         for (i = 0u; i < len; ++i) tty_putc(data[i]);
+        *written = len;
+        return FS_OK;
+    }
+    if (which == 4u) { /* /dev/ttyS0: COM1 transmitter from SMOD */
+        for (i = 0u; i < len; ++i) smod_serial_write(data[i]);
+        *written = len;
+        return FS_OK;
+    }
+    if (which == 5u) { /* /dev/kmsg: user messages go to kernel logger */
+        char line[96];
+        uint32_t off = 0u;
+        while (off < len) {
+            uint32_t n = 0u;
+            while (off < len && n + 1u < sizeof(line)) {
+                char ch = data[off++];
+                if (ch == '\n' || ch == '\r') break;
+                line[n++] = ch;
+            }
+            line[n] = '\0';
+            if (n != 0u) klog_info("kmsg", line);
+        }
         *written = len;
         return FS_OK;
     }
