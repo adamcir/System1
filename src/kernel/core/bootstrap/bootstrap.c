@@ -131,6 +131,11 @@ int bootstrap_start_shell(void) {
     tty_set_color(TTY_WHITE);
     rc = posix_execve(shell_path, argv, 0);
     if (rc < 0) {
+        tty_puts("bootstrap: shell exec failure errno=");
+        tty_hex_u32((uint32_t)(-rc));
+        tty_putc('\n');
+    }
+    if (rc < 0) {
         klog_info("bootstrap", "Userspace shell unavailable; using Kernel Shell");
     } else {
         klog_info("bootstrap", "Userspace shell exited; using Kernel Shell");

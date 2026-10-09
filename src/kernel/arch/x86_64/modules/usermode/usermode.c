@@ -217,7 +217,11 @@ int usermode_exec(const char* path, char* const argv[], char* const envp[]) {
     }
 
     rc = sprg_validate_file(path, SPRG_ARCH_I386, &image);
-    if (rc != SPRG_OK) return sprg_error_to_posix(rc);
+    if (rc != SPRG_OK) {
+        klog_info("compat32", "SPRG validation failed");
+        return sprg_error_to_posix(rc);
+    }
+    klog_info("compat32", "SPRG validated");
 
     if (image_fits_slot(&image, USERMODE_I386_PROGRAM_MIN,
                         USERMODE_I386_PROGRAM_MAX)) {
@@ -239,7 +243,11 @@ int usermode_exec(const char* path, char* const argv[], char* const envp[]) {
     }
 
     rc = sprg_load_file(path, SPRG_ARCH_I386, program_min, program_max, &image);
-    if (rc != SPRG_OK) return sprg_error_to_posix(rc);
+    if (rc != SPRG_OK) {
+        klog_info("compat32", "SPRG loading failed");
+        return sprg_error_to_posix(rc);
+    }
+    klog_info("compat32", "SPRG loaded");
 
     for (i = 0u; i < image.segment_count; ++i) {
         const sprg_segment_t* seg = &image.segments[i];
@@ -256,7 +264,11 @@ int usermode_exec(const char* path, char* const argv[], char* const envp[]) {
     child = process_core_spawn_exec(path, image.arch, image.entry,
                                     image.segment_count, image.file_size,
                                     initial_sp);
-    if (child == 0) return -POSIX_ENOSPC;
+    if (child == 0) {
+        klog_info("compat32", "Process table full");
+        return -POSIX_ENOSPC;
+    }
+    klog_info("compat32", "Entering ring3 process");
 
     old_saved_rsp = g_usermode_saved_rsp;
     old_saved_rflags = g_usermode_saved_rflags;
