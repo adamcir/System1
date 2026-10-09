@@ -951,6 +951,32 @@ int ramfs_core_unlink(const char* path) {
     return FS_ERR_INVALID;
 }
 
+/* Remove an empty RAMFS directory; never detach the cwd or root. */
+int ramfs_core_rmdir(const char* path) {
+    fs_node_t* node = 0;
+    fs_node_t* parent;
+    uint32_t i;
+    int rc = fs_resolve_path(path, &node);
+    if (rc != FS_OK) return rc;
+    if (!node || node == g_root || node == g_cwd ||
+        node->type != FS_NODE_DIR) return FS_ERR_INVALID;
+    if (node->child_count != 0u) return FS_ERR_NOT_EMPTY;
+    parent = node->parent;
+    if (!parent) return FS_ERR_INVALID;
+    for (i = 0u; i < parent->child_count; ++i) {
+        if (parent->children[i] == node) {
+            uint32_t j;
+            for (j = i + 1u; j < parent->child_count; ++j)
+                parent->children[j - 1u] = parent->children[j];
+            parent->children[--parent->child_count] = 0;
+            fs_memzero(node, sizeof(*node));
+            g_dirty = 1u;
+            return FS_OK;
+        }
+    }
+    return FS_ERR_INVALID;
+}
+
 static int ramfs_core_driver_init(void) {
     return (g_root == 0) ? FS_ERR_INVALID : FS_OK;
 }
@@ -969,7 +995,8 @@ static const vfs_driver_t g_ramfs_driver = {
     ramfs_core_close,
     ramfs_core_stat,
     ramfs_core_fstat,
-    ramfs_core_unlink
+    ramfs_core_unlink,
+    ramfs_core_rmdir
 };
 
 const vfs_driver_t* ramfs_core_driver(void) {

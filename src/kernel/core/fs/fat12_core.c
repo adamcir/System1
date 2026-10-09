@@ -2430,6 +2430,66 @@ static int fat12_fstat(uint32_t node_id, fs_stat_t* out_stat) {
     return FS_OK;
 }
 
+/* Remove only empty FAT12 directories: caller walks children first. */
+static int fat12_rmdir(const char* path) {
+    fat12_bpb_t bpb;
+    char parent_path[FS_PATH_CAP], leaf_name[FS_NAME_CAP];
+    uint8_t name83[11], attr = 0u;
+    uint32_t parent_cluster = 0u, first_cluster = 0u;
+    uint32_t current, visited = 0u;
+    fat12_entry_ref_t ref;
+    int rc;
+    if (!g_fat12_dev || !g_fat12_dev->write || !path) return FS_ERR_READ_ONLY;
+    if (fat12_streq(path, "/") || fat12_streq(path, g_fat12_cwd))
+        return FS_ERR_INVALID;
+    rc = block_core_read(g_fat12_dev, 0u, 1u, g_fat12_work_sector);
+    if (rc != FS_OK) return rc;
+    rc = fat12_parse_bpb(g_fat12_work_sector, &bpb);
+    if (rc != FS_OK) return rc;
+    rc = fat12_split_create_path(path, parent_path, leaf_name);
+    if (rc != FS_OK) return rc;
+    rc = fat12_make_83_dir_name(leaf_name, name83);
+    if (rc != FS_OK) return rc;
+    rc = fat12_dev_resolve_dir(g_fat12_dev, &bpb, parent_path, &parent_cluster);
+    if (rc != FS_OK) return rc;
+    rc = fat12_dev_find_entry(g_fat12_dev, &bpb, parent_cluster, name83,
+                              &first_cluster, &attr, &ref);
+    if (rc != FS_OK) return rc;
+    if (!(attr & FAT12_ATTR_DIRECTORY) || first_cluster < 2u)
+        return FS_ERR_NOT_DIR;
+    current = first_cluster;
+    while (current >= 2u && current < 0xFF8u && visited++ < 4096u) {
+        uint32_t sector;
+        uint16_t next;
+        for (sector = 0u; sector < bpb.sectors_per_cluster; ++sector) {
+            uint32_t j;
+            rc = block_core_read(g_fat12_dev,
+                fat12_image_cluster_to_lba(&bpb, current) + sector,
+                1u, g_fat12_work_sector);
+            if (rc != FS_OK) return rc;
+            for (j = 0u; j < 16u; ++j) {
+                const uint8_t* e = g_fat12_work_sector + j * 32u;
+                if (e[0] == FAT12_ENTRY_FREE) break;
+                if (e[0] == FAT12_ENTRY_DELETED ||
+                    e[11] == FAT12_ATTR_LONG_NAME ||
+                    (e[11] & FAT12_ATTR_VOLUME_ID)) continue;
+                if (e[0] == '.' && (e[1] == ' ' || e[1] == '.')) continue;
+                return FS_ERR_NOT_EMPTY;
+            }
+        }
+        rc = fat12_dev_get_fat_entry(g_fat12_dev, &bpb, current, &next);
+        if (rc != FS_OK) return rc;
+        current = next;
+    }
+    if (visited > 4096u) return FS_ERR_INVALID;
+    rc = block_core_read(g_fat12_dev, ref.lba, 1u, g_fat12_work_sector);
+    if (rc != FS_OK) return rc;
+    g_fat12_work_sector[ref.offset] = FAT12_ENTRY_DELETED;
+    rc = block_core_write(g_fat12_dev, ref.lba, 1u, g_fat12_work_sector);
+    if (rc != FS_OK) return rc;
+    return fat12_dev_free_cluster_chain(g_fat12_dev, &bpb, first_cluster);
+}
+
 static int fat12_unlink(const char* path) {
     uint32_t i;
     int rc;
@@ -2598,7 +2658,8 @@ static const vfs_driver_t g_fat12_driver = {
     fat12_close,
     fat12_stat,
     fat12_fstat,
-    fat12_unlink
+    fat12_unlink,
+    fat12_rmdir
 };
 
 const vfs_driver_t* fat12_core_driver(void) {
