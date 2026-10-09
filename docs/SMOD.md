@@ -10,17 +10,19 @@ contains a System-defined header and executable bytes.
 |---|---|---|
 | 0 | Magic = `SMOD` | 4 |
 | 4 | Format version = 1 | 2 |
-| 6 | System Module API version = 1 | 2 |
+| 6 | System Module API version = 3 | 2 |
 | 8 | CPU architecture: 1=i386, 2=x86_64 | 2 |
 | 10 | Flags = 1 (executable) | 2 |
 | 12 | Header/image offset = 32 | 4 |
-| 16 | Image size, max 4096 | 4 |
-| 20 | Memory size (including BSS), max 4096 | 4 |
+| 16 | Image size, max 16384 | 4 |
+| 20 | Memory size (including BSS), max 16384 | 4 |
 | 24 | Entry offset, strictly within image | 4 |
 | 28 | Reserved = 0 | 4 |
 
-The entrypoint is `int entry(const smod_api_v1_t*)`; the first API
-revision offers an ABI identifier and a kernel callback. The loader performs
+The current entrypoint uses `int entry(const smod_api_v3_t*)` and
+provides kernel-managed registration of UART, RTC, display, input, IRQ
+controller/timer and floppy controller drivers. The API is ABI revision 3,
+while the on-disk format remains revision 1. The loader performs
 strict header, file length and architecture checks, copies the program into
 kernel-managed memory, clears BSS, calls the entry and retains successful
 images. It loads files from `/boot/modules/*.mod` after the real filesystem
@@ -63,7 +65,7 @@ supported yet; the initial driver is a built-in bootstrap driver.
 The floppy boot profile has only 1 MiB of installed physical RAM. The
 current MM fallback marks memory beginning at 1 MiB as available; it must
 not be used to allocate executable boot modules on this profile. The SMOD
-loader therefore uses a **single statically reserved 4096-byte resident
+loader therefore uses a **bounded statically reserved resident
 arena** for the first module and refuses additional resident modules rather
 than allocating nonexistent physical memory. This is a compatibility measure
 until the floppy physical-memory map is provided to the page allocator.
@@ -85,7 +87,7 @@ The System Module API has been extended from revision 1 to **revision 2**,
 retaining the 32-byte container header (format revision 1). The callbacks
 are installed only after a successful module entrypoint. Boot includes
 `/boot/modules/com1.mod` and `/boot/modules/cmos.mod`. The 1 MiB floppy
-uses a bounded 4 KiB **shared resident arena** so both modules fit if their
+uses a bounded 16 KiB **shared resident arena** so both modules fit if their
 combined aligned images fit.
 
 TTY and the early VGA/PS2 console remain built-in: they are needed before
@@ -168,3 +170,13 @@ kernel facilities, not magically hot-swappable modules.
 Removing all built-in boot backends safely also requires a real
 pre-kernel device discovery/driver manager and a memory map compatible
 with the floppy's 1 MiB constraint.
+
+## Boot validation
+
+CI validates native module structure and then boots the 1 MiB floppy
+image and the i386/x86_64 GRUB ISO images in QEMU. It verifies that
+every configured native driver has registered, the physical filesystem
+mounts, and boot continues to the configured user shell. This tests
+module activation, not every individual hardware operation (such as
+keyboard input or editing a text line); interactive device behavior
+must also be tested on the target hardware.

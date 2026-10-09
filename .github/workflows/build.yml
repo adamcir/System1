@@ -56,5 +56,31 @@ jobs:
           grep -F "Physical filesystem mounted as root" "$LOG" || { cat "$LOG"; exit 1; }
           grep -F "Starting configured userspace shell" "$LOG" || { cat "$LOG"; exit 1; }
 
+      - name: Boot i386 and x86_64 GRUB with native SMOD drivers
+        run: |
+          set -eu
+          for arch in i386 x86_64; do
+            if [ "$arch" = "i386" ]; then
+              qemu=qemu-system-i386
+              iso=build/artifacts/images/system1-iso-32.iso
+            else
+              qemu=qemu-system-x86_64
+              iso=build/artifacts/images/system1-iso-x86_64.iso
+            fi
+            LOG="${RUNNER_TEMP}/system1-${arch}.log"
+            timeout 20s "$qemu" -m 64M -display none -cdrom "$iso" \
+              -serial stdio -no-reboot > "$LOG" 2>&1 || rc=$?
+            if [ "${rc:-0}" -ne 0 ] && [ "${rc:-0}" -ne 124 ]; then
+              cat "$LOG"
+              exit 1
+            fi
+            unset rc
+            for module in com1 cmos picpit vga ps2 fdc; do
+              grep -F "smod: ${module}.mod" "$LOG" || { cat "$LOG"; exit 1; }
+            done
+            grep -F "Physical filesystem mounted as root" "$LOG" || { cat "$LOG"; exit 1; }
+            grep -F "Starting configured userspace shell" "$LOG" || { cat "$LOG"; exit 1; }
+          done
+
       - name: Check userspace programs
         run: make -C src/userland check
