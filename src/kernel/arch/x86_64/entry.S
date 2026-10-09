@@ -25,9 +25,16 @@ _start_x86_64:
     /* Load 64-bit GDT */
     lgdt gdt64_ptr
 
-    /* Enable PAE */
+    /* x86_64 kernel C and SMOD code may use SSE instructions.
+     * Clear CR0.EM, set CR0.MP and enable OSFXSR/OSXMMEXCPT before
+     * calling any 64-bit compiler-generated code (not just PAE).
+     */
+    mov %cr0, %eax
+    and $0xFFFFFFFB, %eax
+    or  $0x2, %eax
+    mov %eax, %cr0
     mov %cr4, %eax
-    or  $0x20, %eax
+    or  $0x620, %eax
     mov %eax, %cr4
 
     /* Set EFER.LME */
@@ -69,7 +76,7 @@ long_mode_entry:
 gdt64:
     .quad 0x0000000000000000
     .quad 0x00AF9A000000FFFF
-    .quad 0x00AF92000000FFFF
+    .quad 0x00CF92000000FFFF
 
 gdt64_end:
 
