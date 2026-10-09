@@ -11,7 +11,7 @@
 #define SMOD_FLAG_EXECUTABLE 1u
 #define SMOD_HEADER_SIZE 32u
 #define SMOD_IMAGE_LIMIT 16384u
-#define SMOD_BOOT_ARENA_SIZE 65536u
+#define SMOD_BOOT_ARENA_SIZE 16384u
 
 /* Typed interfaces live in core headers; SMOD exports stable ABI tags. */
 typedef struct system_display_ops system_display_ops_t;
