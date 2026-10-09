@@ -90,8 +90,12 @@ int pseudo_fs_open(const char* path, uint32_t flags, uint32_t* out) {
     if (!out) return FS_ERR_INVALID;
     if (id == -2 || id == -3) return FS_ERR_IS_DIR;
     if (id < 0) return FS_ERR_NOT_FOUND;
-    if (flags & (FS_O_CREAT | FS_O_TRUNC)) return FS_ERR_READ_ONLY;
-    if (id >= 6 && (flags & FS_O_WRONLY)) return FS_ERR_READ_ONLY;
+    /* Device nodes already exist. O_CREAT/O_TRUNC do not allocate or
+     * truncate a character device; this is needed by SMU 'write'.
+     * /proc remains strictly read-only.
+     */
+    if (id >= 6 && (flags & (FS_O_WRONLY | FS_O_CREAT | FS_O_TRUNC)))
+        return FS_ERR_READ_ONLY;
     *out = PSEUDO_FD_TAG | (uint32_t)id;
     return FS_OK;
 }
