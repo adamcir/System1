@@ -10,7 +10,9 @@ _start_x86_64:
     mov %eax, mb2_magic_saved
     mov %ebx, mb2_info_saved
 
-    /* Build minimal identity mapping: first 2 MiB */
+    /* Build initial 64 MiB identity mapping before entering C.
+     * Kernel BSS and early SMOD data can now exceed the old 2 MiB limit.
+     */
     movl $pdpt_table, %eax
     orl  $0x3, %eax
     movl %eax, pml4_table
@@ -19,8 +21,16 @@ _start_x86_64:
     orl  $0x3, %eax
     movl %eax, pdpt_table
 
-    /* 2 MiB page: present + rw + huge */
-    movl $0x00000083, pd_table
+    /* 32 x 2 MiB pages: P|RW|PS. Set both halves of each PDE. */
+    movl $pd_table, %edi
+    movl $0x00000083, %eax
+    movl $32, %ecx
+1:
+    movl %eax, (%edi)
+    movl $0, 4(%edi)
+    addl $0x00200000, %eax
+    addl $8, %edi
+    loop 1b
 
     /* Load 64-bit GDT */
     lgdt gdt64_ptr

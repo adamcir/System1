@@ -5,6 +5,7 @@
 #include "process_core.h"
 #include "sprg.h"
 #include "types.h"
+#include "klog.h"
 
 /* Run 32-bit SPRG binaries in IA-32 compatibility mode on a 64-bit kernel.
  * Their original int 0x80 ABI remains unchanged.
@@ -157,6 +158,8 @@ static int build_initial_stack(uintptr_t stack_min, uintptr_t stack_top,
 }
 
 int usermode_init(void) {
+    /* Diagnostics visible on the COM1 SMOD recovery channel. */
+    klog_info("compat32", "Setting up 32-bit compatibility userspace");
     uint64_t base = (uint64_t)(uintptr_t)&g_usermode_tss;
     uint64_t limit = (uint64_t)sizeof(g_usermode_tss) - 1u;
     uint16_t selector = GDT_TSS;
@@ -178,6 +181,7 @@ int usermode_init(void) {
         &g_usermode_kernel_stacks[0][USERMODE_KERNEL_STACK_SIZE];
     g_usermode_tss.iomap_base = sizeof(g_usermode_tss);
 
+    klog_info("compat32", "TSS and GDT initialized");
     g_usermode_gdt_ptr.limit = sizeof(g_usermode_gdt) - 1u;
     g_usermode_gdt_ptr.base = (uint64_t)(uintptr_t)&g_usermode_gdt[0];
     __asm__ volatile ("lgdt %0" : : "m"(g_usermode_gdt_ptr) : "memory");
@@ -189,6 +193,7 @@ int usermode_init(void) {
         paging_set_user_range(USERMODE_I386_SHELL_STACK_MIN, USERMODE_I386_SHELL_STACK_TOP, 1u))
         return -1;
     g_usermode_exec_depth = 0u;
+    klog_info("compat32", "Ring-3 pages mapped");
     return 0;
 }
 
