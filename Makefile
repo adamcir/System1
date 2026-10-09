@@ -221,7 +221,7 @@ $(KERNEL64_ELF): $(LDS64) $(BUILD_OBJ)/mb2_64.o $(BUILD_OBJ)/entry_x64.o $(BUILD
 
 $(KERNELFLP_ELF): $(LDSFLP) $(BUILD_OBJ)/entry_floppy_i386.o $(BUILD_OBJ)/isr_floppy_i386.o $(BUILD_OBJ)/usermode_floppy_i386.o $(BUILD_OBJ)/kernel_i386_floppy.o $(BUILD_OBJ)/floppy_early_smod.o $(FLP_MODULE_OBJS) | $(FLP_OUT_DIR)
 	$(I386_LD) -m elf_i386 -T $(LDSFLP) -o $@ \
-		$(BUILD_OBJ)/entry_floppy_i386.o $(BUILD_OBJ)/isr_floppy_i386.o $(BUILD_OBJ)/usermode_floppy_i386.o $(BUILD_OBJ)/kernel_i386_floppy.o $(FLP_MODULE_OBJS)
+		$(BUILD_OBJ)/entry_floppy_i386.o $(BUILD_OBJ)/isr_floppy_i386.o $(BUILD_OBJ)/usermode_floppy_i386.o $(BUILD_OBJ)/kernel_i386_floppy.o $(BUILD_OBJ)/floppy_early_smod.o $(FLP_MODULE_OBJS)
 
 user-programs:
 	$(MAKE) -C src/userland all
