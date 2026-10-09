@@ -17,7 +17,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             build-essential gcc-multilib nasm xorriso mtools dosfstools perl \
-            grub-pc-bin grub-common
+            grub-pc-bin grub-common qemu-system-x86
 
       - name: Compile kernel targets
         run: |
@@ -36,6 +36,20 @@ jobs:
           make iso-32
           make iso-64
           make img-32
+
+      - name: Boot floppy and confirm early native SMOD activation
+        run: |
+          set -eu
+          LOG="${RUNNER_TEMP}/system1-floppy-boot.log"
+          timeout 20s qemu-system-i386 -m 1M -display none \
+            -drive file=build/artifacts/images/system1-img-32.img,format=raw,if=floppy \
+            -serial stdio -no-reboot > "$LOG" 2>&1 || rc=$?
+          if [ "${rc:-0}" -ne 0 ] && [ "${rc:-0}" -ne 124 ]; then
+            cat "$LOG"
+            exit 1
+          fi
+          grep -F "Early boot modules activated" "$LOG" || { cat "$LOG"; exit 1; }
+          grep -F "Starting configured userspace shell" "$LOG" || { cat "$LOG"; exit 1; }
 
       - name: Check userspace programs
         run: make -C src/userland check

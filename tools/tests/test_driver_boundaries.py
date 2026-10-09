@@ -44,6 +44,24 @@ class DriverBoundaries(unittest.TestCase):
         floppy = (KERNEL / "arch/i386-floppy/kernel.c").read_text(encoding="utf-8")
         self.assertIn("floppy_controller_platform_init();", floppy)
 
+    def test_early_smod_stage_precedes_heap_and_fs(self):
+        for arch in ("i386", "i386-floppy", "x86_64"):
+            with self.subTest(arch=arch):
+                code = (KERNEL / "arch" / arch / "kernel.c").read_text(encoding="utf-8")
+                self.assertIn("smod_boot_early_init", code)
+                self.assertLess(code.index("paging_init("), code.index("smod_boot_early_init("))
+                self.assertLess(code.index("smod_boot_early_init("), code.index("mm_init("))
+                self.assertLess(code.index("smod_boot_early_init("), code.index("bootstrap_init("))
+
+    def test_preloaded_module_sources(self):
+        asm = (KERNEL / "arch/i386-floppy/early_smod.S").read_text(encoding="utf-8")
+        self.assertIn('.incbin "build/artifacts/modules/i386/com1.mod"', asm)
+        self.assertIn('.incbin "build/artifacts/modules/i386/cmos.mod"', asm)
+        for arch in ("i386", "x86_64"):
+            cfg = (ROOT / "rootfs" / arch / "boot/grub/grub.cfg").read_text(encoding="utf-8")
+            self.assertIn("smod:com1.mod", cfg)
+            self.assertIn("smod:cmos.mod", cfg)
+
     def test_build_includes_cpu_and_hardware_drivers(self):
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
         for target in ("I386", "X64", "FLP"):
