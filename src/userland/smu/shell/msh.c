@@ -4,6 +4,7 @@
 #include "system1/unistd.h"
 #include "../common/smu.h"
 #include "../common/uutil.h"
+#include "redir.h"
 
 #define LINE_CAP 192u
 #define TOKEN_CAP 24u
@@ -552,6 +553,18 @@ static int parse_line(const char* line) {
             g_tokens[count][0] = ';'; g_tokens[count][1] = '\0';
             g_token_glob[count++] = 0u; ++i; continue;
         }
+        /* Recognize redirection even without surrounding whitespace. */
+        if (line[i] == '>' || line[i] == '<' ||
+            (line[i] == '2' && line[i + 1u] == '>')) {
+            unsigned out = 0u;
+            if (line[i] == '2') g_tokens[count][out++] = line[i++];
+            g_tokens[count][out++] = line[i++];
+            if (g_tokens[count][out - 1u] == '>' && line[i] == '>')
+                g_tokens[count][out++] = line[i++];
+            g_tokens[count][out] = '\0';
+            g_token_glob[count++] = 0u;
+            continue;
+        }
         if (line[i] == '&' && line[i+1u] == '&') {
             g_tokens[count][0] = '&'; g_tokens[count][1] = '&'; g_tokens[count][2] = '\0';
             g_token_glob[count++] = 0u; i += 2u; continue;
@@ -566,7 +579,8 @@ static int parse_line(const char* line) {
             char c = line[i];
             unsigned char escaped = 0u;
 
-            if (quote == 0u && (c == ' ' || c == '\t' || c == ';' || c == '&' || c == '|'))
+            if (quote == 0u && (c == ' ' || c == '\t' || c == ';' ||
+                                c == '&' || c == '|' || c == '>' || c == '<'))
                 break;
 
             if (quote == 0u && (c == '\'' || c == '"')) {
@@ -673,38 +687,53 @@ static int run_external(int argc, char** argv) {
 
 static int run_segment(unsigned start, unsigned end, int* want_exit) {
     char* argv[EXEC_ARG_CAP];
+    msh_redir_state_t redir;
     unsigned argc = 0u;
     unsigned i;
     int rc;
 
     if (start >= end) return -1;
-    argv[argc++] = g_tokens[start];
-
-    for (i = start + 1u; i < end && argc < EXEC_ARG_CAP - 1u; ++i) {
+    msh_redir_init(&redir);
+    for (i = start; i < end && argc < EXEC_ARG_CAP - 1u; ++i) {
+        if (u_streq(g_tokens[i], ">") || u_streq(g_tokens[i], ">>") ||
+            u_streq(g_tokens[i], "2>") || u_streq(g_tokens[i], "2>>") ||
+            u_streq(g_tokens[i], "<")) {
+            if (i + 1u >= end || msh_redir_apply(&redir, g_tokens[i], g_tokens[i+1u]) < 0) {
+                msh_redir_restore(&redir);
+                u_err("msh: redirect failed\n");
+                return 1;
+            }
+            ++i;
+            continue;
+        }
         if (g_token_glob[i]) (void)expand_one(g_tokens[i], argv, &argc);
         else argv[argc++] = g_tokens[i];
     }
     argv[argc] = 0;
-
-    if (u_streq(argv[0], "exit")) {
-        *want_exit = 1;
+    if (argc == 0u) {
+        msh_redir_restore(&redir);
         return 0;
     }
-
+    if (u_streq(argv[0], "exit")) {
+        *want_exit = 1;
+        msh_redir_restore(&redir);
+        return 0;
+    }
     if (u_streq(argv[0], "cd")) {
         const char* dir = (argc > 1u) ? argv[1] : "/";
         if (argc > 2u) {
             u_err("msh: cd: too many arguments\n");
-            return 1;
-        }
-        if (chdir(dir) < 0) {
+            rc = 1;
+        } else if (chdir(dir) < 0) {
             u_err("msh: cd failed\n");
-            return 1;
-        }
-        return 0;
+            rc = 1;
+        } else rc = 0;
+        msh_redir_restore(&redir);
+        return rc;
     }
 
     rc = run_external((int)argc, argv);
+    msh_redir_restore(&redir);
     if (rc < 0) {
         u_err("msh: command not found or failed: ");
         u_err(argv[0]);

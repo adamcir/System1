@@ -44,7 +44,7 @@ $(BUILD_DIR)/syscall.o: $(ROOT_DIR)/src/lib/user/syscall.c | $(BUILD_DIR)
 $(BUILD_DIR)/errno.o: $(ROOT_DIR)/src/lib/user/errno.c | $(BUILD_DIR)
 	$(I386_CC) $(CFLAGS) -m32 -c $< -o $@
 
-$(BUILD_DIR)/msh.o: $(SMU_DIR)/shell/msh.c | $(BUILD_DIR)
+$(BUILD_DIR)/msh.o: $(SMU_DIR)/shell/msh.c $(SMU_DIR)/shell/redir.h | $(BUILD_DIR)
 	$(I386_CC) $(CFLAGS) -m32 -c $< -o $@
 
 $(SMU_FS_OBJS): $(BUILD_DIR)/%.o: $(SMU_DIR)/fs/%.c | $(BUILD_DIR)
@@ -59,8 +59,11 @@ $(SMU_SYSTEM_OBJS): $(BUILD_DIR)/%.o: $(SMU_DIR)/system/%.c | $(BUILD_DIR)
 $(SMU_EDITOR_OBJS): $(BUILD_DIR)/%.o: $(SMU_DIR)/editor/%.c | $(BUILD_DIR)
 	$(I386_CC) $(CFLAGS) -m32 -c $< -o $@
 
-$(MSH_PRG): linker.shell.i386.ld $(BUILD_DIR)/msh.o $(COMMON_OBJS)
-	$(I386_LD) -m elf_i386 -T linker.shell.i386.ld --oformat=binary -o $@ $(BUILD_DIR)/msh.o $(COMMON_OBJS)
+$(BUILD_DIR)/redir.o: $(SMU_DIR)/shell/redir.c $(SMU_DIR)/shell/redir.h | $(BUILD_DIR)
+	$(I386_CC) $(CFLAGS) -m32 -c $< -o $@
+
+$(MSH_PRG): linker.shell.i386.ld $(BUILD_DIR)/msh.o $(BUILD_DIR)/redir.o $(COMMON_OBJS)
+	$(I386_LD) -m elf_i386 -T linker.shell.i386.ld --oformat=binary -o $@ $(BUILD_DIR)/msh.o $(BUILD_DIR)/redir.o $(COMMON_OBJS)
 
 $(BUILD_DIR)/%.prg: linker.command.i386.ld $(BUILD_DIR)/%.o $(COMMON_OBJS)
 	$(I386_LD) -m elf_i386 -T linker.command.i386.ld --oformat=binary -o $@ $(BUILD_DIR)/$*.o $(COMMON_OBJS)
