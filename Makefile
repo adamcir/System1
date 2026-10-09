@@ -65,7 +65,7 @@ FLP_MODULE_INCLUDES := $(foreach m,$(MODULES),-I$(KDIR_FLP)/modules/$(m))
 
 I386_INCLUDES := -Iinclude $(PC_DRIVER_INCLUDES) $(COMMON_MODULE_INCLUDES) $(I386_MODULE_INCLUDES)
 X64_INCLUDES := -Iinclude $(PC_DRIVER_INCLUDES) $(COMMON_MODULE_INCLUDES) $(X64_MODULE_INCLUDES)
-FLP_INCLUDES := -Iinclude $(PC_DRIVER_INCLUDES) $(COMMON_MODULE_INCLUDES) $(FLP_MODULE_INCLUDES)
+FLP_INCLUDES := -DSYSTEM1_FLOPPY_BOOT -Iinclude $(PC_DRIVER_INCLUDES) $(COMMON_MODULE_INCLUDES) $(FLP_MODULE_INCLUDES)
 
 define module_wrapper_src
 $(if $(wildcard $(1)/modules/$(2)/$(2).c),$(1)/modules/$(2)/$(2).c,$(COMMON_MODULE_DIR)/$(2)/$(2).c)
@@ -202,6 +202,9 @@ $(BUILD_OBJ)/entry_floppy_i386.o: $(ENTRYFLP_SRC) | $(BUILD_OBJ)
 $(BUILD_OBJ)/isr_floppy_i386.o: $(ISRFLP_SRC) | $(BUILD_OBJ)
 	$(I386_CC) $(CFLAGS_COMMON) $(FLP_INCLUDES) -m32 -c $< -o $@
 
+$(BUILD_OBJ)/floppy_early_smod.o: $(KDIR_FLP)/early_smod.S $(SMOD_I386_FILES) | $(BUILD_OBJ)
+	$(I386_CC) $(CFLAGS_COMMON) $(FLP_INCLUDES) -m32 -c $< -o $@
+
 $(BUILD_OBJ)/kernel_i386_floppy.o: $(KDIR_FLP)/kernel.c | $(BUILD_OBJ)
 	$(I386_CC) $(CFLAGS_COMMON) $(FLP_INCLUDES) -m32 -c $< -o $@
 
@@ -216,7 +219,7 @@ $(KERNEL64_ELF): $(LDS64) $(BUILD_OBJ)/mb2_64.o $(BUILD_OBJ)/entry_x64.o $(BUILD
 	$(X64_LD) -m elf_x86_64 -T $(LDS64) -o $@ \
 		$(BUILD_OBJ)/mb2_64.o $(BUILD_OBJ)/entry_x64.o $(BUILD_OBJ)/isr_x64.o $(BUILD_OBJ)/kernel_x64.o $(X64_MODULE_OBJS)
 
-$(KERNELFLP_ELF): $(LDSFLP) $(BUILD_OBJ)/entry_floppy_i386.o $(BUILD_OBJ)/isr_floppy_i386.o $(BUILD_OBJ)/usermode_floppy_i386.o $(BUILD_OBJ)/kernel_i386_floppy.o $(FLP_MODULE_OBJS) | $(FLP_OUT_DIR)
+$(KERNELFLP_ELF): $(LDSFLP) $(BUILD_OBJ)/entry_floppy_i386.o $(BUILD_OBJ)/isr_floppy_i386.o $(BUILD_OBJ)/usermode_floppy_i386.o $(BUILD_OBJ)/kernel_i386_floppy.o $(BUILD_OBJ)/floppy_early_smod.o $(FLP_MODULE_OBJS) | $(FLP_OUT_DIR)
 	$(I386_LD) -m elf_i386 -T $(LDSFLP) -o $@ \
 		$(BUILD_OBJ)/entry_floppy_i386.o $(BUILD_OBJ)/isr_floppy_i386.o $(BUILD_OBJ)/usermode_floppy_i386.o $(BUILD_OBJ)/kernel_i386_floppy.o $(FLP_MODULE_OBJS)
 

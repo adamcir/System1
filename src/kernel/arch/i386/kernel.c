@@ -10,6 +10,7 @@
 #include "paging.h"
 #include "mm.h"
 #include "bootstrap.h"
+#include "module.h"
 #include "usermode.h"
 
 void kmain_i386(uint32_t magic, uint32_t info) {
@@ -21,6 +22,8 @@ void kmain_i386(uint32_t magic, uint32_t info) {
         panic("Paging_init failed");
     }
     klog_info("paging", "Initialized");
+
+    (void)smod_boot_early_init(magic, info);
 
     if (mm_init(magic, info) != 0) {
         panic("MM_init failed");

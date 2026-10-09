@@ -19,8 +19,12 @@ static uint32_t smod_loaded_count;
  * kmalloc() physical addresses above installed RAM. Execute a small boot
  * module from a resident kernel arena instead of touching those pages. */
 #define SMOD_FLOPPY_MAGIC 0x53314D47u
-static uint8_t smod_floppy_image[SMOD_IMAGE_LIMIT] __attribute__((aligned(16)));
-static uint32_t smod_floppy_used;
+/* Early-boot executable arena: available before kmalloc() and filesystem.
+ * Floppy also uses it for any additional small optional modules. */
+static uint8_t smod_boot_image[SMOD_IMAGE_LIMIT] __attribute__((aligned(16)));
+static uint32_t smod_boot_used;
+static char smod_preloaded_names[SMOD_MAX_LOADED][FS_NAME_CAP];
+static uint32_t smod_preloaded_count;
 
 /* Modules register services transactionally: failed init leaves no hooks. */
 static smod_uart_write_t active_uart;
@@ -105,6 +109,104 @@ static const smod_api_v2_t smod_api = {
     SMOD_API_VERSION, smod_report_ready, smod_register_uart, smod_register_rtc
 };
 
+/* One header validator for memory-resident and filesystem-backed SMOD. */
+static int smod_validate(const uint8_t* hdr, uint32_t bytes,
+                         uint32_t* code_size, uint32_t* memory_size,
+                         uint32_t* entry_offset) {
+    uint32_t code;
+    uint32_t mem;
+    uint32_t entry;
+    if (!hdr || !code_size || !memory_size || !entry_offset ||
+        bytes < SMOD_HEADER_SIZE || bytes > SMOD_HEADER_SIZE + SMOD_IMAGE_LIMIT)
+        return -1;
+    code = smod_u32(hdr + 16u);
+    mem = smod_u32(hdr + 20u);
+    entry = smod_u32(hdr + 24u);
+    if (hdr[0] != 'S' || hdr[1] != 'M' || hdr[2] != 'O' || hdr[3] != 'D' ||
+        smod_u16(hdr + 4u) != SMOD_FORMAT_VERSION ||
+        smod_u16(hdr + 6u) != SMOD_API_VERSION ||
+        smod_u16(hdr + 8u) != smod_machine_arch() ||
+        smod_u16(hdr + 10u) != SMOD_FLAG_EXECUTABLE ||
+        smod_u32(hdr + 12u) != SMOD_HEADER_SIZE ||
+        smod_u32(hdr + 28u) != 0u ||
+        code == 0u || code > SMOD_IMAGE_LIMIT ||
+        mem < code || mem > SMOD_IMAGE_LIMIT ||
+        entry >= code || bytes != SMOD_HEADER_SIZE + code)
+        return -1;
+    *code_size = code;
+    *memory_size = mem;
+    *entry_offset = entry;
+    return 0;
+}
+
+/* Common module activation for both boot stages; registration is atomic. */
+static int smod_activate(void* image, uint32_t entry_offset,
+                         uint8_t from_arena, uint32_t aligned_size) {
+    int rc;
+    smod_entry_fn_t entry = (smod_entry_fn_t)((uint8_t*)image + entry_offset);
+    pending_uart = 0;
+    pending_rtc = 0;
+    smod_in_entry = 1u;
+    rc = entry(&smod_api);
+    smod_in_entry = 0u;
+    if (rc != 0) {
+        pending_uart = 0;
+        pending_rtc = 0;
+        return -1;
+    }
+    if (from_arena) smod_boot_used += aligned_size;
+    if (pending_uart) active_uart = pending_uart;
+    if (pending_rtc) active_rtc = pending_rtc;
+    pending_uart = 0;
+    pending_rtc = 0;
+    smod_images[smod_loaded_count++] = image;
+    return 0;
+}
+
+static uint8_t smod_char_lower(uint8_t c) {
+    return (c >= 'A' && c <= 'Z') ? (uint8_t)(c + ('a' - 'A')) : c;
+}
+
+static int smod_name_already_loaded(const char* name) {
+    uint32_t i;
+    for (i = 0u; i < smod_preloaded_count; ++i) {
+        uint32_t j = 0u;
+        while (j < FS_NAME_CAP &&
+               smod_char_lower((uint8_t)name[j]) ==
+                   smod_char_lower((uint8_t)smod_preloaded_names[i][j]) &&
+               name[j] != '\0') ++j;
+        if (j < FS_NAME_CAP && name[j] == '\0' &&
+            smod_preloaded_names[i][j] == '\0') return 1;
+    }
+    return 0;
+}
+
+/* Bootloader-supplied or compiled-in native SMOD. No FS/MM dependency. */
+int smod_core_preload(const uint8_t* file, uint32_t bytes, const char* name) {
+    uint32_t image_size, memory_size, entry_offset;
+    uint32_t aligned_size, i;
+    uint8_t* image;
+    if (!file || !name || smod_loaded_count >= SMOD_MAX_LOADED ||
+        smod_preloaded_count >= SMOD_MAX_LOADED ||
+        smod_name_already_loaded(name) ||
+        smod_validate(file, bytes, &image_size, &memory_size, &entry_offset) != 0)
+        return -1;
+    /* Names are canonicalized and bounded before committing the registration. */
+    for (i = 0u; i < FS_NAME_CAP; ++i) if (name[i] == '\0') break;
+    if (i == 0u || i == FS_NAME_CAP) return -1;
+    aligned_size = (memory_size + 15u) & ~15u;
+    if (aligned_size > SMOD_IMAGE_LIMIT - smod_boot_used) return -1;
+    image = smod_boot_image + smod_boot_used;
+    for (i = 0u; i < image_size; ++i) image[i] = file[SMOD_HEADER_SIZE + i];
+    for (; i < memory_size; ++i) image[i] = 0u;
+    if (smod_activate(image, entry_offset, 1u, aligned_size) != 0) return -1;
+    for (i = 0u; i + 1u < FS_NAME_CAP && name[i] != '\0'; ++i)
+        smod_preloaded_names[smod_preloaded_count][i] = name[i];
+    smod_preloaded_names[smod_preloaded_count][i] = '\0';
+    ++smod_preloaded_count;
+    return 0;
+}
+
 /* Native v1: code+optional BSS, absolute entry offset and no relocations yet.
  * The .mod image must be self-contained position-independent machine code.
  */
@@ -132,33 +234,20 @@ static int smod_core_load_file(const char* path, uint32_t boot_magic) {
         return -1;
     }
 
-    image_size = smod_u32(hdr + 16u);
-    memory_size = smod_u32(hdr + 20u);
-    entry_offset = smod_u32(hdr + 24u);
-
-    if (hdr[0] != 'S' || hdr[1] != 'M' || hdr[2] != 'O' || hdr[3] != 'D' ||
-        smod_u16(hdr + 4u) != SMOD_FORMAT_VERSION ||
-        smod_u16(hdr + 6u) != SMOD_API_VERSION ||
-        smod_u16(hdr + 8u) != smod_machine_arch() ||
-        smod_u16(hdr + 10u) != SMOD_FLAG_EXECUTABLE ||
-        smod_u32(hdr + 12u) != SMOD_HEADER_SIZE ||
-        smod_u32(hdr + 28u) != 0u ||
-        image_size == 0u || image_size > SMOD_IMAGE_LIMIT ||
-        memory_size < image_size || memory_size > SMOD_IMAGE_LIMIT ||
-        entry_offset >= image_size ||
-        st.size != SMOD_HEADER_SIZE + image_size) {
+    if (smod_validate(hdr, st.size, &image_size, &memory_size,
+                      &entry_offset) != 0) {
         (void)fs_core_close(id);
         return -1;
     }
 
     if (boot_magic == SMOD_FLOPPY_MAGIC) {
         aligned_size = (memory_size + 15u) & ~15u;
-        if (aligned_size > SMOD_IMAGE_LIMIT - smod_floppy_used) {
+        if (aligned_size > SMOD_IMAGE_LIMIT - smod_boot_used) {
             (void)fs_core_close(id);
-            klog_info("smod", "Floppy module arena full");
+            klog_info("smod", "Boot module arena full");
             return -1;
         }
-        image = smod_floppy_image + smod_floppy_used;
+        image = smod_boot_image + smod_floppy_used;
         lowmem_arena = 1u;
     } else {
         image = kmalloc(memory_size);
@@ -176,29 +265,9 @@ static int smod_core_load_file(const char* path, uint32_t boot_magic) {
     }
     for (i = image_size; i < memory_size; ++i) ((uint8_t*)image)[i] = 0u;
 
-    /* Commit driver hooks only after successful module initialization. */
-    {
-        smod_entry_fn_t entry = (smod_entry_fn_t)((uint8_t*)image + entry_offset);
-        pending_uart = 0;
-        pending_rtc = 0;
-        smod_in_entry = 1u;
-        rc = entry(&smod_api);
-        smod_in_entry = 0u;
-        if (rc != 0) {
-            pending_uart = 0;
-            pending_rtc = 0;
-            if (!lowmem_arena) kfree(image);
-            return -1;
-        }
-        if (lowmem_arena) smod_floppy_used += aligned_size;
-        if (pending_uart) active_uart = pending_uart;
-        if (pending_rtc) active_rtc = pending_rtc;
-        pending_uart = 0;
-        pending_rtc = 0;
-    }
-
-    smod_images[smod_loaded_count++] = image;
-    return 0;
+    rc = smod_activate(image, entry_offset, lowmem_arena, aligned_size);
+    if (rc != 0 && !lowmem_arena) kfree(image);
+    return rc;
 }
 
 static int smod_has_extension(const char* name) {
@@ -228,7 +297,8 @@ int smod_core_boot_load_all(uint32_t boot_magic) {
         uint32_t j = 0u;
         uint32_t n = 0u;
 
-        if (entries[i].type != FS_NODE_FILE || !smod_has_extension(name)) continue;
+        if (entries[i].type != FS_NODE_FILE || !smod_has_extension(name) ||
+            smod_name_already_loaded(name)) continue;
         if (smod_loaded_count >= SMOD_MAX_LOADED) {
             klog_info("smod", "Module capacity reached");
             break;

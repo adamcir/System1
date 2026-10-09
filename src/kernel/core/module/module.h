@@ -7,6 +7,8 @@
  * Absent directory and invalid modules do not prevent boot.
  */
 int smod_boot_load_all(uint32_t boot_magic);
+/* Bootloader/embedded SMOD activation before MM, IRQ and filesystem init. */
+int smod_boot_early_init(uint32_t magic, uint32_t info_ptr);
 
 /* Kernel core consumers; backed by resident hardware SMOD drivers. */
 void smod_serial_write(char value);

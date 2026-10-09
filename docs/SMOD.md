@@ -116,3 +116,33 @@ the physical filesystem is mounted. This driver must currently be built
 into the **bootstrap kernel**: a module stored on the disk cannot be
 used to read the disk that contains it. Future platforms can register
 different controller ops and still reuse the FAT12 and VFS code.
+
+
+## Early SMOD boot stage (before the filesystem)
+
+SMOD now has two stages. The first is called directly from the architecture
+boot entry, **after the minimal paging map is ready** (x86_64 starts with only
+2 MiB mapped), but **before the heap allocator, IRQ controller, filesystem or
+userspace**. The validated module images are copied into a dedicated, bounded
+4 KiB resident arena in the kernel and activated through the same SMOD ABI.
+They cannot allocate with `kmalloc` or rely on POSIX at this stage.
+
+- **GRUB / Multiboot2**: the loader accepts only module tags whose
+  command line starts with `smod:`. Their code ranges and tag bounds
+  must be within the active identity mapping. `rootfs.iso` is excluded.
+  The GRUB menu preloads `com1.mod` and `cmos.mod` as separate modules.
+- **i386 floppy**: the same native `.mod` binaries are embedded by
+  `early_smod.S` into the boot payload and validated / executed by the
+  early loader. This removes the cycle of having to read the disk before
+  the disk controller exists. The source .mod files also remain on FAT12.
+
+After the real filesystem is mounted, the ordinary second-stage loader
+scans `/boot/modules`. Names of already activated early modules are
+remembered and skipped; only additional modules are loaded.
+
+**Important limitation**: this is not yet a fully dynamic microkernel.
+The essential boot stub, page mapping, kernel TTY, loader, and the initial
+FDC/VGA/PS2 bootstrap backends are still statically linked. Moving them
+requires preboot access to hardware, new driver APIs, and (for VGA/PS2)
+full native code/data/relocation support. They cannot all be loaded from
+the filesystem they are needed to mount.

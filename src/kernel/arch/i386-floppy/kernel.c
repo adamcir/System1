@@ -10,6 +10,7 @@
 #include "paging.h"
 #include "mm.h"
 #include "bootstrap.h"
+#include "module.h"
 #include "floppy_controller.h"
 #include "usermode.h"
 
@@ -24,6 +25,8 @@ void kmain_floppy_i386(uint32_t magic, uint32_t boot_info_ptr) {
         panic("Paging_init failed");
     }
     klog_info("paging", "Initialized");
+
+    (void)smod_boot_early_init(magic, boot_info_ptr);
 
     if (mm_init(magic, boot_info_ptr) != 0) {
         panic("MM_init failed");
