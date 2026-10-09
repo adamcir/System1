@@ -7,6 +7,7 @@ ROOTFS_SRC_DIR="$ROOT_DIR/rootfs/x86_64"
 ROOTFS_BUILD_DIR="$ROOT_DIR/build/staging/rootfs-iso64"
 ROOTFS_ISO_TMP="$ROOT_DIR/build/staging/rootfs-iso64.iso"
 KERNEL_ELF="$ROOT_DIR/build/artifacts/x86_64/kernel.elf"
+USERLAND_DIR="$ROOT_DIR/src/userland/build/i386"
 ROOTFS_ISO="$STAGE_DIR/boot/rootfs.iso"
 OUT_ISO="$ROOT_DIR/build/artifacts/images/system1-iso-x86_64.iso"
 
@@ -36,6 +37,9 @@ mkdir -p "$ROOTFS_BUILD_DIR/bin" "$ROOTFS_BUILD_DIR/boot/modules"
 for module in ${SMOD_MODULES:-com1 cmos}; do
   cp "$ROOT_DIR/build/artifacts/modules/x86_64/${module}.mod" "$ROOTFS_BUILD_DIR/boot/modules/"
 done
+# x86_64 kernel uses IA-32 compatibility mode for current SPRG executables.
+# Always stage freshly built SMU binaries, not stale files from the tree.
+cp "$USERLAND_DIR"/*.prg "$ROOTFS_BUILD_DIR/bin/"
 cp "$KERNEL_ELF" "$ROOTFS_BUILD_DIR/boot/kernel.elf"
 xorriso -as mkisofs -R -J -o "$ROOTFS_ISO_TMP" "$ROOTFS_BUILD_DIR" >/dev/null 2>&1
 cp "$ROOTFS_ISO_TMP" "$ROOTFS_BUILD_DIR/boot/rootfs.iso"

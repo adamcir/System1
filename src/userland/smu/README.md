@@ -57,3 +57,21 @@ true/false  return success/failure for shell conditionals
 
 The Kernel Shell exposes a compact recovery subset of filesystem and
 diagnostic operations, while normal interactive work should use MSh + SMU.
+
+## Shell paths and recursive removal
+
+The `ls` command supports `-a`, `-l`, `-d`, `-1` and
+combined options like `ls -la`. `rm -r` traverses directories,
+`rm -f` suppresses missing-path errors, and `rm -rf dir/` removes
+the directory tree on writable FAT12 or RAMFS. The implementation
+refuses deletion of the filesystem root and dot/dot-dot paths.
+`cd` is a MultiShell builtin. TAB completion appends `/` when
+a unique directory match is found.
+
+`write /dev/tty Hello` sends bytes through the TTY device via VFS;
+`write /dev/ttyS0 Hello` targets the COM1 UART module;
+`write /dev/kmsg Hello` adds a message to the kernel log.
+
+The x86_64 boot ISO now installs the same newly built i386 SPRG
+executables as the i386 ISO; the kernel runs them using its IA-32
+compatibility-mode userspace implementation.
