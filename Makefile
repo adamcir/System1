@@ -50,7 +50,7 @@ KERNEL32_ELF  := $(I386_OUT_DIR)/kernel.elf
 KERNEL64_ELF  := $(X64_OUT_DIR)/kernel.elf
 KERNELFLP_ELF := $(FLP_OUT_DIR)/kernel.elf
 
-SMOD_DRIVERS := com1 cmos picpit
+SMOD_DRIVERS := com1 cmos picpit vga ps2 fdc
 SMOD_I386_FILES := $(addprefix $(BUILD_OUT)/modules/i386/,$(addsuffix .mod,$(SMOD_DRIVERS)))
 SMOD_X64_FILES := $(addprefix $(BUILD_OUT)/modules/x86_64/,$(addsuffix .mod,$(SMOD_DRIVERS)))
 

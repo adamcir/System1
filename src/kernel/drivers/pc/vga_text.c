@@ -3,7 +3,9 @@
 
 #define VGA_WIDTH 80u
 #define VGA_HEIGHT 25u
+#ifndef VGA_TEXT_PATH_MAX
 #define VGA_TEXT_PATH_MAX (VGA_WIDTH * VGA_HEIGHT)
+#endif
 
 static volatile uint16_t* const VGA = (uint16_t*)0xB8000;
 static uint16_t row;

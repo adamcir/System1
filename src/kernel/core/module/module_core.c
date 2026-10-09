@@ -226,7 +226,7 @@ static int smod_activate(void* image, uint32_t entry_offset,
         loaded_input = pending_input;
         has_input = 1u;
         (void)input_register(&loaded_input);
-        /* Explicit hardware init runs later in the architecture entry. */
+        loaded_input.init();
     }
     if (pending_has_irq_chip) {
         loaded_irq_chip = pending_irq_chip;
@@ -285,6 +285,7 @@ int smod_core_preload(const uint8_t* file, uint32_t bytes, const char* name) {
         smod_preloaded_names[smod_preloaded_count][i] = name[i];
     smod_preloaded_names[smod_preloaded_count][i] = '\0';
     ++smod_preloaded_count;
+    klog_info("smod", name);
     return 0;
 }
 

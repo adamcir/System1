@@ -324,6 +324,7 @@ static void pc_fdc_reset_state(void) {
     pc_fdc_ready = 0u;
 }
 
+#ifndef SYSTEM1_SMOD_FDC
 static const system_floppy_controller_ops_t pc_fdc_ops = {
     SYSTEM_FLOPPY_ABI,
     pc_fdc_read_sector_buffer,
@@ -334,3 +335,5 @@ static const system_floppy_controller_ops_t pc_fdc_ops = {
 void floppy_controller_platform_init(void) {
     (void)floppy_controller_register(&pc_fdc_ops);
 }
+
+#endif /* SYSTEM1_SMOD_FDC */

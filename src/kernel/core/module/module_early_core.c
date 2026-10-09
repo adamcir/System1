@@ -37,6 +37,12 @@ int smod_boot_early_init(uint32_t magic, uint32_t info_ptr) {
     extern const uint8_t __smod_floppy_cmos_end[];
     extern const uint8_t __smod_floppy_picpit_begin[];
     extern const uint8_t __smod_floppy_picpit_end[];
+    extern const uint8_t __smod_floppy_vga_begin[];
+    extern const uint8_t __smod_floppy_vga_end[];
+    extern const uint8_t __smod_floppy_ps2_begin[];
+    extern const uint8_t __smod_floppy_ps2_end[];
+    extern const uint8_t __smod_floppy_fdc_begin[];
+    extern const uint8_t __smod_floppy_fdc_end[];
 
     (void)info_ptr;
     if (magic != SMOD_FLOPPY_MAGIC) return 0;
@@ -49,6 +55,15 @@ int smod_boot_early_init(uint32_t magic, uint32_t info_ptr) {
     if (smod_core_preload(__smod_floppy_picpit_begin,
         (uint32_t)(__smod_floppy_picpit_end - __smod_floppy_picpit_begin),
         "picpit.mod") == 0) ++loaded;
+    if (smod_core_preload(__smod_floppy_vga_begin,
+        (uint32_t)(__smod_floppy_vga_end - __smod_floppy_vga_begin),
+        "vga.mod") == 0) ++loaded;
+    if (smod_core_preload(__smod_floppy_ps2_begin,
+        (uint32_t)(__smod_floppy_ps2_end - __smod_floppy_ps2_begin),
+        "ps2.mod") == 0) ++loaded;
+    if (smod_core_preload(__smod_floppy_fdc_begin,
+        (uint32_t)(__smod_floppy_fdc_end - __smod_floppy_fdc_begin),
+        "fdc.mod") == 0) ++loaded;
 #else
     const uint8_t* data;
     uint32_t total, off, seen = 0u;

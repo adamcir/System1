@@ -146,3 +146,25 @@ FDC/VGA/PS2 bootstrap backends are still statically linked. Moving them
 requires preboot access to hardware, new driver APIs, and (for VGA/PS2)
 full native code/data/relocation support. They cannot all be loaded from
 the filesystem they are needed to mount.
+
+## PC native hardware module set
+
+Boot media now distributes six native drivers:
+`com1.mod` (UART), `cmos.mod` (RTC), `picpit.mod` (8259 PIC and
+8253 PIT), `vga.mod` (VGA console with cursor/line editing),
+`ps2.mod` (PS/2 keyboard and scancode translation) and `fdc.mod`
+(82077 floppy controller with 8237 DMA programming).
+
+The SMOD API revision 3 registers typed device operation tables. The
+kernel **copies the operation tables** and activates a new driver only
+after a successful entrypoint; callbacks remain in resident module code.
+The entire module image including zero-initialized state must fit the
+native SMOD memory limit. The floppy image also retains the built-in
+hardware fallback adapters: they are required when a module fails
+validation or when the small floppy early-module arena fills up. The
+generic TTY, VFS, POSIX, CPU paging, and usermode services remain core
+kernel facilities, not magically hot-swappable modules.
+
+Removing all built-in boot backends safely also requires a real
+pre-kernel device discovery/driver manager and a memory map compatible
+with the floppy's 1 MiB constraint.
