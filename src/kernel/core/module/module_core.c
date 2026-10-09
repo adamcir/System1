@@ -247,7 +247,7 @@ static int smod_core_load_file(const char* path, uint32_t boot_magic) {
             klog_info("smod", "Boot module arena full");
             return -1;
         }
-        image = smod_boot_image + smod_floppy_used;
+        image = smod_boot_image + smod_boot_used;
         lowmem_arena = 1u;
     } else {
         image = kmalloc(memory_size);
