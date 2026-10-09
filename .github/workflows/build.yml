@@ -57,6 +57,30 @@ jobs:
           grep -F "Starting configured userspace shell" "$LOG" || { cat "$LOG"; exit 1; }
           grep -F "/dev and /proc live" "$LOG" || { cat "$LOG"; exit 1; }
 
+      - name: Ensure removing vga.mod disables video driver
+        run: |
+          set -eu
+          IMG="${RUNNER_TEMP}/system1-no-vga.img"
+          LOG="${RUNNER_TEMP}/system1-no-vga.log"
+          cp build/artifacts/images/system1-img-32.img "$IMG"
+          mdel -i "$IMG" ::/boot/modules/vga.mod
+          timeout 20s qemu-system-i386 -m 1M -display none \
+            -drive file="$IMG",format=raw,if=floppy \
+            -serial stdio -no-reboot > "$LOG" 2>&1 || rc=$?
+          if [ "${rc:-0}" -ne 0 ] && [ "${rc:-0}" -ne 124 ]; then
+            cat "$LOG"
+            exit 1
+          fi
+          if grep -F "smod: /boot/modules/vga.mod" "$LOG" || \
+             grep -F "smod: vga.mod" "$LOG"; then
+            cat "$LOG"
+            echo "VGA driver activated without vga.mod!"
+            exit 1
+          fi
+          grep -F "Physical filesystem mounted as root" "$LOG" || { cat "$LOG"; exit 1; }
+          grep -F "Starting configured userspace shell" "$LOG" || { cat "$LOG"; exit 1; }
+          grep -F "/dev and /proc live" "$LOG" || { cat "$LOG"; exit 1; }
+
       - name: Boot i386 and x86_64 GRUB with native SMOD drivers
         run: |
           set -eu
