@@ -15,7 +15,6 @@
 
 void kmain_i386(uint32_t magic, uint32_t info) {
     platform_early_init();
-    tty_init();
 
     if (paging_init(magic, info) != 0) {
         panic("Paging_init failed");
@@ -23,6 +22,7 @@ void kmain_i386(uint32_t magic, uint32_t info) {
     klog_info("paging", "Initialized");
 
     (void)smod_boot_early_init(magic, info);
+    tty_init();
 
     if (mm_init(magic, info) != 0) {
         panic("MM_init failed");

@@ -57,7 +57,10 @@ int bootstrap_init(uint32_t boot_magic, uint32_t boot_info_ptr) {
             got > 0u &&
             fs_core_open("/dev/null", FS_O_WRONLY, &id) == FS_OK &&
             fs_core_write(id, 0u, "ok", 2u, &wrote) == FS_OK &&
-            wrote == 2u) {
+            wrote == 2u &&
+            fs_core_open("/dev/tty", FS_O_WRONLY, &id) == FS_OK &&
+            fs_core_write(id, 0u, "", 0u, &wrote) == FS_OK &&
+            wrote == 0u) {
             klog_info("vfs", "/dev and /proc live");
         } else {
             klog_info("vfs", "Pseudo filesystem check failed");

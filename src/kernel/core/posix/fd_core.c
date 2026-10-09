@@ -1,6 +1,7 @@
 #include "fd_core.h"
 #include "platform.h"
 #include "fs_core.h"
+#include "pseudo_fs.h"
 #include "input.h"
 #include "signals.h"
 #include "posix.h"
@@ -441,6 +442,22 @@ int fd_core_dup2(int oldfd, int newfd) {
     return newfd;
 }
 
+/* A terminal opened by pathname must behave like standard TTY fds,
+ * including ioctl(), isatty(), and userland I/O redirection.
+ */
+static int fd_is_terminal(const fd_description_t* desc) {
+    uint32_t id;
+    if (!desc) return 0;
+    if (desc->kind == FD_KIND_TTY_IN || desc->kind == FD_KIND_TTY_OUT) return 1;
+    if (desc->kind != FD_KIND_VFS || !PSEUDO_IS_FD(desc->node_id)) return 0;
+    id = desc->node_id & ~PSEUDO_FD_TAG;
+    return id == 2u || id == 3u;
+}
+static int fd_terminal_input(const fd_description_t* desc) {
+    return desc && (desc->kind == FD_KIND_TTY_IN ||
+        (desc->kind == FD_KIND_VFS && fd_is_terminal(desc)));
+}
+
 int fd_core_isatty(int fd) {
     fd_table_t* table;
     fd_description_t* desc;
@@ -450,7 +467,7 @@ int fd_core_isatty(int fd) {
     desc = fd_description(table, fd);
     if (desc == 0) return -POSIX_EBADF;
 
-    return (desc->kind == FD_KIND_TTY_IN || desc->kind == FD_KIND_TTY_OUT) ? 1 : 0;
+    return fd_is_terminal(desc);
 }
 
 int fd_core_ioctl(int fd, uint32_t request, uint32_t arg) {
@@ -462,7 +479,7 @@ int fd_core_ioctl(int fd, uint32_t request, uint32_t arg) {
     desc = fd_description(table, fd);
 
     if (desc == 0) return -POSIX_EBADF;
-    if (desc->kind != FD_KIND_TTY_IN && desc->kind != FD_KIND_TTY_OUT) {
+    if (!fd_is_terminal(desc)) {
         return -POSIX_ENOTTY;
     }
 
@@ -475,7 +492,7 @@ int fd_core_ioctl(int fd, uint32_t request, uint32_t arg) {
     if (request == 0x5302u) {
         int key;
 
-        if (desc->kind != FD_KIND_TTY_IN) return -POSIX_ENOTTY;
+        if (!fd_terminal_input(desc)) return -POSIX_ENOTTY;
         for (;;) {
             input_poll();
             key = input_take_key();
@@ -492,7 +509,7 @@ int fd_core_ioctl(int fd, uint32_t request, uint32_t arg) {
     }
 
     if (request == 0x5303u) {
-        if (desc->kind != FD_KIND_TTY_IN) return -POSIX_ENOTTY;
+        if (!fd_terminal_input(desc)) return -POSIX_ENOTTY;
         tty_get_cursor(&g_tty_line_row, &g_tty_line_col);
         tty_text_begin(g_tty_line_row, g_tty_line_col);
         return 0;
@@ -501,7 +518,7 @@ int fd_core_ioctl(int fd, uint32_t request, uint32_t arg) {
     if (request == 0x5304u) {
         const fd_tty_line_t* line = (const fd_tty_line_t*)(uintptr_t)arg;
 
-        if (desc->kind != FD_KIND_TTY_IN || line == 0 || line->buffer == 0) {
+        if (!fd_terminal_input(desc) || line == 0 || line->buffer == 0) {
             return -POSIX_EINVAL;
         }
         if (line->cursor > line->len) return -POSIX_EINVAL;
