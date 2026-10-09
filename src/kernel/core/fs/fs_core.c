@@ -7,6 +7,7 @@
 #include "ramfs_core.h"
 #include "vfs_core.h"
 #include "floppy_controller.h"
+#include "pseudo_fs.h"
 
 static const vfs_driver_t* g_root_driver = 0;
 static const vfs_driver_t* g_media_driver = 0;
@@ -673,7 +674,8 @@ int fs_core_change_dir(const char* path) {
         return rc;
     }
 
-    rc = g_root_driver->change_dir(resolved);
+    rc = pseudo_fs_is_path(resolved) ?
+         pseudo_fs_change_dir(resolved) : g_root_driver->change_dir(resolved);
     if (rc != FS_OK) {
         return rc;
     }
@@ -695,6 +697,7 @@ int fs_core_make_dir(const char* path) {
         return rc;
     }
 
+    if (pseudo_fs_is_path(full_path)) return FS_ERR_READ_ONLY;
     return g_root_driver->make_dir(full_path);
 }
 
@@ -715,6 +718,7 @@ int fs_core_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, uint3
         return rc;
     }
 
+    if (pseudo_fs_is_path(full_path)) return pseudo_fs_list_dir(full_path, entries, cap, out_count);
     rc = g_root_driver->list_dir(full_path, entries, cap, out_count);
     if (rc == FS_OK) {
         uint32_t i;
@@ -753,6 +757,8 @@ int fs_core_list_dir(const char* path, fs_dirent_t* entries, uint32_t cap, uint3
             }
         }
     }
+    if (rc == FS_OK && full_path[0] == '/' && full_path[1] == '\0')
+        return pseudo_fs_append_root(entries, cap, out_count);
     return rc;
 }
 
@@ -769,6 +775,8 @@ int fs_core_read_file(const char* path, char* buffer, uint32_t cap, uint32_t* ou
         return rc;
     }
 
+    if (pseudo_fs_is_path(full_path))
+        return pseudo_fs_read_file(full_path, buffer, cap, out_size);
     if (g_root_driver == 0 || g_root_driver->read_file == 0) {
         return FS_ERR_INVALID;
     }
@@ -796,6 +804,8 @@ int fs_core_open(const char* path, uint32_t flags, uint32_t* out_node_id) {
         return rc;
     }
 
+    if (pseudo_fs_is_path(full_path))
+        return pseudo_fs_open(full_path, flags, out_node_id);
     if (g_root_driver == 0 || g_root_driver->open == 0) {
         return FS_ERR_INVALID;
     }
@@ -816,6 +826,7 @@ int fs_core_open(const char* path, uint32_t flags, uint32_t* out_node_id) {
 }
 
 int fs_core_read(uint32_t node_id, uint32_t offset, char* buffer, uint32_t cap, uint32_t* out_size) {
+    if (PSEUDO_IS_FD(node_id)) return pseudo_fs_read(node_id, offset, buffer, cap, out_size);
     if (g_root_driver == 0 || g_root_driver->read == 0) {
         return FS_ERR_INVALID;
     }
@@ -824,6 +835,7 @@ int fs_core_read(uint32_t node_id, uint32_t offset, char* buffer, uint32_t cap, 
 }
 
 int fs_core_write(uint32_t node_id, uint32_t offset, const char* buffer, uint32_t size, uint32_t* out_written) {
+    if (PSEUDO_IS_FD(node_id)) return pseudo_fs_write(node_id, offset, buffer, size, out_written);
     if (g_root_driver == 0 || g_root_driver->write == 0) {
         return FS_ERR_READ_ONLY;
     }
@@ -832,6 +844,7 @@ int fs_core_write(uint32_t node_id, uint32_t offset, const char* buffer, uint32_
 }
 
 int fs_core_size(uint32_t node_id, uint32_t* out_size) {
+    if (PSEUDO_IS_FD(node_id)) return pseudo_fs_size(node_id, out_size);
     if (g_root_driver == 0 || g_root_driver->size == 0) {
         return FS_ERR_INVALID;
     }
@@ -840,6 +853,7 @@ int fs_core_size(uint32_t node_id, uint32_t* out_size) {
 }
 
 int fs_core_close(uint32_t node_id) {
+    if (PSEUDO_IS_FD(node_id)) return pseudo_fs_close(node_id);
     if (g_root_driver == 0 || g_root_driver->close == 0) {
         return FS_OK;
     }
@@ -860,6 +874,7 @@ int fs_core_stat(const char* path, fs_stat_t* out_stat) {
         return rc;
     }
 
+    if (pseudo_fs_is_path(full_path)) return pseudo_fs_stat(full_path, out_stat);
     if (g_root_driver == 0 || g_root_driver->stat == 0) {
         return FS_ERR_INVALID;
     }
@@ -875,6 +890,7 @@ int fs_core_stat(const char* path, fs_stat_t* out_stat) {
 }
 
 int fs_core_fstat(uint32_t node_id, fs_stat_t* out_stat) {
+    if (PSEUDO_IS_FD(node_id)) return pseudo_fs_fstat(node_id, out_stat);
     if (g_root_driver == 0 || g_root_driver->fstat == 0) {
         return FS_ERR_INVALID;
     }
@@ -895,6 +911,7 @@ int fs_core_unlink(const char* path) {
         return rc;
     }
 
+    if (pseudo_fs_is_path(full_path)) return FS_ERR_READ_ONLY;
     if (g_root_driver == 0 || g_root_driver->unlink == 0) {
         return FS_ERR_READ_ONLY;
     }

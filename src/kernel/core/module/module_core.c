@@ -18,6 +18,21 @@
 /* Bootstrap module registry. Modules stay resident until shutdown. */
 static void* smod_images[SMOD_MAX_LOADED];
 static uint32_t smod_loaded_count;
+static char smod_registered_names[SMOD_MAX_LOADED][FS_NAME_CAP];
+
+uint32_t smod_module_count(void) { return smod_loaded_count; }
+const char* smod_module_name(uint32_t index) {
+    return index < smod_loaded_count ? smod_registered_names[index] : 0;
+}
+static void smod_store_name(uint32_t index, const char* name) {
+    uint32_t i = 0u;
+    if (!name || index >= SMOD_MAX_LOADED) return;
+    while (i + 1u < FS_NAME_CAP && name[i] != '\0') {
+        smod_registered_names[index][i] = name[i]; ++i;
+    }
+    smod_registered_names[index][i] = '\0';
+}
+
 
 /* The floppy profile has only 1 MiB RAM. Its legacy MM fallback can hand
  * kmalloc() physical addresses above installed RAM. Execute a small boot
@@ -281,6 +296,7 @@ int smod_core_preload(const uint8_t* file, uint32_t bytes, const char* name) {
     for (i = 0u; i < image_size; ++i) image[i] = file[SMOD_HEADER_SIZE + i];
     for (; i < memory_size; ++i) image[i] = 0u;
     if (smod_activate(image, entry_offset, 1u, aligned_size) != 0) return -1;
+    smod_store_name(smod_loaded_count - 1u, name);
     for (i = 0u; i + 1u < FS_NAME_CAP && name[i] != '\0'; ++i)
         smod_preloaded_names[smod_preloaded_count][i] = name[i];
     smod_preloaded_names[smod_preloaded_count][i] = '\0';
@@ -401,6 +417,7 @@ int smod_core_boot_load_all(uint32_t boot_magic) {
 
         if (smod_core_load_file(path, boot_magic) == 0) {
             ++loaded;
+            smod_store_name(smod_loaded_count - 1u, name);
             klog_info("smod", path);
         } else {
             klog_info("smod", "Invalid or unsupported .mod file");

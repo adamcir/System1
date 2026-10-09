@@ -13,5 +13,7 @@ int smod_boot_early_init(uint32_t magic, uint32_t info_ptr);
 /* Kernel core consumers; backed by resident hardware SMOD drivers. */
 void smod_serial_write(char value);
 int smod_rtc_read(smod_clock_time_t* time);
+uint32_t smod_module_count(void);
+const char* smod_module_name(uint32_t index);
 
 #endif
