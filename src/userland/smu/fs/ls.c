@@ -3,71 +3,74 @@
 #include "system1/unistd.h"
 #include "../common/uutil.h"
 
-#define LS_ENTRY_CAP 32u
+#define LS_CAP 32u
+static int g_all, g_long, g_dir_only;
 
-static int ls_directory(const char* path) {
-    struct dirent entries[LS_ENTRY_CAP];
-    int count;
-    int i;
-
-    count = getdents(path, entries, LS_ENTRY_CAP);
-    if (count < 0) {
-        u_err("ls: cannot read directory: ");
-        u_err(path);
-        u_err("\n");
-        return 1;
-    }
-
-    for (i = 0; i < count; ++i) {
-        u_puts(entries[i].d_name);
-        if (entries[i].d_type == DT_DIR) u_puts("/");
-        else if (entries[i].d_type == DT_LNK) u_puts("@");
-        u_puts("\n");
-    }
-
-    return 0;
+static void num(unsigned n) {
+    char b[12];
+    unsigned i = 0u;
+    do { b[i++] = (char)('0' + n % 10u); n /= 10u; } while (n);
+    while (i) (void)write(STDOUT_FILENO, &b[--i], 1u);
 }
-
-static int ls_path(const char* path, int print_header) {
-    struct stat st;
-
-    if (stat(path, &st) < 0) {
-        u_err("ls: cannot access: ");
-        u_err(path);
-        u_err("\n");
-        return 1;
+static void print_item(const char* name, unsigned char type, const char* dir) {
+    if (g_long) {
+        char path[128];
+        struct stat st;
+        if (dir && u_join3(path, sizeof(path), dir, "/", name) == 0 &&
+            stat(path, &st) == 0) {
+            u_puts(type == DT_DIR ? "d " : type == DT_LNK ? "l " : "- ");
+            num(st.st_size); u_puts(" ");
+        } else u_puts("? ");
     }
-
-    if ((st.st_mode & S_IFDIR) == S_IFDIR) {
-        if (print_header) {
-            u_puts(path);
-            u_puts(":\n");
-        }
-        return ls_directory(path);
-    }
-
-    u_puts(path);
+    u_puts(name);
+    if (type == DT_DIR) u_puts("/");
+    else if (type == DT_LNK) u_puts("@");
     u_puts("\n");
+}
+static int list_dir(const char* path) {
+    struct dirent entries[LS_CAP];
+    int count = getdents(path, entries, LS_CAP);
+    int i;
+    if (count < 0) {
+        u_err("ls: cannot read "); u_err(path); u_err("\n"); return 1;
+    }
+    for (i = 0; i < count; ++i) {
+        if (!g_all && entries[i].d_name[0] == '.') continue;
+        print_item(entries[i].d_name, entries[i].d_type, path);
+    }
     return 0;
 }
-
+static int list_path(const char* path, int header) {
+    struct stat st;
+    if (stat(path, &st) < 0) {
+        u_err("ls: cannot access "); u_err(path); u_err("\n"); return 1;
+    }
+    if (header) { u_puts(path); u_puts(":\n"); }
+    if ((st.st_mode & S_IFDIR) == S_IFDIR && !g_dir_only) return list_dir(path);
+    print_item(path, (st.st_mode & S_IFDIR) == S_IFDIR ? DT_DIR : DT_REG, 0);
+    return 0;
+}
 int main(int argc, char** argv, char** envp) {
-    int i;
-    int rc = 0;
-    int multiple = (argc > 2);
+    int first = 1, i, rc = 0;
     (void)envp;
-
-    if (argc <= 1) {
-        return ls_directory(".");
+    while (first < argc) {
+        const char* a = argv[first];
+        unsigned j;
+        if (u_streq(a, "--")) { ++first; break; }
+        if (a[0] != '-' || !a[1]) break;
+        for (j = 1u; a[j]; ++j) {
+            if (a[j] == 'a' || a[j] == 'A') g_all = 1;
+            else if (a[j] == 'l') g_long = 1;
+            else if (a[j] == 'd') g_dir_only = 1;
+            else if (a[j] == '1' || a[j] == 'F') {}
+            else { u_err("ls: usage: ls [-ald1F] [paths...]\n"); return 2; }
+        }
+        ++first;
     }
-
-    for (i = 1; i < argc; ++i) {
-        int current;
-
-        if (multiple && i > 1) u_puts("\n");
-        current = ls_path(argv[i], multiple);
-        if (current != 0) rc = current;
+    if (first == argc) return list_dir(".");
+    for (i = first; i < argc; ++i) {
+        if (i > first) u_puts("\n");
+        if (list_path(argv[i], argc - first > 1) != 0) rc = 1;
     }
-
     return rc;
 }

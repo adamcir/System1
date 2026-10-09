@@ -323,6 +323,7 @@ static void complete_path(char* line, unsigned cap, unsigned* len,
     int m;
     unsigned matches = 0u;
     unsigned common = 0u;
+    unsigned char unique_type = 0u;
 
     while (start + tlen < *cursor && tlen + 1u < sizeof(token)) {
         token[tlen] = line[start + tlen];
@@ -356,13 +357,21 @@ static void complete_path(char* line, unsigned cap, unsigned* len,
         if (entries[m].d_name[0] == '.' && prefix[0] != '.') continue;
         if (!starts_with(entries[m].d_name, prefix)) continue;
         common = common_prefix(best, entries[m].d_name, matches);
+        unique_type = entries[m].d_type;
         ++matches;
     }
 
     if (matches > 0u && common > u_strlen(prefix)) {
         char replacement[PATH_CAP];
-        if (u_join3(replacement, sizeof(replacement), base, best, "") == 0)
+        if (u_join3(replacement, sizeof(replacement), base, best, "") == 0) {
+            unsigned rl = u_strlen(replacement);
+            if (matches == 1u && unique_type == DT_DIR &&
+                rl + 1u < sizeof(replacement) && replacement[rl - 1u] != '/') {
+                replacement[rl] = '/';
+                replacement[rl + 1u] = '\0';
+            }
             (void)replace_range(line, cap, len, cursor, start, *cursor, replacement);
+        }
     }
 }
 
