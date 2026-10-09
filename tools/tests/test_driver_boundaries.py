@@ -57,8 +57,10 @@ class DriverBoundaries(unittest.TestCase):
         asm = (KERNEL / "arch/i386-floppy/early_smod.S").read_text(encoding="utf-8")
         self.assertIn('.incbin "build/artifacts/modules/i386/com1.mod"', asm)
         self.assertIn('.incbin "build/artifacts/modules/i386/cmos.mod"', asm)
-        for name in ("picpit", "vga", "ps2", "fdc"):
+        for name in ("picpit", "fdc"):
             self.assertIn(f'.incbin "build/artifacts/modules/i386/{name}.mod"', asm)
+        for name in ("vga", "ps2"):
+            self.assertNotIn(f'.incbin "build/artifacts/modules/i386/{name}.mod"', asm)
         for arch in ("i386", "x86_64"):
             cfg = (ROOT / "rootfs" / arch / "boot/grub/grub.cfg").read_text(encoding="utf-8")
             self.assertIn("smod:com1.mod", cfg)

@@ -34,6 +34,35 @@ int bootstrap_init(uint32_t boot_magic, uint32_t boot_info_ptr) {
 
     syscall_init();
     (void)smod_boot_load_all(boot_magic);
+
+    /* VFS smoke test: devfs and procfs are live virtual mounts, not files
+     * copied to FAT12/ISO9660. Must work with RAMFS and physical roots.
+     */
+    {
+        fs_stat_t dev, proc;
+        uint32_t id, got = 0u, wrote = 0u;
+        char zeros[4];
+        char info[48];
+        if (fs_core_stat("/dev", &dev) == FS_OK &&
+            fs_core_stat("/proc", &proc) == FS_OK &&
+            (dev.mode & FS_MODE_DIR) != 0u &&
+            (proc.mode & FS_MODE_DIR) != 0u &&
+            fs_core_open("/dev/zero", FS_O_RDONLY, &id) == FS_OK &&
+            fs_core_read(id, 0u, zeros, sizeof(zeros), &got) == FS_OK &&
+            got == sizeof(zeros) &&
+            zeros[0] == 0 && zeros[1] == 0 &&
+            zeros[2] == 0 && zeros[3] == 0 &&
+            fs_core_open("/proc/version", FS_O_RDONLY, &id) == FS_OK &&
+            fs_core_read(id, 0u, info, sizeof(info), &got) == FS_OK &&
+            got > 0u &&
+            fs_core_open("/dev/null", FS_O_WRONLY, &id) == FS_OK &&
+            fs_core_write(id, 0u, "ok", 2u, &wrote) == FS_OK &&
+            wrote == 2u) {
+            klog_info("vfs", "/dev and /proc live");
+        } else {
+            klog_info("vfs", "Pseudo filesystem check failed");
+        }
+    }
     return 0;
 }
 

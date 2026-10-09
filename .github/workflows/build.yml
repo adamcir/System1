@@ -55,6 +55,7 @@ jobs:
           done
           grep -F "Physical filesystem mounted as root" "$LOG" || { cat "$LOG"; exit 1; }
           grep -F "Starting configured userspace shell" "$LOG" || { cat "$LOG"; exit 1; }
+          grep -F "/dev and /proc live" "$LOG" || { cat "$LOG"; exit 1; }
 
       - name: Boot i386 and x86_64 GRUB with native SMOD drivers
         run: |
@@ -87,6 +88,7 @@ jobs:
             done
             grep -F "Physical filesystem mounted as root" "$LOG" || { cat "$LOG"; exit 1; }
             grep -F "Starting configured userspace shell" "$LOG" || { cat "$LOG"; exit 1; }
+          grep -F "/dev and /proc live" "$LOG" || { cat "$LOG"; exit 1; }
           done
 
       - name: Check userspace programs
