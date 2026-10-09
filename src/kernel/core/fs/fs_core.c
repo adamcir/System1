@@ -7,6 +7,7 @@
 #include "ramfs_core.h"
 #include "vfs_core.h"
 #include "floppy_controller.h"
+#include "paging.h"
 #include "pseudo_fs.h"
 
 static const vfs_driver_t* g_root_driver = 0;
@@ -198,31 +199,37 @@ static int fs_memory_module_read(block_device_t* dev, uint32_t lba, uint32_t cou
     return FS_OK;
 }
 
+/* Only the Multiboot2 module explicitly named 'rootfs' may be mounted.
+ * Other module records are native SMOD binaries, not disk images.
+ */
 static int fs_install_mb2_module_device(void) {
-    uint32_t cursor;
-    uint32_t total_size;
-
-    if (g_boot_magic != FS_MB2_BOOTLOADER_MAGIC || g_boot_info_ptr == 0u) {
+    uint32_t total, offset;
+    const uint8_t* info;
+    uintptr_t limit = paging_identity_limit();
+    if (g_boot_magic != FS_MB2_BOOTLOADER_MAGIC ||
+        !g_boot_info_ptr || g_boot_info_ptr >= limit ||
+        limit - g_boot_info_ptr < 16u) return FS_ERR_INVALID;
+    info = (const uint8_t*)(uintptr_t)g_boot_info_ptr;
+    total = *(const uint32_t*)info;
+    if (total < 16u || total > 65536u || total > limit - g_boot_info_ptr)
         return FS_ERR_INVALID;
-    }
-
-    total_size = *(const uint32_t*)(uintptr_t)g_boot_info_ptr;
-    cursor = g_boot_info_ptr + 8u;
-
-    while (cursor < (g_boot_info_ptr + total_size)) {
-        const fs_mb2_tag_t* tag = (const fs_mb2_tag_t*)(uintptr_t)cursor;
-        uint32_t next;
-
-        if (tag->type == FS_MB2_TAG_TYPE_END) {
-            break;
-        }
-
-        if (tag->type == FS_MB2_TAG_TYPE_MODULE && tag->size >= sizeof(fs_mb2_module_tag_t)) {
-            const fs_mb2_module_tag_t* module = (const fs_mb2_module_tag_t*)tag;
-
-            if (module->mod_end > module->mod_start) {
-                g_mb2_module_start = module->mod_start;
-                g_mb2_module_size = module->mod_end - module->mod_start;
+    offset = 8u;
+    while (offset <= total - 8u) {
+        const fs_mb2_tag_t* tag = (const fs_mb2_tag_t*)(info + offset);
+        uint32_t step;
+        if (tag->size < 8u || tag->size > total - offset) break;
+        if (tag->type == FS_MB2_TAG_TYPE_END) break;
+        if (tag->type == FS_MB2_TAG_TYPE_MODULE &&
+            tag->size >= sizeof(fs_mb2_module_tag_t) + 7u) {
+            const fs_mb2_module_tag_t* mod = (const fs_mb2_module_tag_t*)tag;
+            const char* name = (const char*)tag + sizeof(fs_mb2_module_tag_t);
+            uint32_t begin = mod->mod_start, last = mod->mod_end;
+            if (name[0] == 'r' && name[1] == 'o' && name[2] == 'o' &&
+                name[3] == 't' && name[4] == 'f' && name[5] == 's' &&
+                name[6] == '\0' && last > begin && begin < limit &&
+                last <= limit && last - begin >= 2048u) {
+                g_mb2_module_start = begin;
+                g_mb2_module_size = last - begin;
                 g_mb2_module_device.sector_size = 512u;
                 g_mb2_module_device.sector_count = g_mb2_module_size / 512u;
                 g_mb2_module_device.ctx = 0;
@@ -232,15 +239,11 @@ static int fs_install_mb2_module_device(void) {
                 return FS_OK;
             }
         }
-
-        next = cursor + tag->size;
-        next = (next + 7u) & ~7u;
-        if (next <= cursor) {
-            break;
-        }
-        cursor = next;
+        if (tag->size > 0xfffffff8u) break;
+        step = (tag->size + 7u) & ~7u;
+        if (step > total - offset) break;
+        offset += step;
     }
-
     return FS_ERR_NOT_FOUND;
 }
 

@@ -68,15 +68,22 @@ jobs:
               iso=build/artifacts/images/system1-iso-x86_64.iso
             fi
             LOG="${RUNNER_TEMP}/system1-${arch}.log"
-            timeout 20s "$qemu" -m 64M -display none -cdrom "$iso" \
-              -serial stdio -no-reboot > "$LOG" 2>&1 || rc=$?
+            # Debug 64-bit exceptions to diagnose any early triple fault.
+            if [ "$arch" = "x86_64" ]; then
+              timeout 20s "$qemu" -m 64M -display none -cdrom "$iso" \
+                -serial stdio -no-reboot -d int,guest_errors \
+                -D "$LOG.cpu" > "$LOG" 2>&1 || rc=$?
+            else
+              timeout 20s "$qemu" -m 64M -display none -cdrom "$iso" \
+                -serial stdio -no-reboot > "$LOG" 2>&1 || rc=$?
+            fi
             if [ "${rc:-0}" -ne 0 ] && [ "${rc:-0}" -ne 124 ]; then
               cat "$LOG"
               exit 1
             fi
             unset rc
             for module in com1 cmos picpit vga ps2 fdc; do
-              grep -F "smod: ${module}.mod" "$LOG" || { cat "$LOG"; exit 1; }
+              grep -F "smod: ${module}.mod" "$LOG" || { cat "$LOG"; tail -n 65 "$LOG.cpu" 2>/dev/null || true; exit 1; }
             done
             grep -F "Physical filesystem mounted as root" "$LOG" || { cat "$LOG"; exit 1; }
             grep -F "Starting configured userspace shell" "$LOG" || { cat "$LOG"; exit 1; }

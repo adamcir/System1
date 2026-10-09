@@ -22,6 +22,12 @@ typedef struct {
     uint32_t end;
 } smod_mb2_module_t;
 
+static void smod_serial_trace(const char* prefix, const char* name) {
+    while (prefix && *prefix) smod_serial_write(*prefix++);
+    while (name && *name) smod_serial_write(*name++);
+    smod_serial_write('\n');
+}
+
 static int smod_prefix(const char* data, uint32_t max_bytes) {
     return max_bytes >= 6u &&
            data[0] == 's' && data[1] == 'm' && data[2] == 'o' &&
@@ -92,8 +98,13 @@ int smod_boot_early_init(uint32_t magic, uint32_t info_ptr) {
                     end - start >= SMOD_HEADER_SIZE &&
                     end - start <= SMOD_HEADER_SIZE + SMOD_IMAGE_LIMIT &&
                     start < limit && end <= limit) {
-                    if (smod_core_preload((const uint8_t*)(uintptr_t)start,
-                            end - start, cmdline + 5u) == 0) ++loaded;
+                    int rc;
+                    smod_serial_trace("SMOD begin: ", cmdline + 5u);
+                    rc = smod_core_preload((const uint8_t*)(uintptr_t)start,
+                                          end - start, cmdline + 5u);
+                    smod_serial_trace(rc == 0 ? "SMOD ready: " : "SMOD rejected: ",
+                                      cmdline + 5u);
+                    if (rc == 0) ++loaded;
                 }
             }
         }
