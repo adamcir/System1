@@ -1,6 +1,7 @@
 #include "interrupts.h"
 #include "interrupts_common.h"
 #include "paging.h"
+extern void syscall_entry(void);
 
 typedef struct __attribute__((packed)) {
     uint16_t offset_low;
@@ -97,6 +98,8 @@ void interrupts_init(void) {
     for (i = 0; i < 48; i++) {
         idt_set_gate((uint8_t)i, (uint64_t)(uintptr_t)g_isr_stub_table[i], code_selector, 0x8E);
     }
+
+    idt_set_gate(0x80u, (uint64_t)(uintptr_t)syscall_entry, code_selector, 0xEEu);
 
     idtr.limit = (uint16_t)(sizeof(g_idt) - 1);
     idtr.base = (uint64_t)(uintptr_t)&g_idt[0];

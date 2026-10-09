@@ -228,10 +228,23 @@ void paging_core_handle_page_fault(void) {
 
 int paging_core_set_user_range(uintptr_t start, uintptr_t end, uint8_t writable) {
 #if defined(__x86_64__)
-    (void)start;
-    (void)end;
-    (void)writable;
-    return -1;
+    uintptr_t addr;
+    if (start >= end || start < 0x00060000u ||
+        end > (uintptr_t)PAGING_IDENTITY_LIMIT) return -1;
+    start &= ~(uintptr_t)(PAGE_SIZE - 1u);
+    end = (end + PAGE_SIZE - 1u) & ~(uintptr_t)(PAGE_SIZE - 1u);
+    g_pml4[0] |= 0x4ull;
+    g_pdpt[0] |= 0x4ull;
+    for (addr = start; addr < end; addr += PAGE_SIZE) {
+        uint32_t pd = (uint32_t)(addr >> 21);
+        uint32_t pt = (uint32_t)((addr >> 12) & 511u);
+        if (pd >= 32u) return -1;
+        g_pd[pd] |= 0x4ull;
+        g_pt[pd][pt] |= 0x4ull;
+        if (writable) g_pt[pd][pt] |= 0x2ull;
+        __asm__ volatile("invlpg (%0)" : : "r"(addr) : "memory");
+    }
+    return 0;
 #else
     uintptr_t addr;
 

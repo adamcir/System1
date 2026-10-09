@@ -41,6 +41,7 @@ ISR32_SRC    := $(KDIR_I386)/isr.S
 ISR64_SRC    := $(KDIR_X64)/isr.S
 ISRFLP_SRC   := $(KDIR_FLP)/isr.S
 USERMODE32_SRC  := $(KDIR_I386)/usermode.S
+USERMODE64_SRC  := $(KDIR_X64)/usermode.S
 USERMODEFLP_SRC := $(KDIR_FLP)/usermode.S
 LDS32        := tools/linker/linker.i386.ld
 LDS64        := tools/linker/linker.x86_64.ld
@@ -181,6 +182,9 @@ $(BUILD_OBJ)/isr_i386.o: $(ISR32_SRC) | $(BUILD_OBJ)
 $(BUILD_OBJ)/kernel_i386.o: $(KDIR_I386)/kernel.c | $(BUILD_OBJ)
 	$(I386_CC) $(CFLAGS_COMMON) $(I386_INCLUDES) -m32 -c $< -o $@
 
+$(BUILD_OBJ)/usermode_x64.o: $(USERMODE64_SRC) | $(BUILD_OBJ)
+	$(X64_CC) $(CFLAGS_COMMON) $(X64_INCLUDES) -m64 -mno-red-zone -c $< -o $@
+
 $(BUILD_OBJ)/usermode_i386.o: $(USERMODE32_SRC) | $(BUILD_OBJ)
 	$(I386_CC) $(CFLAGS_COMMON) $(I386_INCLUDES) -m32 -c $< -o $@
 
@@ -215,9 +219,9 @@ $(KERNEL32_ELF): $(LDS32) $(BUILD_OBJ)/mb2_32.o $(BUILD_OBJ)/entry_i386.o $(BUIL
 	$(I386_LD) -m elf_i386 -T $(LDS32) -o $@ \
 		$(BUILD_OBJ)/mb2_32.o $(BUILD_OBJ)/entry_i386.o $(BUILD_OBJ)/isr_i386.o $(BUILD_OBJ)/usermode_i386.o $(BUILD_OBJ)/kernel_i386.o $(I386_MODULE_OBJS)
 
-$(KERNEL64_ELF): $(LDS64) $(BUILD_OBJ)/mb2_64.o $(BUILD_OBJ)/entry_x64.o $(BUILD_OBJ)/isr_x64.o $(BUILD_OBJ)/kernel_x64.o $(X64_MODULE_OBJS) | $(X64_OUT_DIR)
+$(KERNEL64_ELF): $(LDS64) $(BUILD_OBJ)/mb2_64.o $(BUILD_OBJ)/entry_x64.o $(BUILD_OBJ)/isr_x64.o $(BUILD_OBJ)/usermode_x64.o $(BUILD_OBJ)/kernel_x64.o $(X64_MODULE_OBJS) | $(X64_OUT_DIR)
 	$(X64_LD) -m elf_x86_64 -T $(LDS64) -o $@ \
-		$(BUILD_OBJ)/mb2_64.o $(BUILD_OBJ)/entry_x64.o $(BUILD_OBJ)/isr_x64.o $(BUILD_OBJ)/kernel_x64.o $(X64_MODULE_OBJS)
+		$(BUILD_OBJ)/mb2_64.o $(BUILD_OBJ)/entry_x64.o $(BUILD_OBJ)/isr_x64.o $(BUILD_OBJ)/usermode_x64.o $(BUILD_OBJ)/kernel_x64.o $(X64_MODULE_OBJS)
 
 $(KERNELFLP_ELF): $(LDSFLP) $(BUILD_OBJ)/entry_floppy_i386.o $(BUILD_OBJ)/isr_floppy_i386.o $(BUILD_OBJ)/usermode_floppy_i386.o $(BUILD_OBJ)/kernel_i386_floppy.o $(BUILD_OBJ)/floppy_early_smod.o $(FLP_MODULE_OBJS) | $(FLP_OUT_DIR)
 	$(I386_LD) -m elf_i386 -T $(LDSFLP) -o $@ \
