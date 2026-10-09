@@ -11,6 +11,8 @@ SECTIONS {
   }
   .data : { *(.data*) }
   .got : { *(.got*) }
+  __smod_file_end = .;
   .bss (NOLOAD) : { *(.bss*) *(COMMON) }
+  __smod_mem_end = .;
   /DISCARD/ : { *(.note*) *(.comment*) *(.eh_frame*) }
 }

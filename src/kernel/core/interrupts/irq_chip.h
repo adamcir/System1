@@ -7,7 +7,7 @@
 /* Architecture/platform-specific IRQ controller and timer operations.
  * The generic interrupt dispatcher must never access PC I/O ports.
  */
-typedef struct {
+typedef struct system_irq_chip_ops {
     uint32_t abi;
     void (*remap)(uint8_t first, uint8_t second);
     void (*set_default_masks)(void);
@@ -16,6 +16,7 @@ typedef struct {
     void (*init_timer)(uint32_t hz);
 } system_irq_chip_ops_t;
 
+int irq_chip_has_driver(void);
 int irq_chip_register(const system_irq_chip_ops_t* ops);
 void irq_chip_platform_init(void); /* Built-in PC boot driver */
 void irq_chip_remap(uint8_t first, uint8_t second);

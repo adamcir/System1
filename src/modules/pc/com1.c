@@ -28,7 +28,7 @@ static void uart_write_byte(char byte) {
 
 /* Entry is pinned to image offset zero by the native SMOD linker script. */
 __attribute__((section(".text.smod_entry")))
-int smod_entry(const smod_api_v2_t* api) {
+int smod_entry(const smod_api_v3_t* api) {
     uint8_t saved;
     if (!api || api->abi_version != SMOD_API_VERSION || !api->register_uart) return -1;
 

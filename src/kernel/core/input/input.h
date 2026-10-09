@@ -13,7 +13,7 @@
 #define SYSTEM_INPUT_ABI 1u
 
 /* Shared hardware-independent input events, used by kernel TTY and POSIX. */
-typedef struct {
+typedef struct system_input_ops {
     uint32_t abi;
     void (*init)(void);
     void (*poll)(void);
@@ -24,6 +24,7 @@ typedef struct {
     char (*last_char)(void);
 } system_input_ops_t;
 
+int input_has_driver(void);
 int input_register(const system_input_ops_t* ops);
 void input_platform_init(void); /* Boot adapter, eventually loaded from SMOD */
 void input_init(void);

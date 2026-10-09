@@ -67,7 +67,7 @@ static int cmos_read_clock(smod_clock_time_t* time) {
 }
 
 __attribute__((section(".text.smod_entry")))
-int smod_entry(const smod_api_v2_t* api) {
+int smod_entry(const smod_api_v3_t* api) {
     smod_clock_time_t now;
     if (!api || api->abi_version != SMOD_API_VERSION || !api->register_rtc) return -1;
     if (cmos_read_clock(&now) != 0) return -1;

@@ -35,6 +35,8 @@ int smod_boot_early_init(uint32_t magic, uint32_t info_ptr) {
     extern const uint8_t __smod_floppy_com1_end[];
     extern const uint8_t __smod_floppy_cmos_begin[];
     extern const uint8_t __smod_floppy_cmos_end[];
+    extern const uint8_t __smod_floppy_picpit_begin[];
+    extern const uint8_t __smod_floppy_picpit_end[];
 
     (void)info_ptr;
     if (magic != SMOD_FLOPPY_MAGIC) return 0;
@@ -44,6 +46,9 @@ int smod_boot_early_init(uint32_t magic, uint32_t info_ptr) {
     if (smod_core_preload(__smod_floppy_cmos_begin,
         (uint32_t)(__smod_floppy_cmos_end - __smod_floppy_cmos_begin),
         "cmos.mod") == 0) ++loaded;
+    if (smod_core_preload(__smod_floppy_picpit_begin,
+        (uint32_t)(__smod_floppy_picpit_end - __smod_floppy_picpit_begin),
+        "picpit.mod") == 0) ++loaded;
 #else
     const uint8_t* data;
     uint32_t total, off, seen = 0u;

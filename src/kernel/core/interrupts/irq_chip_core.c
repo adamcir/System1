@@ -2,6 +2,8 @@
 
 static const system_irq_chip_ops_t* active_irq_chip;
 
+int irq_chip_has_driver(void) { return active_irq_chip != 0; }
+
 int irq_chip_register(const system_irq_chip_ops_t* ops) {
     if (!ops || ops->abi != SYSTEM_IRQ_CHIP_ABI || !ops->remap ||
         !ops->set_default_masks || !ops->mask_irq || !ops->send_eoi ||

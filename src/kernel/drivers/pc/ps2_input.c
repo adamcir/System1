@@ -13,5 +13,5 @@ static const system_input_ops_t pc_ps2_input_ops = {
     ps2_last_char
 };
 void input_platform_init(void) {
-    (void)input_register(&pc_ps2_input_ops);
+    if (!input_has_driver()) (void)input_register(&pc_ps2_input_ops);
 }

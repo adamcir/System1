@@ -2,6 +2,8 @@
 
 static const system_input_ops_t* active_input;
 
+int input_has_driver(void) { return active_input != 0; }
+
 int input_register(const system_input_ops_t* ops) {
     if (!ops || ops->abi != SYSTEM_INPUT_ABI ||
         !ops->init || !ops->poll || !ops->irq_handler ||

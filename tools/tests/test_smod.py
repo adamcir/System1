@@ -11,7 +11,7 @@ SPEC.loader.exec_module(mksmod)
 
 class NativeModuleTests(unittest.TestCase):
     def setUp(self):
-        self.good = mksmod.HEADER.pack(b"SMOD", 1, 2, 1, 1, 32, 2, 2, 0, 0) + b"\x90\xc3"
+        self.good = mksmod.HEADER.pack(b"SMOD", 1, 3, 1, 1, 32, 2, 2, 0, 0) + b"\x90\xc3"
 
     def test_valid(self):
         self.assertEqual(mksmod.parse(self.good, "i386")["image"], 2)

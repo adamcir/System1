@@ -50,7 +50,7 @@ KERNEL32_ELF  := $(I386_OUT_DIR)/kernel.elf
 KERNEL64_ELF  := $(X64_OUT_DIR)/kernel.elf
 KERNELFLP_ELF := $(FLP_OUT_DIR)/kernel.elf
 
-SMOD_DRIVERS := com1 cmos
+SMOD_DRIVERS := com1 cmos picpit
 SMOD_I386_FILES := $(addprefix $(BUILD_OUT)/modules/i386/,$(addsuffix .mod,$(SMOD_DRIVERS)))
 SMOD_X64_FILES := $(addprefix $(BUILD_OUT)/modules/x86_64/,$(addsuffix .mod,$(SMOD_DRIVERS)))
 
@@ -96,11 +96,11 @@ all: iso-32 iso-64 img-32
 
 $(BUILD_OBJ)/smod/i386/%.o: src/modules/pc/%.c include/smod.h | $(BUILD_OBJ)
 	mkdir -p $(dir $@)
-	$(I386_CC) $(CFLAGS_COMMON) -Iinclude -m32 -O2 -fpie -ffunction-sections -fno-builtin -fno-asynchronous-unwind-tables -c $< -o $@
+	$(I386_CC) $(CFLAGS_COMMON) -Iinclude -Isrc/kernel/core/interrupts -Isrc/kernel/core/input -Isrc/kernel/core/tty -Isrc/kernel/core/fs -Isrc/kernel/drivers/pc -m32 -O2 -fpie -ffunction-sections -fno-builtin -fno-asynchronous-unwind-tables -c $< -o $@
 
 $(BUILD_OBJ)/smod/x86_64/%.o: src/modules/pc/%.c include/smod.h | $(BUILD_OBJ)
 	mkdir -p $(dir $@)
-	$(X64_CC) $(CFLAGS_COMMON) -Iinclude -m64 -mno-red-zone -O2 -fpie -ffunction-sections -fno-builtin -fno-asynchronous-unwind-tables -c $< -o $@
+	$(X64_CC) $(CFLAGS_COMMON) -Iinclude -Isrc/kernel/core/interrupts -Isrc/kernel/core/input -Isrc/kernel/core/tty -Isrc/kernel/core/fs -Isrc/kernel/drivers/pc -m64 -mno-red-zone -O2 -fpie -ffunction-sections -fno-builtin -fno-asynchronous-unwind-tables -c $< -o $@
 
 $(BUILD_OBJ)/smod/i386/%.elf: $(BUILD_OBJ)/smod/i386/%.o tools/linker/linker.smod.ld
 	$(I386_LD) -m elf_i386 -nostdlib -T tools/linker/linker.smod.ld -o $@ $<
@@ -111,13 +111,13 @@ $(BUILD_OBJ)/smod/x86_64/%.elf: $(BUILD_OBJ)/smod/x86_64/%.o tools/linker/linker
 $(BUILD_OUT)/modules/i386/%.mod: $(BUILD_OBJ)/smod/i386/%.elf tools/mksmod.py
 	mkdir -p $(dir $@)
 	$(I386_OBJCOPY) -O binary $< $(BUILD_OBJ)/smod/i386/$*.bin
-	python3 tools/mksmod.py pack --arch i386 $(BUILD_OBJ)/smod/i386/$*.bin $@
+	python3 tools/mksmod.py pack --arch i386 --elf $(BUILD_OBJ)/smod/i386/$*.elf $(BUILD_OBJ)/smod/i386/$*.bin $@
 	python3 tools/mksmod.py check --arch i386 $@
 
 $(BUILD_OUT)/modules/x86_64/%.mod: $(BUILD_OBJ)/smod/x86_64/%.elf tools/mksmod.py
 	mkdir -p $(dir $@)
 	$(X64_OBJCOPY) -O binary $< $(BUILD_OBJ)/smod/x86_64/$*.bin
-	python3 tools/mksmod.py pack --arch x86_64 $(BUILD_OBJ)/smod/x86_64/$*.bin $@
+	python3 tools/mksmod.py pack --arch x86_64 --elf $(BUILD_OBJ)/smod/x86_64/$*.elf $(BUILD_OBJ)/smod/x86_64/$*.bin $@
 	python3 tools/mksmod.py check --arch x86_64 $@
 
 smod-32: $(SMOD_I386_FILES)

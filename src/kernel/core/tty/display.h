@@ -5,7 +5,7 @@
 /* Platform-neutral console display ABI. TTY owns line editing, not the driver. */
 #define SYSTEM_DISPLAY_ABI 1u
 
-typedef struct {
+typedef struct system_display_ops {
     uint32_t abi;
     void (*init)(void);
     void (*set_color)(uint8_t);

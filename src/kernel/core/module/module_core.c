@@ -4,8 +4,12 @@
 #include "fs_core.h"
 #include "mm.h"
 #include "klog.h"
+#include "display.h"
+#include "input.h"
+#include "irq_chip.h"
+#include "floppy_controller.h"
 
-#define SMOD_MAX_LOADED 8u
+#define SMOD_MAX_LOADED 16u
 #define SMOD_MAX_DIRECTORY_ENTRIES 24u
 #define SMOD_IO_CHUNK 512u
 #define SMOD_PATH_PREFIX "/boot/modules/"
@@ -21,7 +25,7 @@ static uint32_t smod_loaded_count;
 #define SMOD_FLOPPY_MAGIC 0x53314D47u
 /* Early-boot executable arena: available before kmalloc() and filesystem.
  * Floppy also uses it for any additional small optional modules. */
-static uint8_t smod_boot_image[SMOD_IMAGE_LIMIT] __attribute__((aligned(16)));
+static uint8_t smod_boot_image[SMOD_BOOT_ARENA_SIZE] __attribute__((aligned(16)));
 static uint32_t smod_boot_used;
 static char smod_preloaded_names[SMOD_MAX_LOADED][FS_NAME_CAP];
 static uint32_t smod_preloaded_count;
@@ -32,6 +36,53 @@ static smod_rtc_read_t active_rtc;
 static smod_uart_write_t pending_uart;
 static smod_rtc_read_t pending_rtc;
 static uint8_t smod_in_entry;
+static system_display_ops_t loaded_display, pending_display;
+static system_input_ops_t loaded_input, pending_input;
+static system_irq_chip_ops_t loaded_irq_chip, pending_irq_chip;
+static system_floppy_controller_ops_t loaded_floppy, pending_floppy;
+static uint8_t has_display, has_input, has_irq_chip, has_floppy;
+static uint8_t pending_has_display, pending_has_input, pending_has_irq_chip, pending_has_floppy;
+
+static int smod_register_display(const system_display_ops_t* ops) {
+    if (!smod_in_entry || !ops || ops->abi != SYSTEM_DISPLAY_ABI ||
+        !ops->init || !ops->set_color || !ops->get_cursor ||
+        !ops->putc || !ops->puts || !ops->hex_u32 ||
+        !ops->text_begin || !ops->text_putc || !ops->text_backspace ||
+        !ops->text_left || !ops->text_right || !ops->text_delete ||
+        !ops->text_toggle_insert || has_display || pending_has_display) return -1;
+    pending_display = *ops;
+    pending_has_display = 1u;
+    return 0;
+}
+
+static int smod_register_input(const system_input_ops_t* ops) {
+    if (!smod_in_entry || !ops || ops->abi != SYSTEM_INPUT_ABI ||
+        !ops->init || !ops->poll || !ops->irq_handler ||
+        !ops->set_poll_fallback || !ops->take_key || !ops->take_char ||
+        !ops->last_char || has_input || pending_has_input) return -1;
+    pending_input = *ops;
+    pending_has_input = 1u;
+    return 0;
+}
+
+static int smod_register_irq_chip(const system_irq_chip_ops_t* ops) {
+    if (!smod_in_entry || !ops || ops->abi != SYSTEM_IRQ_CHIP_ABI ||
+        !ops->remap || !ops->set_default_masks || !ops->mask_irq ||
+        !ops->send_eoi || !ops->init_timer ||
+        has_irq_chip || pending_has_irq_chip) return -1;
+    pending_irq_chip = *ops;
+    pending_has_irq_chip = 1u;
+    return 0;
+}
+
+static int smod_register_floppy(const system_floppy_controller_ops_t* ops) {
+    if (!smod_in_entry || !ops || ops->abi_version != SYSTEM_FLOPPY_ABI ||
+        !ops->read_sector || !ops->write_sector || !ops->reset_state ||
+        has_floppy || pending_has_floppy) return -1;
+    pending_floppy = *ops;
+    pending_has_floppy = 1u;
+    return 0;
+}
 
 static int smod_register_uart(smod_uart_write_t write_byte) {
     if (!smod_in_entry || !write_byte || active_uart || pending_uart) return -1;
@@ -105,8 +156,10 @@ static void smod_report_ready(void) {
     klog_info("smod", "Module successfully called System Module API");
 }
 
-static const smod_api_v2_t smod_api = {
-    SMOD_API_VERSION, smod_report_ready, smod_register_uart, smod_register_rtc
+static const smod_api_v3_t smod_api = {
+    SMOD_API_VERSION, smod_report_ready, smod_register_uart, smod_register_rtc,
+    smod_register_display, smod_register_input, smod_register_irq_chip,
+    smod_register_floppy
 };
 
 /* One header validator for memory-resident and filesystem-backed SMOD. */
@@ -146,12 +199,16 @@ static int smod_activate(void* image, uint32_t entry_offset,
     smod_entry_fn_t entry = (smod_entry_fn_t)((uint8_t*)image + entry_offset);
     pending_uart = 0;
     pending_rtc = 0;
+    pending_has_display = pending_has_input = 0u;
+    pending_has_irq_chip = pending_has_floppy = 0u;
     smod_in_entry = 1u;
     rc = entry(&smod_api);
     smod_in_entry = 0u;
     if (rc != 0) {
         pending_uart = 0;
         pending_rtc = 0;
+        pending_has_display = pending_has_input = 0u;
+        pending_has_irq_chip = pending_has_floppy = 0u;
         return -1;
     }
     if (from_arena) smod_boot_used += aligned_size;
@@ -159,6 +216,30 @@ static int smod_activate(void* image, uint32_t entry_offset,
     if (pending_rtc) active_rtc = pending_rtc;
     pending_uart = 0;
     pending_rtc = 0;
+    if (pending_has_display) {
+        loaded_display = pending_display;
+        has_display = 1u;
+        (void)display_register(&loaded_display);
+        loaded_display.init();
+    }
+    if (pending_has_input) {
+        loaded_input = pending_input;
+        has_input = 1u;
+        (void)input_register(&loaded_input);
+        /* Explicit hardware init runs later in the architecture entry. */
+    }
+    if (pending_has_irq_chip) {
+        loaded_irq_chip = pending_irq_chip;
+        has_irq_chip = 1u;
+        (void)irq_chip_register(&loaded_irq_chip);
+    }
+    if (pending_has_floppy) {
+        loaded_floppy = pending_floppy;
+        has_floppy = 1u;
+        (void)floppy_controller_register(&loaded_floppy);
+    }
+    pending_has_display = pending_has_input = 0u;
+    pending_has_irq_chip = pending_has_floppy = 0u;
     smod_images[smod_loaded_count++] = image;
     return 0;
 }
@@ -195,7 +276,7 @@ int smod_core_preload(const uint8_t* file, uint32_t bytes, const char* name) {
     for (i = 0u; i < FS_NAME_CAP; ++i) if (name[i] == '\0') break;
     if (i == 0u || i == FS_NAME_CAP) return -1;
     aligned_size = (memory_size + 15u) & ~15u;
-    if (aligned_size > SMOD_IMAGE_LIMIT - smod_boot_used) return -1;
+    if (aligned_size > SMOD_BOOT_ARENA_SIZE - smod_boot_used) return -1;
     image = smod_boot_image + smod_boot_used;
     for (i = 0u; i < image_size; ++i) image[i] = file[SMOD_HEADER_SIZE + i];
     for (; i < memory_size; ++i) image[i] = 0u;

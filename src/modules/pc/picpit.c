@@ -1,7 +1,7 @@
+#include "smod.h"
 #include "irq_chip.h"
-#include "types.h"
 
-/* Legacy PC 8259 PIC + 8253 PIT implementation, separated from core. */
+/* The complete 8259 PIC/8253 PIT hardware implementation is native SMOD. */
 #define PIC1_CMD  0x20
 #define PIC1_DATA 0x21
 #define PIC2_CMD  0xA0
@@ -105,15 +105,17 @@ static void pc_pit_init(uint32_t hz) {
 }
 
 
-static const system_irq_chip_ops_t pc_irq_chip = {
-    SYSTEM_IRQ_CHIP_ABI,
-    pc_pic_remap,
-    pc_pic_set_default_masks,
-    pic_set_mask,
-    pic_send_eoi,
-    pc_pit_init
-};
 
-void irq_chip_platform_init(void) {
-    if (!irq_chip_has_driver()) (void)irq_chip_register(&pc_irq_chip);
+__attribute__((section(".text.smod_entry")))
+int smod_entry(const smod_api_v3_t* api) {
+    system_irq_chip_ops_t driver;
+    if (!api || api->abi_version != SMOD_API_VERSION || !api->register_irq_chip)
+        return -1;
+    driver.abi = SYSTEM_IRQ_CHIP_ABI;
+    driver.remap = pc_pic_remap;
+    driver.set_default_masks = pc_pic_set_default_masks;
+    driver.mask_irq = pic_set_mask;
+    driver.send_eoi = pic_send_eoi;
+    driver.init_timer = pc_pit_init;
+    return api->register_irq_chip(&driver);
 }

@@ -15,4 +15,10 @@ __smod_floppy_com1_end:
 __smod_floppy_cmos_begin:
 .incbin "build/artifacts/modules/i386/cmos.mod"
 __smod_floppy_cmos_end:
+.balign 16
+.globl __smod_floppy_picpit_begin
+.globl __smod_floppy_picpit_end
+__smod_floppy_picpit_begin:
+.incbin "build/artifacts/modules/i386/picpit.mod"
+__smod_floppy_picpit_end:
 .section .note.GNU-stack,"",@progbits

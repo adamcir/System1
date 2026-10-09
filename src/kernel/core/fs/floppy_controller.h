@@ -8,7 +8,7 @@
  */
 #define SYSTEM_FLOPPY_ABI 1u
 
-typedef struct {
+typedef struct system_floppy_controller_ops {
     uint32_t abi_version;
     int (*read_sector)(void* buffer, uint32_t lba);
     int (*write_sector)(const void* buffer, uint32_t lba);
