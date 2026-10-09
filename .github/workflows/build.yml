@@ -112,11 +112,24 @@ jobs:
             done
             grep -F "Physical filesystem mounted as root" "$LOG" || { cat "$LOG"; exit 1; }
             grep -F "Starting configured userspace shell" "$LOG" || { cat "$LOG"; exit 1; }
-            if grep -F "Userspace shell unavailable" "$LOG"; then
+            if grep -F "Userspace shell unavailable" "$LOG" ||
+               grep -F "Userspace shell exited" "$LOG"; then
               cat "$LOG"
-              echo "Expected actual MSh, not kernel fallback"
+              echo "Expected persistent MSh, not kernel fallback or early exit"
               exit 1
             fi
+            # Verify visible bytes written by MSh, not just the kernel
+            # 'Starting configured userspace shell' progress message.
+            grep -F "System/1 by Adava Software" "$LOG" || {
+              cat "$LOG"
+              echo "MSh startup MOTD was not displayed"
+              exit 1
+            }
+            grep -F "/ > " "$LOG" || {
+              cat "$LOG"
+              echo "MSh prompt did not appear"
+              exit 1
+            }
           grep -F "/dev and /proc live" "$LOG" || { cat "$LOG"; exit 1; }
           done
 
