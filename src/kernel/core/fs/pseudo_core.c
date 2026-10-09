@@ -34,7 +34,7 @@ static int lookup(const char* path) {
         }
     } else if (kind == 2) {
         if (same(path, "/proc")) return -3;
-        for (i = 0u; i < 6u; ++i) {
+        for (i = 0u; i < 4u; ++i) {
             const char* prefix = path + 6u;
             if (same(prefix, proc_names[i])) return (int)(i + 6u);
         }
