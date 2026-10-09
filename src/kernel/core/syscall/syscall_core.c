@@ -76,6 +76,9 @@ int syscall_core_dispatch(uint32_t nr, uint32_t a0, uint32_t a1, uint32_t a2, ui
         return posix_unlink((const char*)(uintptr_t)a0);
     }
 
+    if (nr == SYS_RMDIR) {
+        return posix_rmdir((const char*)(uintptr_t)a0);
+    }
     if (nr == SYS_IOCTL) {
         return posix_ioctl((int)a0, a1, a2);
     }

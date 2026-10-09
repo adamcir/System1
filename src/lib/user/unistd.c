@@ -88,6 +88,11 @@ int unlink(const char* path) {
         (uint32_t)(uintptr_t)path, 0u, 0u, 0u));
 }
 
+int rmdir(const char* path) {
+    return posix_result(system1_syscall(SYS_RMDIR,
+        (uint32_t)(uintptr_t)path, 0u, 0u, 0u));
+}
+
 int symlink(const char* target, const char* linkpath) {
     return posix_result(system1_syscall(SYS_SYMLINK,
         (uint32_t)(uintptr_t)target,

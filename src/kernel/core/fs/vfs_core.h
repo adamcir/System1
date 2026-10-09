@@ -18,6 +18,7 @@ typedef struct {
     int (*stat)(const char* path, fs_stat_t* out_stat);
     int (*fstat)(uint32_t node_id, fs_stat_t* out_stat);
     int (*unlink)(const char* path);
+    int (*rmdir)(const char* path);
 } vfs_driver_t;
 
 #endif

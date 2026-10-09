@@ -17,6 +17,7 @@
 #define ENOSPC  28
 #define EROFS   30
 #define ENOSYS  38
+#define ENOTEMPTY 39
 
 extern int errno;
 

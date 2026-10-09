@@ -32,6 +32,7 @@ int posix_getppid(void);
 int posix_nanosleep(const posix_timespec_t* req, posix_timespec_t* rem);
 int posix_sync(void);
 int posix_unlink(const char* path);
+int posix_rmdir(const char* path);
 int posix_ioctl(int fd, uint32_t request, uint32_t arg);
 int posix_reboot(uint32_t how);
 int posix_symlink(const char* target, const char* linkpath);

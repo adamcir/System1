@@ -95,6 +95,7 @@ int fs_core_to_errno(int rc) {
     if (rc == FS_ERR_IS_DIR) {
         return POSIX_EISDIR;
     }
+    if (rc == FS_ERR_NOT_EMPTY) return POSIX_ENOTEMPTY;
 
     return POSIX_EIO;
 }
@@ -920,6 +921,17 @@ int fs_core_unlink(const char* path) {
     }
 
     return g_root_driver->unlink(full_path);
+}
+
+int fs_core_rmdir(const char* path) {
+    char full_path[FS_PATH_CAP];
+    int rc;
+    if (!path || !g_root_driver || !g_root_driver->rmdir) return FS_ERR_READ_ONLY;
+    rc = fs_core_normalize_path(fs_core_get_cwd_path(), path, full_path, FS_PATH_CAP);
+    if (rc != FS_OK) return rc;
+    if (full_path[0] == '/' && full_path[1] == '\0') return FS_ERR_INVALID;
+    if (pseudo_fs_is_path(full_path)) return FS_ERR_READ_ONLY;
+    return g_root_driver->rmdir(full_path);
 }
 
 int fs_core_readlink(const char* path, char* buffer, uint32_t cap, uint32_t* out_size) {

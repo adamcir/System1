@@ -14,6 +14,7 @@
 #define SYS_CHDIR  11u
 #define SYS_MKDIR  12u
 #define SYS_UNLINK 13u
+#define SYS_RMDIR 14u
 #define SYS_IOCTL 16u
 #define SYS_ACCESS 21u
 #define SYS_DUP 32u

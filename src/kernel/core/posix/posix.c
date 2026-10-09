@@ -166,6 +166,11 @@ int posix_unlink(const char* path) {
     return 0;
 }
 
+int posix_rmdir(const char* path) {
+    int rc = fs_core_rmdir(path);
+    return rc == FS_OK ? 0 : posix_fs_to_errno(rc);
+}
+
 int posix_symlink(const char* target, const char* linkpath) {
     int rc = fs_core_symlink(target, linkpath);
     return (rc == FS_OK) ? 0 : posix_fs_to_errno(rc);

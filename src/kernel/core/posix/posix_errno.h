@@ -17,6 +17,7 @@
 #define POSIX_ENOSPC  28
 #define POSIX_EROFS   30
 #define POSIX_ENOSYS  38
+#define POSIX_ENOTEMPTY 39
 
 #define POSIX_OK 0
 

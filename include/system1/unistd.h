@@ -14,6 +14,7 @@
 #define SYS_CHDIR  11u
 #define SYS_MKDIR  12u
 #define SYS_UNLINK 13u
+#define SYS_RMDIR 14u
 #define SYS_IOCTL 16u
 #define SYS_ACCESS 21u
 #define SYS_DUP 32u
@@ -65,6 +66,7 @@ void sync(void);
 int chdir(const char* path);
 int mkdir(const char* path);
 int unlink(const char* path);
+int rmdir(const char* path);
 int symlink(const char* target, const char* linkpath);
 int readlink(const char* path, char* buf, unsigned size);
 int execve(const char* path, char* const argv[], char* const envp[]);
